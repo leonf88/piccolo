@@ -5,34 +5,32 @@ VPATH := .:src
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/
 LDFLAGS := 
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/
-LIBS := -Wl,-Bstatic -lglog -lgflags -Wl,-Bdynamic -lboost_thread -lprotobuf 
+DYNAMIC_LIBS := -lboost_thread -lprotobuf
+STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -Wl,-Bdynamic 
 
-AR_LD := ld --eh-frame-hdr -r 
-
-all: bin/test-shortest-path
-
-SRCS := $(shell find src -name '*.c' -o -name '*.cc')
-
-depend:
-	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
+LINK_LIB := ld --eh-frame-hdr -r
+LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
 
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/jenkins-hash.o src/util/file.o \
 									src/util/fake-mpi.o src/util/common.o
 
-LIBKERNEL_OBS := src/worker/kernels/pagerank.o src/worker/kernels/shortest-path.o
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o 
+LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o src/worker/accumulator.o
+
+
+all: bin/test-shortest-path
+
+depend:
+	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
+
 
 bin/libcommon.a : $(LIBCOMMON_OBJS)
-	$(AR_LD) $^ -o $@
+	$(LINK_LIB) $^ -o $@
 
 bin/libworker.a : $(LIBWORKER_OBJS)
-	$(AR_LD) $^ -o $@
-
-bin/libkernel.a : $(LIBKERNEL_OBS) 
-	$(AR_LD) $^ -o $@
-
-bin/test-shortest-path: bin/libkernel.a bin/libworker.a bin/libcommon.a test/test-shortest-path.o
-	g++ $(LDFLAGS) $(LDDIRS) `mpic++ -showme:link` -o $@ $^ $(LIBS) 
+	$(LINK_LIB) $^ -o $@
+	
+bin/test-shortest-path: bin/libworker.a bin/libcommon.a src/test/test-shortest-path.o
+	$(LINK_BIN) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
 	find src -name '*.o' -exec rm {} \;
