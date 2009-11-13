@@ -118,9 +118,12 @@ Worker::Worker(const ConfigData &c) {
   kernelThread = networkThread = NULL;
 }
 
-void Worker::Start() {
+void Worker::Run() {
   kernelThread = new boost::thread(boost::bind(&Worker::KernelLoop, this));
   networkThread = new boost::thread(boost::bind(&Worker::NetworkLoop, this));
+
+  kernelThread->join();
+  networkThread->join();
 }
 
 Worker::~Worker() {

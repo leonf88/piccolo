@@ -52,9 +52,7 @@ int main(int argc, char **argv) {
   } else {
     Worker w(conf);
     distanceHash = w.CreateTable(&ShardStr, &HashStr, &AccumMin);
-    w.Start();
+    w.Run();
   }
-
-  sleep(100);
 }
 

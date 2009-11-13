@@ -18,7 +18,7 @@ public:
   Worker(const ConfigData &c);
   ~Worker();
 
-  void Start();
+  void Run();
 
   void KernelLoop();
   void NetworkLoop();
