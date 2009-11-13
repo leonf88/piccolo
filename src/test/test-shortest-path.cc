@@ -1,10 +1,11 @@
 #include "util/common.h"
 #include "util/file.h"
 #include "worker/worker.h"
+#include "worker/kernel.h"
 #include "worker/worker.pb.h"
 
-namespace asyncgraph {
-void buildGraph(int nodes, int density) {
+namespace upc {
+void BuildTestGraph(int nodes, int density) {
   RecordFile out("nodes.rec", "w");
 
   for (int i = 0; i < nodes; ++i) {
@@ -20,15 +21,20 @@ void buildGraph(int nodes, int density) {
     out.write(n);
     LOG_EVERY_N(INFO, 10000) << "Working; created " << i << " nodes.";
   }
+}
+
+void RunSPIteration() {
 
 }
 
+REGISTER_KERNEL(RunSPIteration);
+
 }
 
-using namespace asyncgraph;
+using namespace upc;
 int main(int argc, char **argv) {
   Init(argc, argv);
-  buildGraph(10000, 3);
+  BuildTestGraph(10000, 3);
 
   ConfigData conf;
   conf.set_kernel("ShortestPathKernel");

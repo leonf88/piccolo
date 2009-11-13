@@ -1,6 +1,6 @@
 #include "util/fake-mpi.h"
 
-namespace asyncgraph {
+namespace upc {
 
 static FakeMPIWorld fakeWorld;
 

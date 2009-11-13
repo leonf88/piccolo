@@ -8,7 +8,7 @@
 
 namespace google { namespace protobuf { class Message; } }
 
-namespace asyncgraph {
+namespace upc {
 
 extern string Slurp(const string& file);
 extern void Dump(const string& file, StringPiece data);

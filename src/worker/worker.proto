@@ -1,16 +1,20 @@
-package asyncgraph;
+package upc;
 
 enum MessageTypes {
-  MTYPE_KERNEL_UPDATE = 1;
-  MTYPE_MASTER_UPDATE = 2;
-  MTYPE_WORKER_EXIT = 3;
+  MTYPE_KERNEL_DATA = 1;
+  MTYPE_KERNEL_DONE = 2;
+  MTYPE_WORKER_SHUTDOWN = 4;
+  MTYPE_RUN_KERNEL = 5; 
 };
+
+enum NodeIds {
+  MASTER_NODE = 0;
+}
 
 message Pair {
   required bytes key = 1;
   required bytes value = 2;
 }
-
 
 message ConfigData {
   required bytes shard_prefix = 1;
@@ -26,28 +30,14 @@ message ConfigData {
   optional int32 network_buffer = 8 [default = 20000000];
 }
 
-message KernelStatus {
-  optional double divergence = 1 [default=-1];
-  repeated Pair extra = 5;
-};
-
-message WorkerStatus {
-  required int64 bytes_out = 1;
-  required int64 bytes_in = 2;
-  required int32 current_iteration = 3;
-
-  required KernelStatus kernel_status = 4;
+message RunKernelRequest {
+  required int32 kernel_id = 1;
 }
 
-message UpdateRequest {
-  repeated Pair update = 1;
-  required int32 source = 2;
-  
-  // The kernel iteration which generated these values.
-  required int32 iteration = 3;
-  
-  // Is this the last update packet for me?
-  required bool done = 4;
+message HashUpdateRequest {
+  required int32 source = 1;
+  required int32 hash_id = 2;
+  repeated Pair update = 3;
 }
 
 message EmptyMessage {}
@@ -58,10 +48,4 @@ message PathNode {
   repeated int32 target = 2;
   required int32 distance = 3 [default = 0];
   required bool dirty = 4 [default = false];
-}
-
-//pagerank.cc
-message PagerankNode {
-  required int32 id = 1;
-  repeated int32 target = 2;
 }

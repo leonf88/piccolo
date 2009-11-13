@@ -18,10 +18,11 @@
 
 DEFINE_bool(dump_stacktrace, true, "");
 
-namespace asyncgraph {
+namespace upc {
 
 boost::thread_group programThreads;
 
+StringPiece::StringPiece() : data(NULL), len(0) {}
 StringPiece::StringPiece(const string& s) : data(s.data()), len(s.size()) {}
 StringPiece::StringPiece(const string& s, int len) : data(s.data()), len(len) {}
 StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
@@ -129,7 +130,7 @@ void SpinLock::unlock() volatile {
 }
 
 static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
-  static asyncgraph::SpinLock l;
+  static upc::SpinLock l;
   l.lock();
 
   char buffer[1024];

@@ -24,7 +24,7 @@
 
 #include "util/hash.h"
 
-namespace asyncgraph {
+namespace upc {
 
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
@@ -68,6 +68,7 @@ private:
 
 class StringPiece {
 public:
+  StringPiece();
   StringPiece(const string& s);
   StringPiece(const string& s, int len);
   StringPiece(const char* c, int len);
@@ -77,6 +78,10 @@ public:
   const char* data;
   int len;
 };
+
+static bool operator==(const StringPiece& a, const StringPiece& b) {
+  return a.data == b.data && a.len == b.len;
+}
 
 extern string StringPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 extern string VStringPrintf(const char* fmt, va_list args);
@@ -115,5 +120,16 @@ private:
 }
 
 }
+
+namespace std {  namespace tr1 {
+template <>
+struct hash<upc::StringPiece> : public unary_function<upc::StringPiece, size_t> {
+  size_t operator()(const upc::StringPiece& k) const {
+    return k.hash();
+  }
+};
+
+}}
+
 
 #endif /* COMMON_H_ */

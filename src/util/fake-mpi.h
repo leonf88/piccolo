@@ -5,7 +5,7 @@
 #include <mpi.h>
 #include <boost/array.hpp>
 
-namespace asyncgraph {
+namespace upc {
 
 struct FakeMPIWorld {
   static const int kMaxWorkers = 256;

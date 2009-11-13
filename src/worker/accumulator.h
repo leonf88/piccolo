@@ -1,131 +1,114 @@
-#ifndef ACCUMULATOR_H_
-#define ACCUMULATOR_H_
+#ifndef ACCUMULATOR_H
+#define ACCUMULATOR_H
 
 #include "util/common.h"
+#include "util/rpc.h"
+
+#include "worker/worker.pb.h"
 #include <algorithm>
 
+// Accumulated hashes are hash tables partitioned across the address space of
+// all worker threads involved in a computation.  Updates to a hash from a
+// local thread are applied immediately; updates against keys stored on
+// remote threads are queued and sent when network bandwidth is available.
 #define POD_CAST(type, d) ( *((type*)d.data) )
 
+namespace upc {
 
-namespace asyncgraph {
-class Accumulator {
+typedef unordered_map<StringPiece, StringPiece> StringMap;
+
+class LocalHash;
+typedef int (*ShardingFunction)(StringPiece);
+typedef int (*HashFunction)(StringPiece);
+typedef void
+    (*AccumFunction)(StringPiece in1, StringPiece in2, StringPiece out);
+
+class AccumHash {
 public:
-  Accumulator() {
-    VLOG(4) << "Created accumulator " << this;
+  AccumHash(ShardingFunction sf, HashFunction hf, AccumFunction af) :
+    sf_(sf), hf_(hf), af_(af) {
   }
 
-  virtual ~Accumulator() {
-    VLOG(4) << "Destroyed accumulator " << this;
-  }
+  // Process network updates for this table, applying the accumulator as necessary.
+  virtual void applyUpdates(const HashUpdateRequest& req) = 0;
 
-  class Iterator {
-  public:
-    Iterator(Accumulator* a) : owner(a) {}
-    virtual StringPiece key() = 0;
-    virtual StringPiece value() = 0;
-    virtual void next() = 0;
-    virtual bool done() = 0;
+  int ownerThread;
+protected:
+  AccumFunction af_;
+  HashFunction hf_;
+  ShardingFunction sf_;
+};
 
-    Accumulator* owner;
+// A local accumulated hash table.
+class LocalHash: public AccumHash {
+private:
+   StringMap data;
+public:
+  struct Iterator {
+    Iterator(LocalHash *owner);
+    StringPiece key();
+    StringPiece value();
+    void next();
+    bool done();
+
+  private:
+    StringMap::iterator it_;
+    LocalHash *owner_;
   };
 
-  virtual Iterator* get_iterator() = 0;
-  virtual void clear() = 0;
-  virtual void add(const StringPiece &k, const StringPiece &v) = 0;
 
-  // An estimate of the amount of space this accumulator is using.
-  virtual int64_t size() = 0;
+  LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af);
 
-  // The iteration this accumulator contains (partial) data for.
-  int iteration;
-  int peer;
+  StringPiece get(const StringPiece &k);
+  void put(const StringPiece &k, const StringPiece &v);
+  void remove(const StringPiece &k);
+  void clear();
+  bool empty();
+  int64_t size();
+  Iterator *getIterator();
+
+  void applyUpdates(const HashUpdateRequest& req);
 };
 
-template <class T>
-class STLIterator : public Accumulator::Iterator {
-public:
-  typedef typename T::key_type K;
-  typedef typename T::value_type V;
-
-  STLIterator(Accumulator* a, const T &m) : Iterator(a), data(m), i(data.begin()) {}
-    
-  StringPiece key() { 
-    return StringPiece((char*)&(i->first), sizeof(K)); 
-  }
-  StringPiece value() { 
-    return StringPiece((char*)&(i->second), sizeof(V)); 
-  }
-
-  void next() { ++i; }
-  bool done() { return i == data.end(); }
+// A set of accumulated hashes.
+class PartitionedHash: public AccumHash {
 private:
-  const T &data;
-  typename T::const_iterator i;
-};
+  static const int32_t kMaxPeers = 8192;
 
-template <class K, class V>
-class SumAccumulator : public Accumulator {
+  // New accumulators are created by the network thread when sending out updates,
+  // and by the kernel thread when a new iteration starts.
+  bool volatile accumWriting[kMaxPeers];
+
+  vector<LocalHash*> partitions;
+  mutable boost::recursive_mutex pendingLock;
 public:
-  typedef unordered_map<K, V> MType;
-  typedef STLIterator<MType> Iterator;
-
-  void add(const StringPiece &k, const StringPiece &v) {
-    add(POD_CAST(K, k), POD_CAST(V, v));
+  PartitionedHash(int numThreads,
+                  ShardingFunction sf,
+                  HashFunction hf,
+                  AccumFunction af,
+                  RPCHelper rpc) :
+    AccumHash(sf, hf, af) {
+    bzero((void*) accumWriting, sizeof(bool) * kMaxPeers);
   }
 
-  void add(const K& k, const V& v) { data[k] += v; }
-  void clear() { data.clear(); }
-  Iterator* get_iterator() { return new Iterator(this, data); }
-  int64_t size() { return (int64_t)(data.size() * sizeof(K) * sizeof(V) * 1.5); }
+  // Return the value associated with 'k', possibly blocking for a remote fetch.
+  StringPiece get(const StringPiece &k);
 
-private:
-  MType data;
+  // Store the given key-value pair in this hash, applying the accumulation
+  // policy set at construction time.  If 'k' has affinity for a remote thread,
+  // the application occurs immediately on the local host, and the update is
+  // queued for transmission to the owning thread.
+  void put(const StringPiece &k, const StringPiece &v);
+
+  // Remove this entry from the local and master table.
+  void remove(const StringPiece &k);
+
+  // Append to 'out' the list of accumulators that have pending network data.
+  bool getPendingUpdates(deque<LocalHash*> *out);
+  int pendingBytes();
+
 };
 
-template <class K, class V>
-class MinAccumulator : public Accumulator {
-public:
-  typedef unordered_map<K, V> MType;
-  typedef STLIterator<MType> Iterator;
-
-  void add(const StringPiece &k, const StringPiece &v) {
-    add(POD_CAST(K, k), POD_CAST(V, v));
-  }
-
-  void add(const K& k, const V& v) {
-    typename MType::iterator i = data.find(k);
-    if (i != data.end()) {
-      i->second = std::min(i->second, v);
-    } else {
-      data.insert(std::make_pair(k, v));
-    }
-  }
-
-  int64_t size() { return (int64_t)(data.size() * sizeof(K) * sizeof(V) * 1.5); }
-
-  void clear() { data.clear(); }
-  Iterator* get_iterator() { return new Iterator(this, data); }
-
-private:
-  MType data;
-};
-
-// Doesn't accumulate values together, just appends them to the
-// outgoing set.
-template <class K, class V>
-class NullAccumulator {
-public:
-  typedef unordered_multimap<K, V> MType;
-  typedef STLIterator<MType> Iterator;
-
-  void add(const K& k, const V& v) { data.insert(std::make_pair(k, v)); }
-  void clear() { data.clear(); }
-  Iterator* get_iterator() { return new Iterator(data); }
-
-  int64_t size() { return (int64_t)(data.size() * sizeof(K) * sizeof(V) * 1.5); }
-private:
-  MType data;
-};
 }
 
-#endif /* ACCUMULATOR_H_ */
+#endif

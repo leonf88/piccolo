@@ -2,7 +2,7 @@
 #include "util/common.h"
 #include "google/protobuf/message.h"
 
-namespace asyncgraph {
+namespace upc {
 
 string Slurp(const string& f) {
   FILE* fp = fopen(f.c_str(), "r");
