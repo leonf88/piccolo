@@ -7,15 +7,15 @@ LocalHash::LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int
 }
 
 StringPiece LocalHash::get(const StringPiece &k) {
-  return data[k];
+  return data[k.AsString()];
 }
 
 void LocalHash::put(const StringPiece &k, const StringPiece &v) {
-  data[k] = v;
+  data[k.AsString()] = v.AsString();
 }
 
 void LocalHash::remove(const StringPiece &k) {
-  data.erase(data.find(k));
+  data.erase(data.find(k.AsString()));
 }
 
 void LocalHash::clear() {

@@ -48,7 +48,7 @@ static void AccumProd(StringPiece current, StringPiece new_val) {
   current.data = (char*) (POD_CAST(int, current) * POD_CAST(int, new_val));
 }
 
-typedef unordered_map<StringPiece, StringPiece> StringMap;
+typedef unordered_map<string, string> StringMap;
 
 class LocalHash;
 
