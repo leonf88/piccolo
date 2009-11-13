@@ -13,7 +13,7 @@ STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -Wl,-Bdynamic
 LINK_LIB := ld --eh-frame-hdr -r
 LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
 
-LIBCOMMON_OBJS := src/util/common.pb.o src/util/jenkins-hash.o src/util/file.o \
+LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o \
 			      src/util/fake-mpi.o src/util/common.o src/util/rpc.o
 
 LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o\
