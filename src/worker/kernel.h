@@ -8,25 +8,24 @@ namespace upc {
 typedef void (*KernelFunction)(void);
 
 struct KernelRegistry {
-  static KernelRegistry* get();
-
   struct StaticHelper {
-    StaticHelper(KernelFunction kf);
+    StaticHelper(const char* name, KernelFunction kf);
   };
 
-  KernelFunction GetKernel(int id) {
-    return kernels[id];
-  }
+  static KernelFunction get_kernel(int id);
+  static int get_id(KernelFunction kf);
 
-  map<int, KernelFunction> kernels;
+  static map<int, KernelFunction>* get_mapping();
 };
+
+
 
 #define REGISTER_KERNEL(kf)\
   namespace {\
     struct MyStaticHelper : public KernelRegistry::StaticHelper {\
-      MyStaticHelper() : StaticHelper(kf) {}\
-      static MyStaticHelper registryHelper;\
+      MyStaticHelper() : StaticHelper(#kf, kf) {}\
     };\
+    static MyStaticHelper registryHelper;\
   }
 
 } // end namespace

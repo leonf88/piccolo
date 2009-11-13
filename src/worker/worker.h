@@ -18,10 +18,14 @@ public:
   Worker(const ConfigData &c);
   ~Worker();
 
-  void kernelLoop();
-  void networkLoop();
+  void Start();
+
+  void KernelLoop();
+  void NetworkLoop();
 
   struct Peer;
+
+  SharedTable *CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af);
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 1 << 20;
@@ -47,14 +51,13 @@ private:
   vector<PartitionedHash*> tables;
 
   // Network operations.
-  void processUpdates(Peer *p);
-  void getIncomingUpdates();
-  void computeUpdates(Peer *p, LocalHash::Iterator *it);
-  void sendAndReceive();
+  void ProcessUpdates(Peer *p);
+  void GetIncomingUpdates();
+  void ComputeUpdates(Peer *p, LocalHash::Iterator *it);
+  void SendAndReceive();
 
-  int64_t pendingNetworkBytes() const;
-  int64_t pendingKernelBytes() const;
-
+  int64_t pending_network_bytes() const;
+  int64_t pending_kernel_bytes() const;
 };
 
 }

@@ -37,7 +37,9 @@ message RunKernelRequest {
 message HashUpdateRequest {
   required int32 source = 1;
   required int32 hash_id = 2;
-  repeated Pair update = 3;
+  
+  repeated Pair put = 3;
+  repeated string remove = 4;
 }
 
 message EmptyMessage {}

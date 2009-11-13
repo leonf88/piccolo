@@ -2,7 +2,7 @@
 
 namespace upc {
 
-static FakeMPIWorld fakeWorld;
+FakeMPIWorld fake_world;
 
 void FakeMPIComm::Send(const void* c, int count, const MPI::Datatype& t, int target, int tag) const {
   Isend(c, count, t, target, tag);
@@ -12,9 +12,9 @@ void FakeMPIComm::Send(const void* c, int count, const MPI::Datatype& t, int tar
 MPI::Request FakeMPIComm::Isend(const void* c, int count, const MPI::Datatype& t, int target, int tag) const {
   DVLOG(3) << id << "::: " << " Send to " << target << " size " << count;
 
-  boost::mutex::scoped_lock sl(fakeWorld.network[target].lock);
+  boost::mutex::scoped_lock sl(fake_world.network[target].lock);
   FakeMPIWorld::Packet p(id, target, tag, string((const char*)c, count));
-  fakeWorld.network[target].data.push_back(p);
+  fake_world.network[target].data.push_back(p);
   return Request();
 }
 
@@ -35,13 +35,13 @@ bool FakeMPIComm::Iprobe(int source, int tag) const {
 }
 
 bool FakeMPIComm::Iprobe(int source, int tag, MPI::Status &result) const {
-  deque<FakeMPIWorld::Packet> &d = fakeWorld.network[id].data;
+  deque<FakeMPIWorld::Packet> &d = fake_world.network[id].data;
   if (d.empty()) {
     return false;
   }
   DVLOG(3) << id << "::: " << " probing for " << source << " tag " << tag;
 
-  boost::mutex::scoped_lock sl(fakeWorld.network[id].lock);
+  boost::mutex::scoped_lock sl(fake_world.network[id].lock);
   for (int i = 0; i < d.size(); ++i) {
     FakeMPIWorld::Packet &p = d[i];
     DVLOG(3) << id << "::: " << " probe for " << source << " tag " << tag << " checking "
@@ -69,9 +69,9 @@ void FakeMPIComm::Recv(void *tgt, int bytes, const MPI::Datatype& t, int source,
 }
 
 void FakeMPIComm::Recv(void *tgt, int bytes, const MPI::Datatype& t, int source, int tag, MPI::Status& result) const {
-  deque<FakeMPIWorld::Packet> &d = fakeWorld.network[id].data;
+  deque<FakeMPIWorld::Packet> &d = fake_world.network[id].data;
 
-  boost::mutex::scoped_lock sl(fakeWorld.network[id].lock);
+  boost::mutex::scoped_lock sl(fake_world.network[id].lock);
   for (int i = 0; i < d.size(); ++i) {
     FakeMPIWorld::Packet &p = d[i];
     if ((p.source == source || source == MPI::ANY_SOURCE) &&

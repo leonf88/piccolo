@@ -2,6 +2,10 @@ src/util/file.o: src/util/file.cc src/util/file.h src/util/common.h \
   extlib/glog/src/glog/logging.h extlib/gflags/src/gflags/gflags.h \
   extlib/glog/src/glog/log_severity.h extlib/glog/src/glog/vlog_is_on.h \
   src/util/hash.h src/util/common.pb.h
+src/util/rpc.o: src/util/rpc.cc src/util/rpc.h src/util/common.h \
+  extlib/glog/src/glog/logging.h extlib/gflags/src/gflags/gflags.h \
+  extlib/glog/src/glog/log_severity.h extlib/glog/src/glog/vlog_is_on.h \
+  src/util/hash.h src/util/fake-mpi.h
 src/util/common.pb.o: src/util/common.pb.cc src/util/common.pb.h
 src/util/fake-mpi.o: src/util/fake-mpi.cc src/util/fake-mpi.h \
   src/util/common.h extlib/glog/src/glog/logging.h \
@@ -11,16 +15,31 @@ src/util/common.o: src/util/common.cc src/util/common.h \
   extlib/glog/src/glog/logging.h extlib/gflags/src/gflags/gflags.h \
   extlib/glog/src/glog/log_severity.h extlib/glog/src/glog/vlog_is_on.h \
   src/util/hash.h src/util/file.h src/util/common.pb.h
-src/worker/worker.o: src/worker/worker.cc src/worker/worker.h \
+src/worker/worker.o: src/worker/worker.cc src/util/common.h \
+  extlib/glog/src/glog/logging.h extlib/gflags/src/gflags/gflags.h \
+  extlib/glog/src/glog/log_severity.h extlib/glog/src/glog/vlog_is_on.h \
+  src/util/hash.h src/util/fake-mpi.h src/worker/worker.h src/util/rpc.h \
+  src/worker/worker.pb.h src/worker/accumulator.h src/worker/kernel.h
+src/worker/kernel.o: src/worker/kernel.cc src/worker/kernel.h \
   src/util/common.h extlib/glog/src/glog/logging.h \
   extlib/gflags/src/gflags/gflags.h extlib/glog/src/glog/log_severity.h \
-  extlib/glog/src/glog/vlog_is_on.h src/util/hash.h src/util/rpc.h \
-  src/worker/worker.pb.h src/worker/accumulator.h src/util/fake-mpi.h
+  extlib/glog/src/glog/vlog_is_on.h src/util/hash.h
+src/worker/accumulator.o: src/worker/accumulator.cc src/util/common.h \
+  extlib/glog/src/glog/logging.h extlib/gflags/src/gflags/gflags.h \
+  extlib/glog/src/glog/log_severity.h extlib/glog/src/glog/vlog_is_on.h \
+  src/util/hash.h src/worker/accumulator.h src/util/rpc.h \
+  src/worker/worker.pb.h
 src/worker/worker.pb.o: src/worker/worker.pb.cc src/worker/worker.pb.h
 src/test/test-shortest-path.o: src/test/test-shortest-path.cc \
   src/util/common.h extlib/glog/src/glog/logging.h \
   extlib/gflags/src/gflags/gflags.h extlib/glog/src/glog/log_severity.h \
   extlib/glog/src/glog/vlog_is_on.h src/util/hash.h src/util/file.h \
   src/util/common.pb.h src/worker/worker.h src/util/rpc.h \
-  src/worker/worker.pb.h src/worker/accumulator.h
+  src/worker/worker.pb.h src/worker/accumulator.h src/master/master.h \
+  src/worker/kernel.h
+src/master/master.o: src/master/master.cc src/master/master.h \
+  src/worker/kernel.h src/util/common.h extlib/glog/src/glog/logging.h \
+  extlib/gflags/src/gflags/gflags.h extlib/glog/src/glog/log_severity.h \
+  extlib/glog/src/glog/vlog_is_on.h src/util/hash.h src/worker/worker.h \
+  src/util/rpc.h src/worker/worker.pb.h src/worker/accumulator.h
 src/util/jenkins-hash.o: src/util/jenkins-hash.c

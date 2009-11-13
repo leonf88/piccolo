@@ -2,6 +2,8 @@ MYD := $(notdir $(CURDIR))
 .PRECIOUS : %.pb.cc %.pb.h
 
 VPATH := .:src
+CFLAGS := -ggdb2 -O0 -Wall -Wno-unused-function -Wno-sign-compare
+CXXFLAGS := $(CFLAGS)  -Wno-reorder 
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/
 LDFLAGS := 
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/
@@ -12,9 +14,14 @@ LINK_LIB := ld --eh-frame-hdr -r
 LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
 
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/jenkins-hash.o src/util/file.o \
-									src/util/fake-mpi.o src/util/common.o
+			      src/util/fake-mpi.o src/util/common.o src/util/rpc.o
 
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o src/worker/accumulator.o
+LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o\
+				  src/worker/accumulator.o src/master/master.o
+
+%.o: %.cc
+	@echo CC :: $<
+	@$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
 all: bin/test-shortest-path

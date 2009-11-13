@@ -29,6 +29,9 @@ struct FakeMPIWorld {
   FakeMPIWorld() {}
 };
 
+extern FakeMPIWorld fake_world;
+
+
 struct FakeMPIComm : public MPI::Comm {
   int id;
   struct Request : public MPI::Request {

@@ -15,24 +15,60 @@
 
 namespace upc {
 
+typedef int (*ShardingFunction)(StringPiece, int);
+typedef int (*HashFunction)(StringPiece);
+
+// Accumulate new_val into current.
+typedef void (*AccumFunction)(StringPiece current, StringPiece new_val);
+
+// Sharding functions
+static int ShardInt(StringPiece k, int shards) {
+  return POD_CAST(int, k) % shards;
+}
+static int ShardStr(StringPiece k, int shards) {
+  return k.hash() % shards;
+}
+
+// Hash functions
+static int HashInt(StringPiece k) {
+  return POD_CAST(int, k);
+}
+static int HashStr(StringPiece k) {
+  return k.hash();
+}
+
+// Accumulation functions
+static void AccumMin(StringPiece current, StringPiece new_val) {
+  current.data = (char*) min(POD_CAST(int, current), POD_CAST(int, new_val));
+}
+static void AccumSum(StringPiece current, StringPiece new_val) {
+  current.data = (char*) (POD_CAST(int, current) + POD_CAST(int, new_val));
+}
+static void AccumProd(StringPiece current, StringPiece new_val) {
+  current.data = (char*) (POD_CAST(int, current) * POD_CAST(int, new_val));
+}
+
 typedef unordered_map<StringPiece, StringPiece> StringMap;
 
 class LocalHash;
-typedef int (*ShardingFunction)(StringPiece);
-typedef int (*HashFunction)(StringPiece);
-typedef void
-    (*AccumFunction)(StringPiece in1, StringPiece in2, StringPiece out);
 
-class AccumHash {
+class SharedTable {
 public:
-  AccumHash(ShardingFunction sf, HashFunction hf, AccumFunction af) :
-    sf_(sf), hf_(hf), af_(af) {
+  SharedTable(ShardingFunction sf, HashFunction hf, AccumFunction af,
+              int owner, int id) :
+    sf_(sf), hf_(hf), af_(af), owner(owner), hash_id(id) {
   }
 
-  // Process network updates for this table, applying the accumulator as necessary.
-  virtual void applyUpdates(const HashUpdateRequest& req) = 0;
+  virtual StringPiece get(const StringPiece &k) = 0;
+  virtual void put(const StringPiece &k, const StringPiece &v) = 0;
+  virtual void remove(const StringPiece &k) = 0;
 
-  int ownerThread;
+  // The thread with ownership over this data.
+  int owner;
+
+  // The table to which this partition belongs.
+  int hash_id;
+
 protected:
   AccumFunction af_;
   HashFunction hf_;
@@ -40,9 +76,7 @@ protected:
 };
 
 // A local accumulated hash table.
-class LocalHash: public AccumHash {
-private:
-   StringMap data;
+class LocalHash: public SharedTable {
 public:
   struct Iterator {
     Iterator(LocalHash *owner);
@@ -51,13 +85,17 @@ public:
     void next();
     bool done();
 
+    LocalHash *owner() {
+      return owner_;
+    }
+
   private:
-    StringMap::iterator it_;
     LocalHash *owner_;
+    StringMap::iterator it_;
   };
 
-
-  LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af);
+  LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int owner,
+            int id);
 
   StringPiece get(const StringPiece &k);
   void put(const StringPiece &k, const StringPiece &v);
@@ -65,30 +103,33 @@ public:
   void clear();
   bool empty();
   int64_t size();
-  Iterator *getIterator();
+  Iterator *get_iterator();
 
   void applyUpdates(const HashUpdateRequest& req);
+private:
+  StringMap data;
 };
 
 // A set of accumulated hashes.
-class PartitionedHash: public AccumHash {
+class PartitionedHash: public SharedTable {
 private:
   static const int32_t kMaxPeers = 8192;
 
-  // New accumulators are created by the network thread when sending out updates,
-  // and by the kernel thread when a new iteration starts.
-  bool volatile accumWriting[kMaxPeers];
+  bool volatile accum_working[kMaxPeers];
 
   vector<LocalHash*> partitions;
-  mutable boost::recursive_mutex pendingLock;
+  mutable boost::recursive_mutex pending_lock;
+
 public:
-  PartitionedHash(int numThreads,
-                  ShardingFunction sf,
-                  HashFunction hf,
-                  AccumFunction af,
-                  RPCHelper rpc) :
-    AccumHash(sf, hf, af) {
-    bzero((void*) accumWriting, sizeof(bool) * kMaxPeers);
+  PartitionedHash(ShardingFunction sf, HashFunction hf, AccumFunction af,
+                  int my_thread, int hash_id,
+                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, hash_id) {
+    partitions.resize(num_threads);
+
+    bzero((void*) accum_working, sizeof(bool) * kMaxPeers);
+    for (int i = 0; i < partitions.size(); ++i) {
+      partitions[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
+    }
   }
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
@@ -104,9 +145,10 @@ public:
   void remove(const StringPiece &k);
 
   // Append to 'out' the list of accumulators that have pending network data.
-  bool getPendingUpdates(deque<LocalHash*> *out);
-  int pendingBytes();
+  bool GetPendingUpdates(deque<LocalHash*> *out);
+  void ApplyUpdates(const upc::HashUpdateRequest& req);
 
+  int pending_write_bytes();
 };
 
 }

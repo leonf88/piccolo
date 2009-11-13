@@ -7,6 +7,12 @@
 
 namespace upc {
 
+class RPCHelper;
+
+// Return pointers to mpi or rpc helpers.
+RPCHelper *GetRPCHelper();
+MPI::Comm *GetMPIWorld();
+
 class RPCHelper {
 public:
   RPCHelper(MPI::Comm *mpi) :
@@ -15,49 +21,16 @@ public:
 
   // Try to read a message from the given peer and rpc channel.  Return
   // the number of bytes read, 0 if no message was available.
-  int TryRead(int peerId, int rpcId, google::protobuf::Message *msg,
-              string *scratch = NULL) {
-    string buf;
-    int rSize = 0;
+  int TryRead(int peerId, int rpcId, google::protobuf::Message *msg, string *scratch = NULL);
+  int Read(int peerId, int rpcId, google::protobuf::Message *msg, string *scratch = NULL);
+  int ReadAny(int *peerId, int rpcId, google::protobuf::Message *msg, string *scratch = NULL);
 
-    if (!scratch) {
-      scratch = &buf;
-    }
 
-    MPI::Status probeResult;
-    if (mpiWorld->Iprobe(peerId, rpcId, probeResult)) {
-      rSize = probeResult.Get_count(MPI::BYTE);
-      scratch->resize(rSize);
-      mpiWorld->Recv(&(*scratch)[0], rSize, MPI::BYTE, peerId, rpcId);
-      msg->ParseFromString(*scratch);
-      return rSize;
-    }
-  }
+  void Send(int peerId, int rpcId, const google::protobuf::Message &msg, string *scratch = NULL);
 
-  int Read(int peerId, int rpcId, google::protobuf::Message *msg,
-           string *scratch = NULL) {
-    string buf;
-    int rSize = 0;
-
-    if (!scratch) {
-      scratch = &buf;
-    }
-
-    MPI::Status probeResult;
-    mpiWorld->Probe(peerId, rpcId, probeResult);
-    rSize = probeResult.Get_count(MPI::BYTE);
-    scratch->resize(rSize);
-    mpiWorld->Recv(&(*scratch)[0], rSize, MPI::BYTE, peerId, rpcId);
-    msg->ParseFromString(*scratch);
-    return rSize;
-  }
-
-  void Send(int peerId, int rpcId, const google::protobuf::Message &msg) {
-    string scratch;
-    msg.AppendToString(&scratch);
-    mpiWorld->Send(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId);
-  }
-
+  // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
+  // here.
+  void Broadcast(int rpcId, const google::protobuf::Message &msg);
 private:
   MPI::Comm *mpiWorld;
 };

@@ -1,8 +1,7 @@
 #include "util/common.h"
 #include "util/file.h"
 #include "worker/worker.h"
-#include "worker/kernel.h"
-#include "worker/worker.pb.h"
+#include "master/master.h"
 
 namespace upc {
 void BuildTestGraph(int nodes, int density) {
@@ -23,10 +22,18 @@ void BuildTestGraph(int nodes, int density) {
   }
 }
 
+static SharedTable* distanceHash;
+
 void RunSPIteration() {
+  LOG(INFO) << "Running... " << distanceHash;
+  for (int i = 0; i < 1000; ++i) {
+    distanceHash->put(StringPrintf("key.%d", i), StringPiece((char*)new int(i + 10000), sizeof(i)));
+  }
 
+  for (int i = 0; i < 1000; ++i) {
+    distanceHash->put(StringPrintf("key.%d", i), StringPiece((char*)new int(i), sizeof(i)));
+  }
 }
-
 REGISTER_KERNEL(RunSPIteration);
 
 }
@@ -34,13 +41,19 @@ REGISTER_KERNEL(RunSPIteration);
 using namespace upc;
 int main(int argc, char **argv) {
   Init(argc, argv);
-  BuildTestGraph(10000, 3);
+//  BuildTestGraph(10000, 3);
 
   ConfigData conf;
-  conf.set_kernel("ShortestPathKernel");
-  conf.set_shard_prefix("nodes.rec");
-  conf.set_num_workers(1);
-  Worker w(conf);
+  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+
+  if (MPI::COMM_WORLD.Get_rank() == 0) {
+    Master m(conf);
+    m.run(&RunSPIteration);
+  } else {
+    Worker w(conf);
+    distanceHash = w.CreateTable(&ShardStr, &HashStr, &AccumMin);
+    w.Start();
+  }
 
   sleep(100);
 }

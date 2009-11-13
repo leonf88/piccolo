@@ -9,8 +9,6 @@
 
 namespace upc {
 
-FakeMPIWorld fakeWorld;
-
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
   struct Request {
@@ -47,7 +45,7 @@ struct Worker::Peer {
     accumulatedUpdates = new HashUpdateRequest;
   }
 
-  void collectPendingSends() {
+  void CollectPendingSends() {
     for (list<Request*>::iterator i = outgoingRequests.begin(); i
         != outgoingRequests.end(); ++i) {
       Request *r = (*i);
@@ -61,7 +59,7 @@ struct Worker::Peer {
     }
   }
 
-  int receiveIncomingData(RPCHelper *rpc) {
+  int ReceiveIncomingData(RPCHelper *rpc) {
     string data;
     int bytesProcessed = 0;
     int updateSize = 0;
@@ -79,7 +77,7 @@ struct Worker::Peer {
     return bytesProcessed;
   }
 
-  int64_t writeBytesPending() const {
+  int64_t write_bytes_pending() const {
     int64_t t = 0;
     for (list<Request*>::const_iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       t += (*i)->payload.size();
@@ -87,7 +85,7 @@ struct Worker::Peer {
     return t;
   }
 
-  Request* getRequest(HashUpdateRequest *ureq) {
+  Request* get_request(HashUpdateRequest *ureq) {
     Request* r = new Request();
     r->target = id;
     ureq->SerializeToString(&r->payload);
@@ -95,7 +93,7 @@ struct Worker::Peer {
     return r;
   }
 
-  HashUpdateRequest *popIncoming() {
+  HashUpdateRequest *pop_incoming() {
     HashUpdateRequest *r = incomingRequests.front();
     incomingRequests.pop_front();
     return r;
@@ -108,23 +106,21 @@ Worker::Worker(const ConfigData &c) {
   numPeers = config.num_workers();
   peers.resize(numPeers);
   for (int i = 0; i < numPeers; ++i) {
-    peers[i] = new Peer(i);
+    peers[i] = new Peer(i + 1);
   }
 
   bytesOut = bytesIn = 0;
 
   running = true;
 
-  if (config.localtest()) {
-    world = new FakeMPIComm(config.worker_id());
-  } else {
-    world = &MPI::COMM_WORLD;
-  }
+  rpc = GetRPCHelper();
+  world = GetMPIWorld();
+  kernelThread = networkThread = NULL;
+}
 
-  rpc = new RPCHelper(world);
-
-  kernelThread = new boost::thread(boost::bind(&Worker::kernelLoop, this));
-  networkThread = new boost::thread(boost::bind(&Worker::networkLoop, this));
+void Worker::Start() {
+  kernelThread = new boost::thread(boost::bind(&Worker::KernelLoop, this));
+  networkThread = new boost::thread(boost::bind(&Worker::NetworkLoop, this));
 }
 
 Worker::~Worker() {
@@ -138,53 +134,60 @@ Worker::~Worker() {
   }
 }
 
-void Worker::networkLoop() {
+SharedTable* Worker::CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af) {
+  PartitionedHash *t = new PartitionedHash(sf, hf, af, config.worker_id(), tables.size(), config.num_workers(), rpc);
+  tables.push_back(t);
+  return t;
+}
+
+void Worker::NetworkLoop() {
   deque<LocalHash*> work;
   while (running) {
     PERIODIC(10,
-        LOG(INFO) << "Network loop working - " << pendingKernelBytes() << " bytes in the processing queue.");
+        LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.");
 
     while (work.empty()) {
-      Sleep(0.1);
-      sendAndReceive();
+      Sleep(5.);
+      SendAndReceive();
 
       for (int i = 0; i < tables.size(); ++i) {
-        tables[i]->getPendingUpdates(&work);
+        tables[i]->GetPendingUpdates(&work);
       }
     }
 
     LocalHash* old = work.front();
     work.pop_front();
 
-    VLOG(2) << "Accum " << old->ownerThread << " : " << old->size();
-    Peer * p = peers[old->ownerThread];
+    VLOG(2) << "Accum " << old->owner << " : " << old->size();
+    Peer * p = peers[old->owner];
 
-    LocalHash::Iterator *i = old->getIterator();
+    LocalHash::Iterator *i = old->get_iterator();
     while (!i->done()) {
-      if (pendingNetworkBytes() < config.network_buffer()) {
-        computeUpdates(p, i);
+      if (pending_network_bytes() < config.network_buffer()) {
+        ComputeUpdates(p, i);
       }
 
-      sendAndReceive();
+      SendAndReceive();
     }
 
     delete i;
     delete old;
-
-    sendAndReceive();
   }
 }
 
-void Worker::kernelLoop() {
+void Worker::KernelLoop() {
   RunKernelRequest kernelRequest;
 
 	while (running) {
 		rpc->Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
 
-		KernelFunction f = KernelRegistry::get()->GetKernel(kernelRequest.kernel_id());
+		LOG(INFO) << "Received run request for kernel id: " << kernelRequest.kernel_id();
+
+		KernelFunction f = KernelRegistry::get_kernel(kernelRequest.kernel_id());
 		f();
 
-	  while (pendingKernelBytes() + pendingNetworkBytes() > 0) {
+		LOG(INFO) << "Waiting for network to finish: " << pending_network_bytes() + pending_kernel_bytes();
+	  while (pending_kernel_bytes() + pending_network_bytes() > 0) {
 	    Sleep(0.1);
 	  }
 
@@ -192,40 +195,45 @@ void Worker::kernelLoop() {
      // and we are done transmitting.
 	  EmptyMessage m;
 	  rpc->Send(config.master_id(), MTYPE_KERNEL_DONE, m);
+
+	  LOG(INFO) << "Kernel done.";
 	}
 }
 
-int64_t Worker::pendingNetworkBytes() const {
+int64_t Worker::pending_network_bytes() const {
   int64_t t = 0;
   for (int i = 0; i < peers.size(); ++i) {
-    t += peers[i]->writeBytesPending();
+    t += peers[i]->write_bytes_pending();
   }
   return t;
 }
 
-int64_t Worker::pendingKernelBytes() const {
+int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
   for (int i = 0; i < tables.size(); ++i) {
-    t += tables[i]->pendingBytes();
+    t += tables[i]->pending_write_bytes();
   }
 
   return t;
 }
 
-void Worker::computeUpdates(Peer *p, LocalHash::Iterator *it) {
+void Worker::ComputeUpdates(Peer *p, LocalHash::Iterator *it) {
   HashUpdateRequest *r = &p->writeScratch;
   r->Clear();
 
   r->set_source(config.worker_id());
+  r->set_hash_id(it->owner()->hash_id);
 
   int bytesUsed = 0;
   int count = 0;
   for (; !it->done() && bytesUsed < kNetworkChunkSize; it->next()) {
-    const StringPiece& k = it->key();
-    const StringPiece& v = it->value();
+    StringPiece k = it->key();
+    StringPiece v = it->value();
 
-    Pair &u = *r->add_update();
+//    LOG(INFO) << " k " << k.len << " v " << v.len;
+
+    Pair &u = *r->add_put();
     u.set_key(k.data, k.len);
     u.set_value(v.data, v.len);
     ++count;
@@ -235,14 +243,14 @@ void Worker::computeUpdates(Peer *p, LocalHash::Iterator *it) {
 
   VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
 
-  Peer::Request *mpiReq = p->getRequest(r);
+  Peer::Request *mpiReq = p->get_request(r);
   bytesOut += mpiReq->payload.size();
 
   mpiReq->Send(world);
   ++count;
 }
 
-void Worker::sendAndReceive() {
+void Worker::SendAndReceive() {
   MPI::Status probeResult;
 
   string scratch;
@@ -254,12 +262,12 @@ void Worker::sendAndReceive() {
 
   for (int i = 0; i < peers.size(); ++i) {
     Peer *p = peers[i];
-    p->collectPendingSends();
-    p->receiveIncomingData(rpc);
+    p->CollectPendingSends();
+    p->ReceiveIncomingData(rpc);
     while (!p->incomingRequests.empty()) {
-      HashUpdateRequest *r = p->popIncoming();
+      HashUpdateRequest *r = p->pop_incoming();
 
-      tables[r->hash_id()]->applyUpdates(*r);
+      tables[r->hash_id()]->ApplyUpdates(*r);
       delete r;
     }
   }

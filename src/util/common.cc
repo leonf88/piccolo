@@ -17,6 +17,7 @@
 #include <mpi.h>
 
 DEFINE_bool(dump_stacktrace, true, "");
+DEFINE_bool(localtest, false, "");
 
 namespace upc {
 
