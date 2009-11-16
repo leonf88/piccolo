@@ -22,6 +22,10 @@ void LocalHash::clear() {
   data.clear();
 }
 
+bool LocalHash::contains(const StringPiece &k) {
+  return data.find(k.AsString()) != data.end();
+}
+
 bool LocalHash::empty() {
   return data.empty();
 }
@@ -30,7 +34,7 @@ int64_t LocalHash::size() {
   return data.size();
 }
 
-void LocalHash::applyUpdates(const HashUpdateRequest& req) {
+void LocalHash::applyUpdates(const HashUpdate& req) {
   for (int i = 0; i < req.put_size(); ++i) {
     const Pair &p = req.put(i);
     put(p.key(), p.value());
@@ -64,19 +68,19 @@ bool LocalHash::Iterator::done() {
   return it_ == owner_->data.end();
 }
 
-void PartitionedHash::ApplyUpdates(const upc::HashUpdateRequest& req) {
-  partitions[owner]->applyUpdates(req);
+void PartitionedHash::ApplyUpdates(const upc::HashUpdate& req) {
+  partitions_[owner_thread_]->applyUpdates(req);
 }
 
 bool PartitionedHash::GetPendingUpdates(deque<LocalHash*> *out) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock);
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
-  for (int i = 0; i < partitions.size(); ++i) {
-    LocalHash *a = partitions[i];
-    if (i != owner && !a->empty()) {
-      partitions[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
+  for (int i = 0; i < partitions_.size(); ++i) {
+    LocalHash *a = partitions_[i];
+    if (i != owner_thread_ && !a->empty()) {
+      partitions_[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
       out->push_back(a);
-      while (accum_working[i]);
+      while (accum_working_[i]);
     }
   }
 
@@ -84,12 +88,12 @@ bool PartitionedHash::GetPendingUpdates(deque<LocalHash*> *out) {
 }
 
 int PartitionedHash::pending_write_bytes() {
-  boost::recursive_mutex::scoped_lock sl(pending_lock);
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   int64_t s = 0;
-  for (int i = 0; i < partitions.size(); ++i) {
-    LocalHash *a = partitions[i];
-    if (i != owner) {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    LocalHash *a = partitions_[i];
+    if (i != owner_thread_) {
       s += a->size();
     }
   }
@@ -98,21 +102,32 @@ int PartitionedHash::pending_write_bytes() {
 }
 
 void PartitionedHash::put(const StringPiece &k, const StringPiece &v) {
-  int shard = sf_(k, partitions.size());
-  accum_working[shard] = 1;
-  LocalHash *h = partitions[shard];
+  int shard = sf_(k, partitions_.size());
+  accum_working_[shard] = 1;
+  LocalHash *h = partitions_[shard];
   h->put(k, v);
-  accum_working[shard] = 0;
+  accum_working_[shard] = 0;
 
   //LOG_EVERY_N(INFO, 100) << "Added key :: " << k.AsString() << " shard " << shard;
 }
 
 StringPiece PartitionedHash::get(const StringPiece &k) {
-  int shard = sf_(k, partitions.size());
-  accum_working[shard] = 1;
-  LocalHash *h = partitions[shard];
+  int shard = sf_(k, partitions_.size());
+  accum_working_[shard] = 1;
+  LocalHash *h = partitions_[shard];
+
+  if (shard != owner_thread_ && !h->contains(k)) {
+    HashRequest req;
+    HashUpdate resp;
+    req.set_key(k.AsString());
+
+    rpc_->Send(shard + 1, MTYPE_GET_REQUEST, req);
+    rpc_->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
+    h->put(k, resp.put(0).value());
+  }
+
   StringPiece data = h->get(k);
-  accum_working[shard] = 0;
+  accum_working_[shard] = 0;
   return data;
 }
 

@@ -56,7 +56,7 @@ class SharedTable {
 public:
   SharedTable(ShardingFunction sf, HashFunction hf, AccumFunction af,
               int owner, int id) :
-    sf_(sf), hf_(hf), af_(af), owner(owner), hash_id(id) {
+    sf_(sf), hf_(hf), af_(af), owner_thread_(owner), hash_id(id) {
   }
 
   virtual StringPiece get(const StringPiece &k) = 0;
@@ -64,7 +64,7 @@ public:
   virtual void remove(const StringPiece &k) = 0;
 
   // The thread with ownership over this data.
-  int owner;
+  int owner_thread_;
 
   // The table to which this partition belongs.
   int hash_id;
@@ -102,10 +102,12 @@ public:
   void remove(const StringPiece &k);
   void clear();
   bool empty();
+  bool contains(const StringPiece &k);
+
   int64_t size();
   Iterator *get_iterator();
 
-  void applyUpdates(const HashUpdateRequest& req);
+  void applyUpdates(const HashUpdate& req);
 private:
   StringMap data;
 };
@@ -115,20 +117,20 @@ class PartitionedHash: public SharedTable {
 private:
   static const int32_t kMaxPeers = 8192;
 
-  bool volatile accum_working[kMaxPeers];
-
-  vector<LocalHash*> partitions;
-  mutable boost::recursive_mutex pending_lock;
+  vector<LocalHash*> partitions_;
+  mutable boost::recursive_mutex pending_lock_;
+  bool volatile accum_working_[kMaxPeers];
+  RPCHelper *rpc_;
 
 public:
   PartitionedHash(ShardingFunction sf, HashFunction hf, AccumFunction af,
                   int my_thread, int hash_id,
-                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, hash_id) {
-    partitions.resize(num_threads);
+                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, hash_id), rpc_(rpc) {
+    partitions_.resize(num_threads);
 
-    bzero((void*) accum_working, sizeof(bool) * kMaxPeers);
-    for (int i = 0; i < partitions.size(); ++i) {
-      partitions[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
+    bzero((void*) accum_working_, sizeof(bool) * kMaxPeers);
+    for (int i = 0; i < partitions_.size(); ++i) {
+      partitions_[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
     }
   }
 
@@ -146,7 +148,7 @@ public:
 
   // Append to 'out' the list of accumulators that have pending network data.
   bool GetPendingUpdates(deque<LocalHash*> *out);
-  void ApplyUpdates(const upc::HashUpdateRequest& req);
+  void ApplyUpdates(const upc::HashUpdate& req);
 
   int pending_write_bytes();
 };

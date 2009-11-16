@@ -5,6 +5,9 @@ enum MessageTypes {
   MTYPE_KERNEL_DONE = 2;
   MTYPE_WORKER_SHUTDOWN = 4;
   MTYPE_RUN_KERNEL = 5; 
+  
+  MTYPE_GET_REQUEST = 6;
+  MTYPE_GET_RESPONSE = 7;
 };
 
 enum NodeIds {
@@ -34,12 +37,16 @@ message RunKernelRequest {
   required int32 kernel_id = 1;
 }
 
-message HashUpdateRequest {
+message HashUpdate {
   required int32 source = 1;
   required int32 hash_id = 2;
   
   repeated Pair put = 3;
   repeated string remove = 4;
+}
+
+message HashRequest {
+  required string key = 1;
 }
 
 message EmptyMessage {}

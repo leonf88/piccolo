@@ -32,17 +32,17 @@ struct Worker::Peer {
   };
 
   list<Request*> outgoingRequests;
-  HashUpdateRequest writeScratch;
-  HashUpdateRequest readScratch;
-  HashUpdateRequest *accumulatedUpdates;
+  HashUpdate writeScratch;
+  HashUpdate readScratch;
+  HashUpdate *accumulatedUpdates;
 
   // Incoming data from this peer that we have read from the network, but has yet to be
   // processed by the kernel.
-  deque<HashUpdateRequest*> incomingRequests;
+  deque<HashUpdate*> incomingRequests;
 
   int32_t id;
   Peer(int id) : id(id) {
-    accumulatedUpdates = new HashUpdateRequest;
+    accumulatedUpdates = new HashUpdate;
   }
 
   void CollectPendingSends() {
@@ -63,10 +63,10 @@ struct Worker::Peer {
     string data;
     int bytesProcessed = 0;
     int updateSize = 0;
-    while ((updateSize = rpc->TryRead(id, MTYPE_KERNEL_DATA, &readScratch, &data))) {
+    while ((updateSize = rpc->TryRead(id, MTYPE_KERNEL_DATA, &readScratch))) {
     	bytesProcessed += updateSize;
 
-      HashUpdateRequest *req = new HashUpdateRequest;
+      HashUpdate *req = new HashUpdate;
       req->CopyFrom(readScratch);
       incomingRequests.push_back(req);
 
@@ -85,7 +85,7 @@ struct Worker::Peer {
     return t;
   }
 
-  Request* get_request(HashUpdateRequest *ureq) {
+  Request* get_request(HashUpdate *ureq) {
     Request* r = new Request();
     r->target = id;
     ureq->SerializeToString(&r->payload);
@@ -93,8 +93,8 @@ struct Worker::Peer {
     return r;
   }
 
-  HashUpdateRequest *pop_incoming() {
-    HashUpdateRequest *r = incomingRequests.front();
+  HashUpdate *pop_incoming() {
+    HashUpdate *r = incomingRequests.front();
     incomingRequests.pop_front();
     return r;
   }
@@ -106,15 +106,13 @@ Worker::Worker(const ConfigData &c) {
   numPeers = config.num_workers();
   peers.resize(numPeers);
   for (int i = 0; i < numPeers; ++i) {
-    peers[i] = new Peer(i + 1);
+    peers[i] = new Peer(i);
   }
 
   bytesOut = bytesIn = 0;
 
   running = true;
 
-  rpc = GetRPCHelper();
-  world = GetMPIWorld();
   kernelThread = networkThread = NULL;
 }
 
@@ -138,7 +136,7 @@ Worker::~Worker() {
 }
 
 SharedTable* Worker::CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af) {
-  PartitionedHash *t = new PartitionedHash(sf, hf, af, config.worker_id(), tables.size(), config.num_workers(), rpc);
+  PartitionedHash *t = new PartitionedHash(sf, hf, af, config.worker_id(), tables.size(), config.num_workers(), new RPCHelper(world));
   tables.push_back(t);
   return t;
 }
@@ -161,8 +159,8 @@ void Worker::NetworkLoop() {
     LocalHash* old = work.front();
     work.pop_front();
 
-    VLOG(2) << "Accum " << old->owner << " : " << old->size();
-    Peer * p = peers[old->owner];
+    VLOG(2) << "Accum " << old->owner_thread_ << " : " << old->size();
+    Peer * p = peers[old->owner_thread_];
 
     LocalHash::Iterator *i = old->get_iterator();
     while (!i->done()) {
@@ -180,9 +178,9 @@ void Worker::NetworkLoop() {
 
 void Worker::KernelLoop() {
   RunKernelRequest kernelRequest;
-
+  RPCHelper rpc(world);
 	while (running) {
-		rpc->Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
+		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
 
 		LOG(INFO) << "Received run request for kernel id: " << kernelRequest.kernel_id();
 
@@ -197,7 +195,7 @@ void Worker::KernelLoop() {
     // Send a message to master indicating that we've completed our kernel
      // and we are done transmitting.
 	  EmptyMessage m;
-	  rpc->Send(config.master_id(), MTYPE_KERNEL_DONE, m);
+	  rpc.Send(config.master_id(), MTYPE_KERNEL_DONE, m);
 
 	  LOG(INFO) << "Kernel done.";
 	}
@@ -222,7 +220,7 @@ int64_t Worker::pending_kernel_bytes() const {
 }
 
 void Worker::ComputeUpdates(Peer *p, LocalHash::Iterator *it) {
-  HashUpdateRequest *r = &p->writeScratch;
+  HashUpdate *r = &p->writeScratch;
   r->Clear();
 
   r->set_source(config.worker_id());
@@ -255,6 +253,7 @@ void Worker::ComputeUpdates(Peer *p, LocalHash::Iterator *it) {
 
 void Worker::SendAndReceive() {
   MPI::Status probeResult;
+  RPCHelper rpc(world);
 
   string scratch;
 
@@ -266,9 +265,9 @@ void Worker::SendAndReceive() {
   for (int i = 0; i < peers.size(); ++i) {
     Peer *p = peers[i];
     p->CollectPendingSends();
-    p->ReceiveIncomingData(rpc);
+    p->ReceiveIncomingData(&rpc);
     while (!p->incomingRequests.empty()) {
-      HashUpdateRequest *r = p->pop_incoming();
+      HashUpdate *r = p->pop_incoming();
 
       tables[r->hash_id()]->ApplyUpdates(*r);
       delete r;

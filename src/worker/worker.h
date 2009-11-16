@@ -35,7 +35,7 @@ private:
 
   boost::thread *kernelThread, *networkThread;
   MPI::Comm *world;
-  RPCHelper *rpc;
+  RPCHelper *networkHelper;
 
   int64_t bytesIn, bytesOut;
 
