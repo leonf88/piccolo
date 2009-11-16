@@ -4,8 +4,10 @@ namespace upc {
 
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
-  world_ = GetMPIWorld();
-  rpc_ = GetRPCHelper();
+  world_ = MPI::COMM_WORLD;
+  rpc_ = new RPCHelper(&world_);
+
+  world_.Split(1, world_.Get_rank());
 }
 
 void Master::run(KernelFunction f) {
@@ -17,9 +19,9 @@ void Master::run(KernelFunction f) {
   LOG(INFO) << "Waiting for response.";
 
 
-  string waiting(world_->Get_size() - 1, '0');
+  string waiting(world_.Get_size() - 1, '0');
   int peer = 0;
-  for (int i = 1; i < world_->Get_size(); ++i) {
+  for (int i = 1; i < world_.Get_size(); ++i) {
     EmptyMessage msg;
     rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &msg);
     waiting[peer - 1] = '1';

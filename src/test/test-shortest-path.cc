@@ -6,19 +6,21 @@
 namespace upc {
 static SharedTable* distanceHash;
 
-void RunSPIteration() {
-  LOG(INFO) << "Running... " << distanceHash;
-  for (int i = 0; i < 1000; ++i) {
-    distanceHash->put(StringPrintf("key.%d", i), StringPiece((char*)new int(i + 10000), sizeof(i)));
-  }
-
-  for (int i = 0; i < 1000; ++i) {
+void TestPut() {
+  for (int i = 0; i < 100; ++i) {
     distanceHash->put(StringPrintf("key.%d", i), StringPrintf("v: %d", i));
-    StringPiece a = distanceHash->get(StringPrintf("key.%d", i));
-    LOG(INFO) << "v : " << a.AsString();
   }
 }
-REGISTER_KERNEL(RunSPIteration);
+REGISTER_KERNEL(TestPut);
+
+void TestGet() {
+  for (int i = 0; i < 100; ++i) {
+    string a = distanceHash->get(StringPrintf("key.%d", i));
+    LOG(INFO) << "v : " << a;
+  }
+}
+REGISTER_KERNEL(TestGet);
+
 }
 
 using namespace upc;
@@ -30,8 +32,10 @@ int main(int argc, char **argv) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    m.run(&RunSPIteration);
+    m.run(&TestPut);
+    m.run(&TestGet);
   } else {
+    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
     distanceHash = w.CreateTable(&ShardStr, &HashStr, &AccumMin);
     w.Run();

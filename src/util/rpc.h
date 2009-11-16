@@ -9,10 +9,6 @@ namespace upc {
 
 class RPCHelper;
 
-// Return pointers to mpi or rpc helpers.
-RPCHelper *GetRPCHelper();
-MPI::Comm *GetMPIWorld();
-
 class RPCHelper {
 public:
   typedef google::protobuf::Message Message;

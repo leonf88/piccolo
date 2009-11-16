@@ -6,7 +6,7 @@ LocalHash::LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int
   SharedTable(sf, hf, af, thread, id) {
 }
 
-StringPiece LocalHash::get(const StringPiece &k) {
+string LocalHash::get(const StringPiece &k) {
   return data[k.AsString()];
 }
 
@@ -52,11 +52,11 @@ LocalHash::Iterator *LocalHash::get_iterator() {
 
 LocalHash::Iterator::Iterator(LocalHash *owner) : owner_(owner), it_(owner_->data.begin()) {}
 
-StringPiece LocalHash::Iterator::key() {
+string LocalHash::Iterator::key() {
   return it_->first;
 }
 
-StringPiece LocalHash::Iterator::value() {
+string LocalHash::Iterator::value() {
   return it_->second;
 }
 
@@ -69,6 +69,7 @@ bool LocalHash::Iterator::done() {
 }
 
 void PartitionedHash::ApplyUpdates(const upc::HashUpdate& req) {
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[owner_thread_]->applyUpdates(req);
 }
 
@@ -78,7 +79,7 @@ bool PartitionedHash::GetPendingUpdates(deque<LocalHash*> *out) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalHash *a = partitions_[i];
     if (i != owner_thread_ && !a->empty()) {
-      partitions_[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
+      partitions_[i] = new LocalHash(sf_, hf_, af_, i, table_id);
       out->push_back(a);
       while (accum_working_[i]);
     }
@@ -111,24 +112,46 @@ void PartitionedHash::put(const StringPiece &k, const StringPiece &v) {
   //LOG_EVERY_N(INFO, 100) << "Added key :: " << k.AsString() << " shard " << shard;
 }
 
-StringPiece PartitionedHash::get(const StringPiece &k) {
+string PartitionedHash::get_local(const StringPiece &k) {
   int shard = sf_(k, partitions_.size());
+  CHECK_EQ(shard, owner_thread_);
+
   accum_working_[shard] = 1;
   LocalHash *h = partitions_[shard];
+  string v = h->get(k);
+  accum_working_[shard] = 0;
+  return v;
+}
 
-  if (shard != owner_thread_ && !h->contains(k)) {
-    HashRequest req;
-    HashUpdate resp;
-    req.set_key(k.AsString());
-
-    rpc_->Send(shard + 1, MTYPE_GET_REQUEST, req);
-    rpc_->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
-    h->put(k, resp.put(0).value());
+string PartitionedHash::get(const StringPiece &k) {
+  int shard = sf_(k, partitions_.size());
+  if (shard == owner_thread_) {
+    return partitions_[shard]->get(k);
   }
 
-  StringPiece data = h->get(k);
+  accum_working_[shard] = 1;
+  if (partitions_[shard]->contains(k)) {
+    string data = partitions_[shard]->get(k);
+    accum_working_[shard] = 0;
+    return data;
+  }
+
   accum_working_[shard] = 0;
-  return data;
+  VLOG(1) << "Requesting key " << k.AsString() << " from shard " << shard;
+  HashRequest req;
+  HashUpdate resp;
+  req.set_key(k.AsString());
+  req.set_table_id(table_id);
+
+  rpc_->Send(shard, MTYPE_GET_REQUEST, req);
+  rpc_->Read(shard, MTYPE_GET_RESPONSE, &resp);
+
+  VLOG(1) << "Got key " << k.AsString() << " : " << resp.put(0).value();
+
+  accum_working_[shard] = 1;
+  partitions_[shard]->put(k, resp.put(0).value());
+  accum_working_[shard] = 0;
+  return resp.put(0).value();
 }
 
 void PartitionedHash::remove(const StringPiece &k) {

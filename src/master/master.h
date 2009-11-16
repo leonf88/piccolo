@@ -17,7 +17,7 @@ public:
 private:
   ConfigData config_;
   RPCHelper *rpc_;
-  MPI::Comm *world_;
+  MPI::Intracomm world_;
 };
 
 }

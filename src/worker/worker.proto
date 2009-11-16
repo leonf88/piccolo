@@ -39,14 +39,15 @@ message RunKernelRequest {
 
 message HashUpdate {
   required int32 source = 1;
-  required int32 hash_id = 2;
+  required int32 table_id = 2;
   
   repeated Pair put = 3;
   repeated string remove = 4;
 }
 
 message HashRequest {
-  required string key = 1;
+  required int32 table_id = 1;
+  required string key = 2;
 }
 
 message EmptyMessage {}

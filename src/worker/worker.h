@@ -31,15 +31,13 @@ private:
   static const int64_t kNetworkChunkSize = 1 << 20;
   static const int32_t kNetworkTimeout = 10;
 
-  deque<LocalHash*> pendingWrites;
+  deque<LocalHash*> pending_writes_;
 
-  boost::thread *kernelThread, *networkThread;
-  MPI::Comm *world;
-  RPCHelper *networkHelper;
+  boost::thread *kernel_thread_, *network_thread_;
 
-  int64_t bytesIn, bytesOut;
+  MPI::Intracomm worker_comm_;
 
-  int numPeers;
+  int num_peers_;
   bool running;
 
   ConfigData config;

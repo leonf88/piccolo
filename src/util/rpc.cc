@@ -5,22 +5,8 @@ DECLARE_bool(localtest);
 
 namespace upc {
 
-RPCHelper *GetRPCHelper() {
-  return new RPCHelper(GetMPIWorld());
-}
-
-MPI::Comm *GetMPIWorld() {
-  MPI::Comm *world;
-  if (FLAGS_localtest) {
-    world = new FakeMPIComm(MPI_ANY_SOURCE);
-  } else {
-    world = &MPI::COMM_WORLD;
-  }
-  return world;
-}
-
 static void rpc_log(string msg, int src, int target, int rpc) {
-  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg;
+//  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg;
 }
 
 // Try to read a message from the given peer and rpc channel.  Return
@@ -31,6 +17,7 @@ int RPCHelper::TryRead(int peerId, int rpcId, google::protobuf::Message *msg) {
   rpc_log("IProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
   MPI::Status probeResult;
   if (mpiWorld->Iprobe(peerId, rpcId, probeResult)) {
+    rpc_log("IProbeSuccess", mpiWorld->Get_rank(), peerId, rpcId);
     rSize = probeResult.Get_count(MPI::BYTE);
     scratch.resize(rSize);
     mpiWorld->Recv(&scratch[0], rSize, MPI::BYTE, peerId, rpcId);
@@ -38,7 +25,7 @@ int RPCHelper::TryRead(int peerId, int rpcId, google::protobuf::Message *msg) {
   }
 
   rpc_log("IProbeDone", mpiWorld->Get_rank(), peerId, rpcId);
-  return 0;
+  return rSize;
 }
 
 int RPCHelper::Read(int peerId, int rpcId, google::protobuf::Message *msg) {

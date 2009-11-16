@@ -22,10 +22,10 @@ struct KernelRegistry {
 
 #define REGISTER_KERNEL(kf)\
   namespace {\
-    struct MyStaticHelper : public KernelRegistry::StaticHelper {\
-      MyStaticHelper() : StaticHelper(#kf, kf) {}\
+    struct StaticHelper_ ## kf : public KernelRegistry::StaticHelper {\
+      StaticHelper_ ## kf () : StaticHelper(#kf, kf) {}\
     };\
-    static MyStaticHelper registryHelper;\
+    static StaticHelper_ ## kf reg_helper_ ## kf;\
   }
 
 } // end namespace

@@ -56,10 +56,10 @@ class SharedTable {
 public:
   SharedTable(ShardingFunction sf, HashFunction hf, AccumFunction af,
               int owner, int id) :
-    sf_(sf), hf_(hf), af_(af), owner_thread_(owner), hash_id(id) {
+    sf_(sf), hf_(hf), af_(af), owner_thread_(owner), table_id(id) {
   }
 
-  virtual StringPiece get(const StringPiece &k) = 0;
+  virtual string get(const StringPiece &k) = 0;
   virtual void put(const StringPiece &k, const StringPiece &v) = 0;
   virtual void remove(const StringPiece &k) = 0;
 
@@ -67,7 +67,7 @@ public:
   int owner_thread_;
 
   // The table to which this partition belongs.
-  int hash_id;
+  int table_id;
 
 protected:
   AccumFunction af_;
@@ -80,8 +80,8 @@ class LocalHash: public SharedTable {
 public:
   struct Iterator {
     Iterator(LocalHash *owner);
-    StringPiece key();
-    StringPiece value();
+    string key();
+    string value();
     void next();
     bool done();
 
@@ -97,7 +97,7 @@ public:
   LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int owner,
             int id);
 
-  StringPiece get(const StringPiece &k);
+  string get(const StringPiece &k);
   void put(const StringPiece &k, const StringPiece &v);
   void remove(const StringPiece &k);
   void clear();
@@ -124,18 +124,21 @@ private:
 
 public:
   PartitionedHash(ShardingFunction sf, HashFunction hf, AccumFunction af,
-                  int my_thread, int hash_id,
-                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, hash_id), rpc_(rpc) {
+                  int my_thread, int table_id,
+                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, table_id), rpc_(rpc) {
     partitions_.resize(num_threads);
 
     bzero((void*) accum_working_, sizeof(bool) * kMaxPeers);
     for (int i = 0; i < partitions_.size(); ++i) {
-      partitions_[i] = new LocalHash(sf_, hf_, af_, i, hash_id);
+      partitions_[i] = new LocalHash(sf_, hf_, af_, i, table_id);
     }
   }
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
-  StringPiece get(const StringPiece &k);
+  string get(const StringPiece &k);
+
+  // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
+  string get_local(const StringPiece &k);
 
   // Store the given key-value pair in this hash, applying the accumulation
   // policy set at construction time.  If 'k' has affinity for a remote thread,
