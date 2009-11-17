@@ -25,13 +25,13 @@ public:
 
   struct Peer;
 
-  SharedTable *CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af);
+  Table *CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af);
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 1 << 20;
   static const int32_t kNetworkTimeout = 10;
 
-  deque<LocalHash*> pending_writes_;
+  deque<LocalTable*> pending_writes_;
 
   boost::thread *kernel_thread_, *network_thread_;
 
@@ -46,12 +46,12 @@ private:
   vector<Peer*> peers;
 
   // Tables registered in the system.
-  vector<PartitionedHash*> tables;
+  vector<PartitionedTable*> tables;
 
   // Network operations.
   void ProcessUpdates(Peer *p);
   void GetIncomingUpdates();
-  void ComputeUpdates(Peer *p, LocalHash::Iterator *it);
+  void ComputeUpdates(Peer *p, LocalTable::Iterator *it);
   void SendAndReceive();
 
   int64_t pending_network_bytes() const;

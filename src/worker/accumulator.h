@@ -38,61 +38,72 @@ static string AccumMul(const string& a, const string& b) { return double_as_str(
 
 static string AccumRep(const string& a, const string& b) { return b; }
 
-class LocalHash;
 
-class SharedTable {
+struct TableInfo {
 public:
-  SharedTable(ShardingFunction sf, HashFunction hf, AccumFunction af,
-              int owner, int id) :
-    sf_(sf), hf_(hf), af_(af), owner_thread_(owner), table_id(id) {
-  }
+  // The thread with ownership over this data.
+  int owner_thread;
+
+  // The table to which this partition belongs.
+  int table_id;
+
+  AccumFunction af;
+  HashFunction hf;
+  ShardingFunction sf;
+
+  // Used for partitioned tables
+  RPCHelper *rpc;
+  int num_threads;
+};
+
+class LocalTable;
+
+class Table {
+public:
+  Table(TableInfo tinfo) : info_(tinfo) {}
+  virtual ~Table() {}
 
   virtual string get(const StringPiece &k) = 0;
   virtual void put(const StringPiece &k, const StringPiece &v) = 0;
   virtual void remove(const StringPiece &k) = 0;
 
-  // The thread with ownership over this data.
-  int owner_thread_;
-
-  // The table to which this partition belongs.
-  int table_id;
+  // Returns a view on the global table containing only local values.
+  virtual LocalTable* get_local() = 0;
+  const TableInfo& info() { return info_; }
 
 protected:
-  AccumFunction af_;
-  HashFunction hf_;
-  ShardingFunction sf_;
+  TableInfo info_;
 };
 
 // A local accumulated hash table.
-class LocalHash: public SharedTable {
+class LocalTable : public Table {
 public:
   typedef unordered_map<string, string> StringMap;
+  LocalTable(TableInfo ti);
+
   struct Iterator {
-    Iterator(LocalHash *owner);
+    Iterator(LocalTable *owner);
     string key();
     string value();
     void next();
     bool done();
 
-    LocalHash *owner() {
-      return owner_;
-    }
+    LocalTable *owner() { return owner_; }
 
   private:
-    LocalHash *owner_;
+    LocalTable *owner_;
     StringMap::iterator it_;
   };
 
-  LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int owner,
-            int id);
 
   string get(const StringPiece &k);
   void put(const StringPiece &k, const StringPiece &v);
-  void put_no_accum(const StringPiece &k, const StringPiece &v);
   void remove(const StringPiece &k);
   void clear();
   bool empty();
   bool contains(const StringPiece &k);
+
+  LocalTable* get_local() { return this; }
 
   int64_t size();
   Iterator *get_iterator();
@@ -103,26 +114,15 @@ private:
 };
 
 // A set of accumulated hashes.
-class PartitionedHash: public SharedTable {
+class PartitionedTable : public Table {
 private:
   static const int32_t kMaxPeers = 8192;
 
-  vector<LocalHash*> partitions_;
+  vector<LocalTable*> partitions_;
   mutable boost::recursive_mutex pending_lock_;
   bool volatile accum_working_[kMaxPeers];
-  RPCHelper *rpc_;
-
 public:
-  PartitionedHash(ShardingFunction sf, HashFunction hf, AccumFunction af,
-                  int my_thread, int table_id,
-                  int num_threads, RPCHelper *rpc) : SharedTable(sf, hf, af, my_thread, table_id), rpc_(rpc) {
-    partitions_.resize(num_threads);
-
-    bzero((void*) accum_working_, sizeof(bool) * kMaxPeers);
-    for (int i = 0; i < partitions_.size(); ++i) {
-      partitions_[i] = new LocalHash(sf_, hf_, af_, i, table_id);
-    }
-  }
+  PartitionedTable(TableInfo tinfo);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   string get(const StringPiece &k);
@@ -139,8 +139,10 @@ public:
   // Remove this entry from the local and master table.
   void remove(const StringPiece &k);
 
+  LocalTable *get_local();
+
   // Append to 'out' the list of accumulators that have pending network data.
-  bool GetPendingUpdates(deque<LocalHash*> *out);
+  bool GetPendingUpdates(deque<LocalTable*> *out);
   void ApplyUpdates(const upc::HashUpdate& req);
 
   int pending_write_bytes();

@@ -2,45 +2,43 @@
 #include "worker/accumulator.h"
 
 namespace upc {
-LocalHash::LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int thread, int id) :
-  SharedTable(sf, hf, af, thread, id) {
-}
+LocalTable::LocalTable(TableInfo tinfo) : Table(tinfo) {}
 
-string LocalHash::get(const StringPiece &k) {
+string LocalTable::get(const StringPiece &k) {
   return data_[k.AsString()];
 }
 
-void LocalHash::put(const StringPiece &k, const StringPiece &v) {
+void LocalTable::put(const StringPiece &k, const StringPiece &v) {
   StringMap::iterator i = data_.find(k.AsString());
   if (i != data_.end()) {
     LOG(INFO) << "Accumulating: " << k.AsString() << " : " << str_as_double(v.AsString()) << " : " << str_as_double(i->second);
-    i->second = af_(i->second, v.AsString());
+    i->second = info_.af(i->second, v.AsString());
   } else {
     data_.insert(make_pair(k.AsString(), v.AsString()));
   }
 }
 
-void LocalHash::remove(const StringPiece &k) {
+void LocalTable::remove(const StringPiece &k) {
   data_.erase(data_.find(k.AsString()));
 }
 
-void LocalHash::clear() {
+void LocalTable::clear() {
   data_.clear();
 }
 
-bool LocalHash::contains(const StringPiece &k) {
+bool LocalTable::contains(const StringPiece &k) {
   return data_.find(k.AsString()) != data_.end();
 }
 
-bool LocalHash::empty() {
+bool LocalTable::empty() {
   return data_.empty();
 }
 
-int64_t LocalHash::size() {
+int64_t LocalTable::size() {
   return data_.size();
 }
 
-void LocalHash::applyUpdates(const HashUpdate& req) {
+void LocalTable::applyUpdates(const HashUpdate& req) {
   for (int i = 0; i < req.put_size(); ++i) {
     const Pair &p = req.put(i);
     put(p.key(), p.value());
@@ -52,40 +50,53 @@ void LocalHash::applyUpdates(const HashUpdate& req) {
   }
 }
 
-LocalHash::Iterator *LocalHash::get_iterator() {
+LocalTable::Iterator *LocalTable::get_iterator() {
   return new Iterator(this);
 }
 
-LocalHash::Iterator::Iterator(LocalHash *owner) : owner_(owner), it_(owner_->data_.begin()) {}
+LocalTable::Iterator::Iterator(LocalTable *owner) : owner_(owner), it_(owner_->data_.begin()) {}
 
-string LocalHash::Iterator::key() {
+string LocalTable::Iterator::key() {
   return it_->first;
 }
 
-string LocalHash::Iterator::value() {
+string LocalTable::Iterator::value() {
   return it_->second;
 }
 
-void LocalHash::Iterator::next() {
+void LocalTable::Iterator::next() {
   ++it_;
 }
 
-bool LocalHash::Iterator::done() {
+bool LocalTable::Iterator::done() {
   return it_ == owner_->data_.end();
 }
 
-void PartitionedHash::ApplyUpdates(const upc::HashUpdate& req) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  partitions_[owner_thread_]->applyUpdates(req);
+PartitionedTable::PartitionedTable(TableInfo tinfo) : Table(tinfo) {
+  partitions_.resize(info_.num_threads);
+
+  bzero((void*) accum_working_, sizeof(bool) * kMaxPeers);
+  for (int i = 0; i < partitions_.size(); ++i) {
+    TableInfo linfo = info_;
+    linfo.owner_thread = i;
+    partitions_[i] = new LocalTable(linfo);
+  }
 }
 
-bool PartitionedHash::GetPendingUpdates(deque<LocalHash*> *out) {
+void PartitionedTable::ApplyUpdates(const upc::HashUpdate& req) {
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+  partitions_[info_.owner_thread]->applyUpdates(req);
+}
+
+bool PartitionedTable::GetPendingUpdates(deque<LocalTable*> *out) {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalHash *a = partitions_[i];
-    if (i != owner_thread_ && !a->empty()) {
-      partitions_[i] = new LocalHash(sf_, hf_, af_, i, table_id);
+    LocalTable *a = partitions_[i];
+    if (i != info_.owner_thread && !a->empty()) {
+      TableInfo linfo = info_;
+      linfo.owner_thread = i;
+      partitions_[i] = new LocalTable(linfo);
       out->push_back(a);
       while (accum_working_[i]);
     }
@@ -94,13 +105,13 @@ bool PartitionedHash::GetPendingUpdates(deque<LocalHash*> *out) {
   return out->size() > 0;
 }
 
-int PartitionedHash::pending_write_bytes() {
+int PartitionedTable::pending_write_bytes() {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalHash *a = partitions_[i];
-    if (i != owner_thread_) {
+    LocalTable *a = partitions_[i];
+    if (i != info_.owner_thread) {
       s += a->size();
     }
   }
@@ -108,30 +119,30 @@ int PartitionedHash::pending_write_bytes() {
   return s;
 }
 
-void PartitionedHash::put(const StringPiece &k, const StringPiece &v) {
-  int shard = sf_(k, partitions_.size());
+void PartitionedTable::put(const StringPiece &k, const StringPiece &v) {
+  int shard = info_.sf(k, partitions_.size());
   accum_working_[shard] = 1;
-  LocalHash *h = partitions_[shard];
+  LocalTable *h = partitions_[shard];
   h->put(k, v);
   accum_working_[shard] = 0;
 
   //LOG_EVERY_N(INFO, 100) << "Added key :: " << k.AsString() << " shard " << shard;
 }
 
-string PartitionedHash::get_local(const StringPiece &k) {
-  int shard = sf_(k, partitions_.size());
-  CHECK_EQ(shard, owner_thread_);
+string PartitionedTable::get_local(const StringPiece &k) {
+  int shard = info_.sf(k, partitions_.size());
+  CHECK_EQ(shard, info_.owner_thread);
 
   accum_working_[shard] = 1;
-  LocalHash *h = partitions_[shard];
+  LocalTable *h = partitions_[shard];
   string v = h->get(k);
   accum_working_[shard] = 0;
   return v;
 }
 
-string PartitionedHash::get(const StringPiece &k) {
-  int shard = sf_(k, partitions_.size());
-  if (shard == owner_thread_) {
+string PartitionedTable::get(const StringPiece &k) {
+  int shard = info_.sf(k, partitions_.size());
+  if (shard == info_.owner_thread) {
     return partitions_[shard]->get(k);
   }
 
@@ -147,10 +158,10 @@ string PartitionedHash::get(const StringPiece &k) {
   HashRequest req;
   HashUpdate resp;
   req.set_key(k.AsString());
-  req.set_table_id(table_id);
+  req.set_table_id(info_.table_id);
 
-  rpc_->Send(shard, MTYPE_GET_REQUEST, req);
-  rpc_->Read(shard, MTYPE_GET_RESPONSE, &resp);
+  info_.rpc->Send(shard, MTYPE_GET_REQUEST, req);
+  info_.rpc->Read(shard, MTYPE_GET_RESPONSE, &resp);
 
   VLOG(1) << "Got key " << k.AsString() << " : " << resp.put(0).value();
 //
@@ -160,8 +171,12 @@ string PartitionedHash::get(const StringPiece &k) {
   return resp.put(0).value();
 }
 
-void PartitionedHash::remove(const StringPiece &k) {
+void PartitionedTable::remove(const StringPiece &k) {
   LOG(FATAL) << "Not implemented!";
+}
+
+LocalTable* PartitionedTable::get_local() {
+  return partitions_[info().owner_thread];
 }
 
 }
