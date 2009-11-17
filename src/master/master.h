@@ -12,6 +12,8 @@ namespace upc {
 class Master {
 public:
   Master(const ConfigData &conf);
+  ~Master();
+
   void run(KernelFunction f);
 
 private:

@@ -13,7 +13,7 @@ void LocalTable::put(const StringPiece &k, const StringPiece &v) {
   boost::recursive_mutex::scoped_lock sl(write_lock_);
   StringMap::iterator i = data_.find(k.AsString());
   if (i != data_.end()) {
-    LOG(INFO) << "Accumulating: " << k.AsString() << " : " << str_as_double(v.AsString()) << " : " << str_as_double(i->second);
+    VLOG(1) << "Accumulating: " << k.AsString() << " : " << str_as_double(v.AsString()) << " : " << str_as_double(i->second);
     i->second = info_.af(i->second, v.AsString());
   } else {
     data_.insert(make_pair(k.AsString(), v.AsString()));

@@ -35,6 +35,7 @@ private:
 
   boost::thread *kernel_thread_, *network_thread_;
 
+  MPI::Intracomm world_;
   MPI::Intracomm worker_comm_;
 
   int num_peers_;

@@ -7,14 +7,25 @@ Master::Master(const ConfigData &conf) {
   world_ = MPI::COMM_WORLD;
   rpc_ = new RPCHelper(&world_);
 
-  world_.Split(1, world_.Get_rank());
+  world_.Split(MASTER_COLOR, world_.Get_rank());
+}
+
+Master::~Master() {
+  EmptyMessage msg;
+  LOG(INFO) << "Shutting down workers.";
+  for (int i = 1; i < world_.Get_size(); ++i) {
+    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
+  }
 }
 
 void Master::run(KernelFunction f) {
   int id = KernelRegistry::get_id(f);
   RunKernelRequest msg;
   msg.set_kernel_id(id);
-  rpc_->Broadcast(MTYPE_RUN_KERNEL, msg);
+
+  for (int i = 1; i < world_.Get_size(); ++i) {
+    rpc_->Send(i, MTYPE_RUN_KERNEL, msg);
+  }
 
   LOG(INFO) << "Waiting for response.";
 

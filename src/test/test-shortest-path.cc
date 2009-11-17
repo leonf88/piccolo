@@ -63,5 +63,7 @@ int main(int argc, char **argv) {
     sum_hash = w.CreateTable(&ShardStr, &HashStr, &AccumSum);
     w.Run();
   }
+
+  LOG(INFO) << "Exiting.";
 }
 

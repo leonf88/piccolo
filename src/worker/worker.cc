@@ -116,8 +116,11 @@ Worker::Worker(const ConfigData &c) {
 
   running = true;
 
-  MPI::Intracomm world = MPI::COMM_WORLD;
-  worker_comm_ = world.Split(0, world.Get_rank());
+  world_ = MPI::COMM_WORLD;
+
+  // Obtain a communicator that only includes workers.  This allows us to specify shards
+  // conveniently (shard 0 == worker_comm.rank0), and express barriers on only workers.
+  worker_comm_ = world_.Split(WORKER_COLOR, world_.Get_rank());
 
   kernel_thread_ = network_thread_ = NULL;
 }
@@ -162,13 +165,15 @@ void Worker::NetworkLoop() {
     PERIODIC(10,
         LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.");
 
-    while (work.empty()) {
-      Sleep(0.1);
-      SendAndReceive();
+    Sleep(0.01);
+    SendAndReceive();
 
-      for (int i = 0; i < tables.size(); ++i) {
-        tables[i]->GetPendingUpdates(&work);
-      }
+    for (int i = 0; i < tables.size(); ++i) {
+      tables[i]->GetPendingUpdates(&work);
+    }
+
+    if (work.empty()) {
+      continue;
     }
 
     LocalTable* old = work.front();
@@ -196,19 +201,22 @@ void Worker::KernelLoop() {
   RunKernelRequest kernelRequest;
   RPCHelper rpc(&world);
 	while (running) {
-//	  if (master_comm_->Iprobe(config.master_id(), MTYPE_WORKER_SHUTDOWN, probeResult)) {
-//	    LOG(INFO) << "Shutting down worker " << config.worker_id();
-//	    running = false;
-//	  }
+	  MPI::Status probe_result;
+	  world_.Probe(config.master_id(), MPI_ANY_TAG, probe_result);
+
+	  if (probe_result.Get_tag() == MTYPE_WORKER_SHUTDOWN) {
+	    LOG(INFO) << "Shutting down worker " << config.worker_id();
+	    running = false;
+	    return;
+	  }
 
 		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
 
 		LOG(INFO) << "Received run request for kernel id: " << kernelRequest.kernel_id();
-
 		KernelFunction f = KernelRegistry::get_kernel(kernelRequest.kernel_id());
 		f();
-
 		LOG(INFO) << "Waiting for network to finish: " << pending_network_bytes() + pending_kernel_bytes();
+
 	  while (pending_kernel_bytes() + pending_network_bytes() > 0) {
 	    Sleep(0.1);
 	  }

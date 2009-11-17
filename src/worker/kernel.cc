@@ -18,7 +18,6 @@ KernelFunction KernelRegistry::get_kernel(int id) {
 int KernelRegistry::get_id(KernelFunction kf) {
   map<int, KernelFunction> &k = *KernelRegistry::get_mapping();
   for (map<int, KernelFunction>::iterator i = k.begin(); i != k.end(); ++i) {
-    LOG(INFO) << "Kernel " << i->first << " :: " << i->second;
     if (i->second == kf) { return i->first; }
   }
   LOG(FATAL) << "Failed to find kernel " << kf << " in mapping.";
