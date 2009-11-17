@@ -7,31 +7,37 @@ LocalHash::LocalHash(ShardingFunction sf, HashFunction hf, AccumFunction af, int
 }
 
 string LocalHash::get(const StringPiece &k) {
-  return data[k.AsString()];
+  return data_[k.AsString()];
 }
 
 void LocalHash::put(const StringPiece &k, const StringPiece &v) {
-  data[k.AsString()] = v.AsString();
+  StringMap::iterator i = data_.find(k.AsString());
+  if (i != data_.end()) {
+    LOG(INFO) << "Accumulating: " << k.AsString() << " : " << str_as_double(v.AsString()) << " : " << str_as_double(i->second);
+    i->second = af_(i->second, v.AsString());
+  } else {
+    data_.insert(make_pair(k.AsString(), v.AsString()));
+  }
 }
 
 void LocalHash::remove(const StringPiece &k) {
-  data.erase(data.find(k.AsString()));
+  data_.erase(data_.find(k.AsString()));
 }
 
 void LocalHash::clear() {
-  data.clear();
+  data_.clear();
 }
 
 bool LocalHash::contains(const StringPiece &k) {
-  return data.find(k.AsString()) != data.end();
+  return data_.find(k.AsString()) != data_.end();
 }
 
 bool LocalHash::empty() {
-  return data.empty();
+  return data_.empty();
 }
 
 int64_t LocalHash::size() {
-  return data.size();
+  return data_.size();
 }
 
 void LocalHash::applyUpdates(const HashUpdate& req) {
@@ -50,7 +56,7 @@ LocalHash::Iterator *LocalHash::get_iterator() {
   return new Iterator(this);
 }
 
-LocalHash::Iterator::Iterator(LocalHash *owner) : owner_(owner), it_(owner_->data.begin()) {}
+LocalHash::Iterator::Iterator(LocalHash *owner) : owner_(owner), it_(owner_->data_.begin()) {}
 
 string LocalHash::Iterator::key() {
   return it_->first;
@@ -65,7 +71,7 @@ void LocalHash::Iterator::next() {
 }
 
 bool LocalHash::Iterator::done() {
-  return it_ == owner_->data.end();
+  return it_ == owner_->data_.end();
 }
 
 void PartitionedHash::ApplyUpdates(const upc::HashUpdate& req) {
@@ -147,10 +153,10 @@ string PartitionedHash::get(const StringPiece &k) {
   rpc_->Read(shard, MTYPE_GET_RESPONSE, &resp);
 
   VLOG(1) << "Got key " << k.AsString() << " : " << resp.put(0).value();
-
-  accum_working_[shard] = 1;
-  partitions_[shard]->put(k, resp.put(0).value());
-  accum_working_[shard] = 0;
+//
+//  accum_working_[shard] = 1;
+//  partitions_[shard]->put_no_accum(k, resp.put(0).value());
+//  accum_working_[shard] = 0;
   return resp.put(0).value();
 }
 

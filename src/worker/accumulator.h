@@ -15,40 +15,28 @@
 
 namespace upc {
 
+static inline double str_as_double(const string& s) { return *reinterpret_cast<const double*>(s.data()); }
+static inline string double_as_str(double d) { return string((char*)&d, sizeof(d)); }
+
 typedef int (*ShardingFunction)(StringPiece, int);
 typedef int (*HashFunction)(StringPiece);
-
-// Accumulate new_val into current.
-typedef void (*AccumFunction)(StringPiece current, StringPiece new_val);
+typedef string (*AccumFunction)(const string& a, const string& b);
 
 // Sharding functions
-static int ShardInt(StringPiece k, int shards) {
-  return POD_CAST(int, k) % shards;
-}
-static int ShardStr(StringPiece k, int shards) {
-  return k.hash() % shards;
-}
+static int ShardInt(StringPiece k, int shards) { return POD_CAST(int, k) % shards; }
+static int ShardStr(StringPiece k, int shards) { return k.hash() % shards; }
 
 // Hash functions
-static int HashInt(StringPiece k) {
-  return POD_CAST(int, k);
-}
-static int HashStr(StringPiece k) {
-  return k.hash();
-}
+static int HashInt(StringPiece k) { return POD_CAST(int, k); }
+static int HashStr(StringPiece k) { return k.hash(); }
 
 // Accumulation functions
-static void AccumMin(StringPiece current, StringPiece new_val) {
-  current.data = (char*) min(POD_CAST(int, current), POD_CAST(int, new_val));
-}
-static void AccumSum(StringPiece current, StringPiece new_val) {
-  current.data = (char*) (POD_CAST(int, current) + POD_CAST(int, new_val));
-}
-static void AccumProd(StringPiece current, StringPiece new_val) {
-  current.data = (char*) (POD_CAST(int, current) * POD_CAST(int, new_val));
-}
+static string AccumMin(const string& a, const string& b) { return double_as_str(min(str_as_double(a), str_as_double(b))); }
+static string AccumMax(const string& a, const string& b) { return double_as_str(max(str_as_double(a), str_as_double(b))); }
+static string AccumSum(const string& a, const string& b) { return double_as_str(str_as_double(a) + str_as_double(b)); }
+static string AccumMul(const string& a, const string& b) { return double_as_str(str_as_double(a) * str_as_double(b)); }
 
-typedef unordered_map<string, string> StringMap;
+static string AccumRep(const string& a, const string& b) { return b; }
 
 class LocalHash;
 
@@ -78,6 +66,7 @@ protected:
 // A local accumulated hash table.
 class LocalHash: public SharedTable {
 public:
+  typedef unordered_map<string, string> StringMap;
   struct Iterator {
     Iterator(LocalHash *owner);
     string key();
@@ -99,6 +88,7 @@ public:
 
   string get(const StringPiece &k);
   void put(const StringPiece &k, const StringPiece &v);
+  void put_no_accum(const StringPiece &k, const StringPiece &v);
   void remove(const StringPiece &k);
   void clear();
   bool empty();
@@ -109,7 +99,7 @@ public:
 
   void applyUpdates(const HashUpdate& req);
 private:
-  StringMap data;
+  StringMap data_;
 };
 
 // A set of accumulated hashes.
