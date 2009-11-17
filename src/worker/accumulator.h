@@ -109,6 +109,8 @@ public:
   Iterator *get_iterator();
 
   void applyUpdates(const HashUpdate& req);
+
+  mutable boost::recursive_mutex write_lock_;
 private:
   StringMap data_;
 };
@@ -120,7 +122,6 @@ private:
 
   vector<LocalTable*> partitions_;
   mutable boost::recursive_mutex pending_lock_;
-  bool volatile accum_working_[kMaxPeers];
 public:
   PartitionedTable(TableInfo tinfo);
 

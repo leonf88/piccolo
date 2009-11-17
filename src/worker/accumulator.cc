@@ -5,10 +5,12 @@ namespace upc {
 LocalTable::LocalTable(TableInfo tinfo) : Table(tinfo) {}
 
 string LocalTable::get(const StringPiece &k) {
+  boost::recursive_mutex::scoped_lock sl(write_lock_);
   return data_[k.AsString()];
 }
 
 void LocalTable::put(const StringPiece &k, const StringPiece &v) {
+  boost::recursive_mutex::scoped_lock sl(write_lock_);
   StringMap::iterator i = data_.find(k.AsString());
   if (i != data_.end()) {
     LOG(INFO) << "Accumulating: " << k.AsString() << " : " << str_as_double(v.AsString()) << " : " << str_as_double(i->second);
@@ -19,10 +21,12 @@ void LocalTable::put(const StringPiece &k, const StringPiece &v) {
 }
 
 void LocalTable::remove(const StringPiece &k) {
+  boost::recursive_mutex::scoped_lock sl(write_lock_);
   data_.erase(data_.find(k.AsString()));
 }
 
 void LocalTable::clear() {
+  boost::recursive_mutex::scoped_lock sl(write_lock_);
   data_.clear();
 }
 
@@ -39,6 +43,7 @@ int64_t LocalTable::size() {
 }
 
 void LocalTable::applyUpdates(const HashUpdate& req) {
+  boost::recursive_mutex::scoped_lock sl(write_lock_);
   for (int i = 0; i < req.put_size(); ++i) {
     const Pair &p = req.put(i);
     put(p.key(), p.value());
@@ -75,7 +80,6 @@ bool LocalTable::Iterator::done() {
 PartitionedTable::PartitionedTable(TableInfo tinfo) : Table(tinfo) {
   partitions_.resize(info_.num_threads);
 
-  bzero((void*) accum_working_, sizeof(bool) * kMaxPeers);
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info_;
     linfo.owner_thread = i;
@@ -84,7 +88,6 @@ PartitionedTable::PartitionedTable(TableInfo tinfo) : Table(tinfo) {
 }
 
 void PartitionedTable::ApplyUpdates(const upc::HashUpdate& req) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[info_.owner_thread]->applyUpdates(req);
 }
 
@@ -98,7 +101,6 @@ bool PartitionedTable::GetPendingUpdates(deque<LocalTable*> *out) {
       linfo.owner_thread = i;
       partitions_[i] = new LocalTable(linfo);
       out->push_back(a);
-      while (accum_working_[i]);
     }
   }
 
@@ -120,24 +122,21 @@ int PartitionedTable::pending_write_bytes() {
 }
 
 void PartitionedTable::put(const StringPiece &k, const StringPiece &v) {
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+
   int shard = info_.sf(k, partitions_.size());
-  accum_working_[shard] = 1;
   LocalTable *h = partitions_[shard];
   h->put(k, v);
-  accum_working_[shard] = 0;
-
-  //LOG_EVERY_N(INFO, 100) << "Added key :: " << k.AsString() << " shard " << shard;
 }
 
 string PartitionedTable::get_local(const StringPiece &k) {
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+
   int shard = info_.sf(k, partitions_.size());
   CHECK_EQ(shard, info_.owner_thread);
 
-  accum_working_[shard] = 1;
   LocalTable *h = partitions_[shard];
-  string v = h->get(k);
-  accum_working_[shard] = 0;
-  return v;
+  return h->get(k);
 }
 
 string PartitionedTable::get(const StringPiece &k) {
@@ -146,14 +145,11 @@ string PartitionedTable::get(const StringPiece &k) {
     return partitions_[shard]->get(k);
   }
 
-  accum_working_[shard] = 1;
   if (partitions_[shard]->contains(k)) {
     string data = partitions_[shard]->get(k);
-    accum_working_[shard] = 0;
     return data;
   }
 
-  accum_working_[shard] = 0;
   VLOG(1) << "Requesting key " << k.AsString() << " from shard " << shard;
   HashRequest req;
   HashUpdate resp;
@@ -164,10 +160,7 @@ string PartitionedTable::get(const StringPiece &k) {
   info_.rpc->Read(shard, MTYPE_GET_RESPONSE, &resp);
 
   VLOG(1) << "Got key " << k.AsString() << " : " << resp.put(0).value();
-//
-//  accum_working_[shard] = 1;
-//  partitions_[shard]->put_no_accum(k, resp.put(0).value());
-//  accum_working_[shard] = 0;
+
   return resp.put(0).value();
 }
 
