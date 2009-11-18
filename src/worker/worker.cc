@@ -144,23 +144,9 @@ Worker::~Worker() {
   }
 }
 
-Table* Worker::CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af) {
-  TableInfo tinfo;
-  tinfo.af = af;
-  tinfo.sf = sf;
-  tinfo.hf = hf;
-  tinfo.num_threads = config.num_workers();
-  tinfo.table_id = tables.size();
-  tinfo.rpc = new RPCHelper(&worker_comm_);
-  tinfo.owner_thread = config.worker_id();
-
-  PartitionedTable *t = new PartitionedTable(tinfo);
-  tables.push_back(t);
-  return t;
-}
 
 void Worker::NetworkLoop() {
-  deque<LocalTable*> work;
+  deque<Table*> work;
   while (running) {
     PERIODIC(10,
         LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.");
@@ -176,13 +162,13 @@ void Worker::NetworkLoop() {
       continue;
     }
 
-    LocalTable* old = work.front();
+    Table* old = work.front();
     work.pop_front();
 
     VLOG(2) << "Accum " << old->info().owner_thread << " : " << old->size();
     Peer * p = peers[old->info().owner_thread];
 
-    LocalTable::Iterator *i = old->get_iterator();
+    TableIterator *i = old->get_iterator();
     while (!i->done()) {
       if (pending_network_bytes() < config.network_buffer()) {
         ComputeUpdates(p, i);
@@ -248,7 +234,7 @@ int64_t Worker::pending_kernel_bytes() const {
   return t;
 }
 
-void Worker::ComputeUpdates(Peer *p, LocalTable::Iterator *it) {
+void Worker::ComputeUpdates(Peer *p, TableIterator *it) {
   HashUpdate *r = &p->writeScratch;
   r->Clear();
 
@@ -257,18 +243,18 @@ void Worker::ComputeUpdates(Peer *p, LocalTable::Iterator *it) {
 
   int bytesUsed = 0;
   int count = 0;
-  for (; !it->done() && bytesUsed < kNetworkChunkSize; it->next()) {
-    StringPiece k = it->key();
-    StringPiece v = it->value();
+  for (; !it->done() && bytesUsed < kNetworkChunkSize; it->Next()) {
+    const string& k = it->key_str();
+    const string& v = it->value_str();
 
 //    LOG(INFO) << " k " << k.len << " v " << v.len;
 
     Pair &u = *r->add_put();
-    u.set_key(k.data, k.len);
-    u.set_value(v.data, v.len);
+    u.set_key(k.data(), k.size());
+    u.set_value(v.data(), v.size());
     ++count;
 
-    bytesUsed += k.len + v.len;
+    bytesUsed += k.size() + v.size();
   }
 
   VLOG(2) << "Prepped " << count << " taking " << bytesUsed;

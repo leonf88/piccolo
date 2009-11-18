@@ -4,7 +4,7 @@
 #include "util/common.h"
 #include "util/rpc.h"
 #include "worker/worker.pb.h"
-#include "worker/accumulator.h"
+#include "worker/table-internal.h"
 
 #include <boost/thread.hpp>
 #include <mpi.h>
@@ -25,13 +25,28 @@ public:
 
   struct Peer;
 
-  Table *CreateTable(ShardingFunction sf, HashFunction hf, AccumFunction af);
+  template <class K, class V>
+  TypedTable<K, V>* CreateTable(typename TypedTable<K, V>::ShardingFunction sf,
+                                typename TypedTable<K, V>::AccumFunction af) {
+    TableInfo tinfo;
+    tinfo.af = (void*)af;
+    tinfo.sf = (void*)sf;
+    tinfo.num_threads = config.num_workers();
+    tinfo.table_id = tables.size();
+    tinfo.rpc = new RPCHelper(&worker_comm_);
+    tinfo.owner_thread = config.worker_id();
+
+    TypedPartitionedTable<K, V> *t = new TypedPartitionedTable<K, V>(tinfo);
+    tables.push_back(t);
+    return t;
+  }
+
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 1 << 20;
   static const int32_t kNetworkTimeout = 10;
 
-  deque<LocalTable*> pending_writes_;
+  deque<Table*> pending_writes_;
 
   boost::thread *kernel_thread_, *network_thread_;
 
@@ -52,7 +67,7 @@ private:
   // Network operations.
   void ProcessUpdates(Peer *p);
   void GetIncomingUpdates();
-  void ComputeUpdates(Peer *p, LocalTable::Iterator *it);
+  void ComputeUpdates(Peer *p, TableIterator *it);
   void SendAndReceive();
 
   int64_t pending_network_bytes() const;
