@@ -15,18 +15,15 @@ LINK_LIB := ld --eh-frame-hdr -r
 LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
 
 
-LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o \
-			   			    src/util/common.o src/util/rpc.o
-
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o\
-								  src/master/master.o
+LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/rpc.o
+LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o src/master/master.o
 
 %.o: %.cc
 	@echo CC :: $<
 	@$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
-all: bin/test-shortest-path
+all: bin/test-shortest-path bin/test-tables
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -43,6 +40,9 @@ bin/libworker.a : $(LIBWORKER_OBJS)
 	$(LINK_LIB) $^ -o $@
 	
 bin/test-shortest-path: bin/libworker.a bin/libcommon.a src/test/test-shortest-path.o
+	$(LINK_BIN) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
+
+bin/test-tables: bin/libworker.a bin/libcommon.a src/test/test-tables.o
 	$(LINK_BIN) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
