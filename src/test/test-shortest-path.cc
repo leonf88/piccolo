@@ -28,7 +28,7 @@ void TestGet() {
 REGISTER_KERNEL(TestGet);
 
 void TestGetLocal() {
-  TypedTableIterator<string, double> *it = min_hash->get_typed_iterator();
+  TypedTable<string, double>::Iterator *it = min_hash->get_typed_iterator();
   TypedTable<string, double>* local = (TypedTable<string, double>*)it->owner();
 
   int my_thread = local->info().owner_thread;

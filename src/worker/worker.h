@@ -67,7 +67,7 @@ private:
   // Network operations.
   void ProcessUpdates(Peer *p);
   void GetIncomingUpdates();
-  void ComputeUpdates(Peer *p, TableIterator *it);
+  void ComputeUpdates(Peer *p, Table::Iterator *it);
   void SendAndReceive();
 
   int64_t pending_network_bytes() const;

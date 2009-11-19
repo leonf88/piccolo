@@ -24,7 +24,7 @@ class LocalTable : public TypedTable<K, V> {
 public:
   typedef unordered_map<K, V> DataMap;
 
-  struct Iterator : public TypedTableIterator<K, V> {
+  struct Iterator : public TypedTable<K, V>::Iterator {
     Iterator(LocalTable<K, V> *owner) {
       owner_ = owner;
       it_ = owner->data_.begin();
@@ -54,11 +54,11 @@ public:
   bool empty() { return data_.empty(); }
   int64_t size() { return data_.size(); }
 
-  TableIterator* get_iterator() {
+  Iterator* get_iterator() {
     return new Iterator(this);
   }
 
-  TypedTableIterator<K, V>* get_typed_iterator() {
+  Iterator* get_typed_iterator() {
     return new Iterator(this);
   }
 
@@ -137,8 +137,8 @@ public:
   void ApplyUpdates(const upc::HashUpdate& req);
   int pending_write_bytes();
 
-  TableIterator* get_iterator();
-  TypedTableIterator<K, V>* get_typed_iterator();
+  Table::Iterator* get_iterator();
+  typename TypedTable<K, V>::Iterator* get_typed_iterator();
 
   const TableInfo& info() { return this->info_; }
 
@@ -245,12 +245,12 @@ void TypedPartitionedTable<K, V>::remove(const K &k) {
 }
 
 template <class K, class V>
-TableIterator* TypedPartitionedTable<K, V>::get_iterator() {
+Table::Iterator* TypedPartitionedTable<K, V>::get_iterator() {
   return partitions_[info().owner_thread]->get_iterator();
 }
 
 template <class K, class V>
-TypedTableIterator<K, V>* TypedPartitionedTable<K, V>::get_typed_iterator() {
+typename TypedTable<K, V>::Iterator* TypedPartitionedTable<K, V>::get_typed_iterator() {
   return partitions_[info().owner_thread]->get_typed_iterator();
 }
 

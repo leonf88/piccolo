@@ -167,7 +167,7 @@ void Worker::NetworkLoop() {
     VLOG(2) << "Accum " << old->info().owner_thread << " : " << old->size();
     Peer * p = peers[old->info().owner_thread];
 
-    TableIterator *i = old->get_iterator();
+    Table::Iterator *i = old->get_iterator();
     while (!i->done()) {
       if (pending_network_bytes() < config.network_buffer()) {
         ComputeUpdates(p, i);
@@ -233,7 +233,7 @@ int64_t Worker::pending_kernel_bytes() const {
   return t;
 }
 
-void Worker::ComputeUpdates(Peer *p, TableIterator *it) {
+void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
   HashUpdate *r = &p->writeScratch;
   r->Clear();
 

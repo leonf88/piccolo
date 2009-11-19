@@ -56,26 +56,17 @@ public:
   int num_threads;
 };
 
-
-class Table;
-
-struct TableIterator {
-  virtual string key_str() = 0;
-  virtual string value_str() = 0;
-  virtual bool done() = 0;
-  virtual void Next() = 0;
-
-  virtual Table *owner() = 0;
-};
-
-template <class K, class V>
-struct TypedTableIterator : public TableIterator {
-  virtual const K& key() = 0;
-  virtual const V& value() = 0;
-};
-
 class Table {
 public:
+  struct Iterator {
+    virtual string key_str() = 0;
+    virtual string value_str() = 0;
+    virtual bool done() = 0;
+    virtual void Next() = 0;
+
+    virtual Table *owner() = 0;
+  };
+
   Table(TableInfo tinfo) : info_(tinfo) {}
   virtual ~Table() {}
 
@@ -84,7 +75,7 @@ public:
   virtual int64_t size() = 0;
 
   // Returns a view on the global table containing only local values.
-  virtual TableIterator* get_iterator() = 0;
+  virtual Iterator* get_iterator() = 0;
   const TableInfo& info() { return info_; }
 
   TableInfo info_;
@@ -93,6 +84,11 @@ public:
 template <class K, class V>
 class TypedTable : public Table {
 public:
+  struct Iterator : public Table::Iterator {
+    virtual const K& key() = 0;
+    virtual const V& value() = 0;
+  };
+
   TypedTable(const TableInfo& tinfo) : Table(tinfo) {}
 
   // Functions for locating and accumulating data.
@@ -103,7 +99,7 @@ public:
   virtual void put(const K& k, const V &v) = 0;
   virtual void remove(const K& k) { }
 
-  virtual TypedTableIterator<K, V>* get_typed_iterator() = 0;
+  virtual Iterator* get_typed_iterator() = 0;
 
   string get_str(const StringPiece &k) {
     return Marshal<V>::to_string(get(Marshal<K>::from_string(k)));
