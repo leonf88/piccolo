@@ -52,7 +52,7 @@ message HashUpdate {
 
 message HashRequest {
   required int32 table_id = 1;
-  required string key = 2;
+  required bytes key = 2;
 }
 
 message EmptyMessage {}
