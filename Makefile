@@ -1,23 +1,25 @@
 MYD := $(notdir $(CURDIR))
 .PRECIOUS : %.pb.cc %.pb.h
 
-VPATH := .:src
 CFLAGS := -ggdb2 -O0 -Wall -Wno-unused-function -Wno-sign-compare
-CXXFLAGS := $(CFLAGS)  -Wno-reorder 
-CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/
+CXXFLAGS := $(CFLAGS)
+CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
+
 LDFLAGS := 
-LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/
+LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIB)
+
 DYNAMIC_LIBS := -lboost_thread -lprotobuf
 STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -Wl,-Bdynamic 
 
 LINK_LIB := ld --eh-frame-hdr -r
 LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
 
+
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o \
-			      src/util/fake-mpi.o src/util/common.o src/util/rpc.o
+			   			    src/util/common.o src/util/rpc.o
 
 LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o\
-				  src/worker/accumulator.o src/master/master.o
+								  src/master/master.o
 
 %.o: %.cc
 	@echo CC :: $<
@@ -26,9 +28,13 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 
 all: bin/test-shortest-path
 
+ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
+
 depend:
 	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
 
+Makefile.dep: $(ALL_SOURCES)
+	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
 
 bin/libcommon.a : $(LIBCOMMON_OBJS)
 	$(LINK_LIB) $^ -o $@
