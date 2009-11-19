@@ -5,7 +5,7 @@
 
 using namespace upc;
 
-static int NUM_NODES = 1000;
+static int NUM_NODES = 100;
 static int NUM_WORKERS = 0;
 static TypedTable<int, double>* distance;
 
@@ -19,7 +19,6 @@ void BuildGraph(int shards, int nodes, int density) {
   for (int i = 0; i < nodes; i++) {
     PathNode n;
     n.set_id(i);
-    n.set_dirty(i == 0);
 
     for (int j = 0; j < density; j++) {
       n.add_target(random() % nodes);
@@ -55,9 +54,23 @@ void Propagate() {
 }
 
 void DumpDistances() {
-  for (int i = 0; i < NUM_NODES; ++i) {
-    LOG(INFO) << "node: " << i << " :: " << distance->get(i);
+  LocalFile f("testdata/distances.dot", "w");
+
+  f.Printf("digraph G{\n");
+  for (int i = 0; i < NUM_WORKERS; ++i) {
+    RecordFile r(StringPrintf("testdata/nodes.rec-%05d-of-%05d", i, NUM_WORKERS), "r");
+    PathNode n;
+    while (r.read(&n)) {
+      f.Printf("node_%d [label=\"d=%d\"];\n", n.id(), (int)distance->get(n.id()));
+      for (int i = 0; i < n.target_size(); ++i) {
+        if (distance->get(n.target(i)) == distance->get(n.id()) + 1) {
+          f.Printf("node_%d -> node_%d;\n", n.id(), n.target(i));
+        }
+      }
+    }
   }
+
+  f.Printf("}");
 }
 
 REGISTER_KERNEL(Initialize);
@@ -72,14 +85,14 @@ int main(int argc, char **argv) {
   NUM_WORKERS = conf.num_workers();
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-    BuildGraph(NUM_WORKERS, NUM_NODES, 10);
+    BuildGraph(NUM_WORKERS, NUM_NODES, 4);
 
     Master m(conf);
     m.run_one(&Initialize);
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 20; ++i) {
       m.run_all(&Propagate);
     }
-    m.run_one(DumpDistances);
+    m.run_one(&DumpDistances);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);

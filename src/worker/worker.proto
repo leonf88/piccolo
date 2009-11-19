@@ -62,5 +62,5 @@ message PathNode {
   required int32 id = 1;
   repeated int32 target = 2;
   optional int32 distance = 3 [default = 0];
-  required bool dirty = 4 [default = false];
+  optional bool dirty = 4 [default = false];
 }
