@@ -131,6 +131,10 @@ public:
   // Remove this entry from the local and master table.
   void remove(const K &k);
 
+  void clear() {
+    partitions_[info().owner_thread]->clear();
+  }
+
   // Append to 'out' the list of accumulators that have pending network data.  Return
   // true if any updates were appended.
   bool GetPendingUpdates(deque<Table*> *out);

@@ -72,6 +72,10 @@ public:
   virtual void put_str(const StringPiece &k, const StringPiece& v) = 0;
   virtual int64_t size() = 0;
 
+
+  // Clear the local portion of a shared table.
+  virtual void clear() = 0;
+
   // Returns a view on the global table containing only local values.
   virtual Iterator* get_iterator() = 0;
   const TableInfo& info() { return info_; }
