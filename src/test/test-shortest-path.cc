@@ -5,7 +5,7 @@
 
 using namespace upc;
 
-static int NUM_NODES = 10000;
+static int NUM_NODES = 1000;
 static int NUM_WORKERS = 0;
 static TypedTable<int, double>* distance;
 
@@ -35,6 +35,7 @@ void BuildGraph(int shards, int nodes, int density) {
 }
 
 void Initialize() {
+  if (distance->info().owner_thread != 0) { return; }
   for (int i = 0; i < NUM_NODES; ++i) {
     distance->put(i, 1e9);
   }
@@ -55,6 +56,7 @@ void Propagate() {
 }
 
 void DumpDistances() {
+  if (distance->info().owner_thread != 0) { return; }
   for (int i = 0; i < NUM_NODES; ++i) {
     LOG(INFO) << "node: " << i << " :: " << distance->get(i);
   }

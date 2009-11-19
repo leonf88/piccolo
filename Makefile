@@ -1,5 +1,10 @@
-MYD := $(notdir $(CURDIR))
 .PRECIOUS : %.pb.cc %.pb.h
+
+MPI_INC :=
+MPI_LINK := mpic++
+
+#MPI_LINK := /home/power/local/mpich2/bin/mpic++
+#MPI_INC := -I/home/power/local/mpich2/include
 
 CFLAGS := -ggdb2 -O0 -Wall -Wno-unused-function -Wno-sign-compare
 CXXFLAGS := $(CFLAGS)
@@ -12,7 +17,7 @@ DYNAMIC_LIBS := -lboost_thread -lprotobuf
 STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -Wl,-Bdynamic 
 
 LINK_LIB := ld --eh-frame-hdr -r
-LINK_BIN := $(CXX) $(LDDIRS) `mpic++ -showme:link`
+LINK_BIN := $(MPI_LINK) $(LDDIRS) 
 
 
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/rpc.o
