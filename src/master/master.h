@@ -14,7 +14,16 @@ public:
   Master(const ConfigData &conf);
   ~Master();
 
-  void run(KernelFunction f);
+  // N.B.  All run_* methods are blocking.
+
+  // Run the given kernel function on all worker nodes.
+  void run_all(KernelFunction f);
+
+  // Run the given kernel function on one (arbitrary) worker node.
+  void run_one(KernelFunction f);
+
+  // Run the kernel function on the given set of nodes.
+  void run_range(KernelFunction f, const vector<int> &nodes);
 
 private:
   ConfigData config_;

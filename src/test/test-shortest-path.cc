@@ -35,7 +35,6 @@ void BuildGraph(int shards, int nodes, int density) {
 }
 
 void Initialize() {
-  if (distance->info().owner_thread != 0) { return; }
   for (int i = 0; i < NUM_NODES; ++i) {
     distance->put(i, 1e9);
   }
@@ -56,7 +55,6 @@ void Propagate() {
 }
 
 void DumpDistances() {
-  if (distance->info().owner_thread != 0) { return; }
   for (int i = 0; i < NUM_NODES; ++i) {
     LOG(INFO) << "node: " << i << " :: " << distance->get(i);
   }
@@ -77,11 +75,11 @@ int main(int argc, char **argv) {
     BuildGraph(NUM_WORKERS, NUM_NODES, 10);
 
     Master m(conf);
-    m.run(&Initialize);
+    m.run_one(&Initialize);
     for (int i = 0; i < 10; ++i) {
-      m.run(&Propagate);
+      m.run_all(&Propagate);
     }
-    m.run(DumpDistances);
+    m.run_one(DumpDistances);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);

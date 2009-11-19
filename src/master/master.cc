@@ -18,21 +18,35 @@ Master::~Master() {
   }
 }
 
-void Master::run(KernelFunction f) {
+void Master::run_all(KernelFunction f) {
+  vector<int> nodes;
+  for (int i = 1; i < world_.Get_size(); ++i) {
+    nodes.push_back(i);
+  }
+  run_range(f, nodes);
+}
+
+void Master::run_one(KernelFunction f) {
+  vector<int> nodes;
+  nodes.push_back(1);
+  run_range(f, nodes);
+}
+
+void Master::run_range(KernelFunction f, const vector<int> &nodes) {
   int id = KernelRegistry::get_id(f);
   RunKernelRequest msg;
   msg.set_kernel_id(id);
 
-  for (int i = 1; i < world_.Get_size(); ++i) {
-    rpc_->Send(i, MTYPE_RUN_KERNEL, msg);
+  for (int i = 0; i < nodes.size(); ++i) {
+    rpc_->Send(nodes[i], MTYPE_RUN_KERNEL, msg);
   }
 
   LOG(INFO) << "Waiting for response.";
 
 
-  string waiting(world_.Get_size() - 1, '0');
+  string waiting(nodes.size() - 1, '0');
   int peer = 0;
-  for (int i = 1; i < world_.Get_size(); ++i) {
+  for (int i = 0; i < nodes.size(); ++i) {
     EmptyMessage msg;
     rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &msg);
     waiting[peer - 1] = '1';

@@ -55,9 +55,9 @@ int main(int argc, char **argv) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    m.run(&TestPut);
-    m.run(&TestGetLocal);
-    m.run(&TestGet);
+    m.run_all(&TestPut);
+    m.run_all(&TestGetLocal);
+    m.run_all(&TestGet);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
