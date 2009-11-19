@@ -10,9 +10,7 @@
 namespace upc {
 
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
-
-template <class K>
-static int ModSharding(const K& k, int shards) { return k % shards; }
+static int ModSharding(const int& key, int shards) { return key % shards; }
 
 template <class V>
 struct Accumulator {

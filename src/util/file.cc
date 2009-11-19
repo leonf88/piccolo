@@ -4,6 +4,10 @@
 
 namespace upc {
 
+void Mkdirs(const string& path) {
+  system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str());
+}
+
 string Slurp(const string& f) {
   FILE* fp = fopen(f.c_str(), "r");
   if (!fp) { LOG(FATAL) << "Failed to read input file " << f.c_str(); }

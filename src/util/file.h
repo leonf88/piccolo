@@ -12,6 +12,7 @@ namespace upc {
 
 extern string Slurp(const string& file);
 extern void Dump(const string& file, StringPiece data);
+extern void Mkdirs(const string& path);
 
 class File {
 public:

@@ -61,6 +61,6 @@ message EmptyMessage {}
 message PathNode {
   required int32 id = 1;
   repeated int32 target = 2;
-  required int32 distance = 3 [default = 0];
+  optional int32 distance = 3 [default = 0];
   required bool dirty = 4 [default = false];
 }
