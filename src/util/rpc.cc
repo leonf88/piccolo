@@ -1,5 +1,4 @@
 #include "util/rpc.h"
-#include "util/fake-mpi.h"
 
 DECLARE_bool(localtest);
 

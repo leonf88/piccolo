@@ -1,5 +1,4 @@
 #include "util/common.h"
-#include "util/fake-mpi.h"
 
 #include "worker/worker.h"
 #include "worker/kernel.h"
