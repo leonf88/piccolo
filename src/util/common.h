@@ -131,5 +131,16 @@ struct hash<upc::StringPiece> : public unary_function<upc::StringPiece, size_t> 
 
 }}
 
+#include <google/protobuf/message.h>
+namespace std{
+static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
+  string s = q.ShortDebugString();
+  out << s;
+  return out;
+}
+
+}
+
+
 
 #endif /* COMMON_H_ */
