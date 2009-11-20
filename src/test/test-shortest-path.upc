@@ -16,13 +16,13 @@
 // is located at (BS * K * THREADS) {start of the block} +
 // (K % THREADS) * BS {offset in the block}.
 
-shared int[BS] distance[THREADS * NUM_NODES];
+shared [BS] int distance[THREADS * NUM_NODES];
 
 int main(int argc, char** argv) {
   char srcfile[1000];
   int current_entry, num_entries;
-  int i, j, k;
-  RecordFile *r;
+  int i, j, k, idx;
+  struct RFile *r;
   GraphEntry *e, *entries;
 
   int *local_copy;
@@ -32,25 +32,27 @@ int main(int argc, char** argv) {
 
   local_copy = malloc(sizeof(int) * BS * THREADS);
 
-  GraphEntry **entries = (GraphEntry*)malloc(NUM_NODES * sizeof(GraphEntry*));
+  entries = (GraphEntry*)malloc(NUM_NODES * sizeof(GraphEntry*));
   sprintf(srcfile, "testdata/graph-%05d-of-%05d", MYTHREAD, THREADS);
 
   r = RecordFile_Open(srcfile, "r");
   while ((e = RecordFile_ReadGraphEntry(r))) {
-    entries[current_entry++] = r;
+    entries[current_entry++] = *e;
   }
+
   RecordFile_Close(r);
 
   for (i = 0; i < 100; ++i) {
     // Propagate any updates into our local section of the address space
     for (j = 0; j < num_entries; ++i) {
-      e = entries[j];
+      e = &entries[j];
       for (k = 0; k < e->num_neighbors; ++k) {
         distance[IDX(e->neighbors[k])] = MIN(distance[IDX(e->neighbors[k] * THREADS + MYTHREAD)],
                                              distance[IDX(e->id)] + 1);
       }
     }
-    upc_barrier();
+
+    upc_barrier;
 
     // For each block of entries, fetch and compare with the remote blocks corresponding to our local block
     for (j = BS * MYTHREAD; j < NUM_NODES; j += BS * THREADS) {
@@ -61,6 +63,6 @@ int main(int argc, char** argv) {
       }
     }
 
-    upc_barrier();
+    upc_barrier;
   }
 }

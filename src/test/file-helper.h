@@ -1,21 +1,26 @@
 #ifndef FILEHELPER_H_
 #define FILEHELPER_H_
 
-// Converts the recordfile calls into a form accessible from C.
-
+#ifdef __cplusplus
 extern "C" {
-  struct RecordFile;
+#endif
 
-  typedef struct {
-    int id;
-    int num_neighbors;
-    int *neighbors;
-  } GraphEntry;
+// Wrapper around recordfile calls to make them accessible from C.
+struct RFile;
 
-  RecordFile *RecordFile_Open(const char* f, const char *mode);
-  GraphEntry* RecordFile_ReadGraphEntry(RecordFile *r);
+typedef struct {
+  int id;
+  int num_neighbors;
+  int *neighbors;
+} GraphEntry;
 
-  void RecordFile_Close(RecordFile* f);
+struct RFile *RecordFile_Open(const char* f, const char *mode);
+GraphEntry *RecordFile_ReadGraphEntry(struct RFile *r);
+
+void RecordFile_Close(struct RFile* f);
+
+#ifdef __cplusplus
 }
+#endif
 
 #endif /* FILEHELPER_H_ */
