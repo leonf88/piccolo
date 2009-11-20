@@ -25,14 +25,9 @@ message Pair {
 }
 
 message ConfigData {
-  required bytes shard_prefix = 1;
-  required int32 num_shards = 2;
-  
   required int32 num_workers = 3;
   required int32 worker_id = 4;
   required int32 master_id = 9;
-  required bytes kernel = 5;
-  required int32 graph_size = 6;
   
   optional bool localtest = 7 [default = false];
   optional int32 network_buffer = 8 [default = 20000000];
