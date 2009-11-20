@@ -2,6 +2,7 @@
 #include "util/file.h"
 #include "worker/worker.h"
 #include "master/master.h"
+#include "test/test.pb.h"
 
 using namespace upc;
 
