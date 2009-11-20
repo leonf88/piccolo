@@ -4,40 +4,42 @@
 #include "master/master.h"
 
 namespace upc {
-static TypedTable<string, double>* min_hash;
-static TypedTable<string, double>* max_hash;
-static TypedTable<string, double>* sum_hash;
+static TypedTable<int, double>* min_hash;
+static TypedTable<int, double>* max_hash;
+static TypedTable<int, double>* sum_hash;
+static TypedTable<int, double>* replace_hash;
 
 void TestPut() {
   for (int i = 0; i < 100; ++i) {
-    min_hash->put(StringPrintf("key.%d", i), i);
-    max_hash->put(StringPrintf("key.%d", i), i);
-    sum_hash->put(StringPrintf("key.%d", i), i);
+    min_hash->put(i, i);
+    max_hash->put(i, i);
+    sum_hash->put(i, i);
+    replace_hash->put(i, i);
   }
 }
 REGISTER_KERNEL(TestPut);
 
 void TestGet() {
-  int my_thread = min_hash->get_typed_iterator()->owner()->info().owner_thread;
+  int num_threads = min_hash->info().num_threads;
   for (int i = 0; i < 100; ++i) {
-    LOG(INFO) << my_thread << " min_v : " << min_hash->get(StringPrintf("key.%d", i));
-    LOG(INFO) << my_thread << " max_v : " << max_hash->get(StringPrintf("key.%d", i));
-    LOG(INFO) << my_thread << " sum_v : " << sum_hash->get(StringPrintf("key.%d", i));
+    CHECK_EQ((int)min_hash->get(i), i);
+    CHECK_EQ((int)max_hash->get(i), i);
+    CHECK_EQ((int)replace_hash->get(i), i);
+    CHECK_EQ((int)sum_hash->get(i), i * num_threads);
   }
 }
 REGISTER_KERNEL(TestGet);
 
 void TestGetLocal() {
-  TypedTable<string, double>::Iterator *it = min_hash->get_typed_iterator();
-  TypedTable<string, double>* local = (TypedTable<string, double>*)it->owner();
-
-  int my_thread = local->info().owner_thread;
+  TypedTable<int, double>::Iterator *it = min_hash->get_typed_iterator();
+  int num_threads = min_hash->info().num_threads;
 
   while (!it->done()) {
-    const string& k = it->key();
-    LOG(INFO) << my_thread << " min_v : " << k << " : " << min_hash->get(k);
-    LOG(INFO) << my_thread << " max_v : " << k << " : " << max_hash->get(k);
-    LOG(INFO) << my_thread << " sum_v : " << k << " : " << sum_hash->get(k);
+    const int& k = it->key();
+    CHECK_EQ((int)min_hash->get(k), k);
+    CHECK_EQ((int)max_hash->get(k), k);
+    CHECK_EQ((int)replace_hash->get(k), k);
+    CHECK_EQ((int)sum_hash->get(k), k * num_threads);
     it->Next();
   }
 }
@@ -61,9 +63,10 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-    min_hash = w.CreateTable<string, double>(&StringSharding, &Accumulator<double>::min);
-    max_hash = w.CreateTable<string, double>(&StringSharding, &Accumulator<double>::max);
-    sum_hash = w.CreateTable<string, double>(&StringSharding, &Accumulator<double>::sum);
+    min_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::min);
+    max_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::max);
+    sum_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::sum);
+    replace_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::replace);
     w.Run();
   }
 

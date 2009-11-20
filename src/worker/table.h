@@ -17,6 +17,7 @@ struct Accumulator {
   static V min(const V& a, const V& b) { return std::min(a, b); }
   static V max(const V& a, const V& b) { return std::max(a, b); }
   static V sum(const V& a, const V& b) { return a + b; }
+  static V replace(const V& a, const V& b) { return b; }
 };
 
 template <class T>
