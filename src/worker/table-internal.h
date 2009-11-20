@@ -32,9 +32,9 @@ public:
 
     string key_str() {
 //      LOG(INFO) << key() << " : " << value();
-      return Marshal<K>::to_string(key());
+      return Data::to_string<K>(key());
     }
-    string value_str() { return Marshal<V>::to_string(value()); }
+    string value_str() { return Data::to_string<V>(value()); }
     bool done() { return it_ == owner_->data_.end(); }
     void Next() { ++it_; }
 
@@ -210,13 +210,13 @@ template <class K, class V>
 string TypedPartitionedTable<K, V>::get_local(const StringPiece &k) {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
-  int shard = this->get_shard(Marshal<K>::from_string(k));
+  int shard = this->get_shard(Data::from_string<K>(k));
   CHECK_EQ(shard, info().owner_thread);
 
   LocalTable<K, V> *h = partitions_[shard];
 
-  VLOG(1) << "Returning local result : " <<  h->get(Marshal<K>::from_string(k))
-          << " : " << Marshal<V>::from_string(h->get_str(k));
+  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
+          << " : " << Data::from_string<V>(h->get_str(k));
 
   return h->get_str(k);
 }
@@ -228,17 +228,17 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
     return partitions_[shard]->get(k);
   }
 
-  VLOG(1) << "Requesting key " << Marshal<K>::to_string(k) << " from shard " << shard;
+  VLOG(1) << "Requesting key " << Data::to_string<K>(k) << " from shard " << shard;
   HashRequest req;
   HashUpdate resp;
-  req.set_key(Marshal<K>::to_string(k));
+  req.set_key(Data::to_string<K>(k));
   req.set_table_id(info().table_id);
 
   info().rpc->Send(shard, MTYPE_GET_REQUEST, req);
   info().rpc->Read(shard, MTYPE_GET_RESPONSE, &resp);
 
-  V v = Marshal<V>::from_string(resp.put(0).value());
-  VLOG(1) << "Got key " << Marshal<K>::to_string(k) << " : " << v;
+  V v = Data::from_string<V>(resp.put(0).value());
+  VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;
 
   return v;
 }

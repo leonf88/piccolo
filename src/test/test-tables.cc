@@ -2,19 +2,25 @@
 #include "util/file.h"
 #include "worker/worker.h"
 #include "master/master.h"
+using namespace upc;
 
-namespace upc {
+
 static TypedTable<int, double>* min_hash;
 static TypedTable<int, double>* max_hash;
 static TypedTable<int, double>* sum_hash;
 static TypedTable<int, double>* replace_hash;
+static TypedTable<int, Pair>* pair_hash;
 
 void TestPut() {
+  Pair p;
   for (int i = 0; i < 100; ++i) {
     min_hash->put(i, i);
     max_hash->put(i, i);
     sum_hash->put(i, i);
     replace_hash->put(i, i);
+    p.set_key(StringPrintf("%d", i));
+    p.set_value(StringPrintf("%d", i));
+    pair_hash->put(i, p);
   }
 }
 REGISTER_KERNEL(TestPut);
@@ -26,6 +32,7 @@ void TestGet() {
     CHECK_EQ((int)max_hash->get(i), i);
     CHECK_EQ((int)replace_hash->get(i), i);
     CHECK_EQ((int)sum_hash->get(i), i * num_threads);
+    CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
   }
 }
 REGISTER_KERNEL(TestGet);
@@ -40,20 +47,34 @@ void TestGetLocal() {
     CHECK_EQ((int)max_hash->get(k), k);
     CHECK_EQ((int)replace_hash->get(k), k);
     CHECK_EQ((int)sum_hash->get(k), k * num_threads);
+    CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
     it->Next();
   }
 }
 REGISTER_KERNEL(TestGetLocal);
+
+
+static void TestMarshalling() {
+  ConfigData c;
+  c.set_num_workers(10000);
+  c.set_worker_id(0);
+  c.set_master_id(0);
+
+  LOG(INFO) << c.DebugString();
+
+  string cdata = Data::to_string<ConfigData>(c);
+  ConfigData c2 = Data::from_string<ConfigData>(cdata);
+
+  CHECK_EQ(c2.DebugString(), c.DebugString());
 }
 
-using namespace upc;
 int main(int argc, char **argv) {
   Init(argc, argv);
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
 
-  LOG(INFO) << Marshal<double>::from_string(Marshal<double>::to_string(10));
+  TestMarshalling();
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
@@ -67,6 +88,7 @@ int main(int argc, char **argv) {
     max_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::max);
     sum_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::sum);
     replace_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::replace);
+    pair_hash = w.CreateTable<int, Pair>(&ModSharding, &Accumulator<Pair>::replace);
     w.Run();
   }
 

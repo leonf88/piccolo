@@ -20,22 +20,39 @@ struct Accumulator {
   static V replace(const V& a, const V& b) { return b; }
 };
 
-template <class T>
-struct Marshal {
+struct Data {
+  // strings
+  static void marshal(const string& t, string *out) { *out = t; }
+  static void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
+
+  // protocol messages
+  static void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
+  static void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
+
+#define POD_MARSHAL(T)\
+  static void marshal(const T& t, string* out) { out->assign(reinterpret_cast<const char*>(&t), sizeof(t)); }\
+  static void unmarshal(const StringPiece& s, T *t) { *t = *reinterpret_cast<const T*>(s.data); }\
+
+  POD_MARSHAL(int32_t);
+  POD_MARSHAL(int64_t);
+  POD_MARSHAL(double);
+  POD_MARSHAL(float);
+
+  template <class T>
   static string to_string(const T& t) {
-    return string(reinterpret_cast<const char*>(&t), sizeof(t));
+    string t_marshal;
+    marshal(t, &t_marshal);
+    return t_marshal;
   }
-  static T from_string(const StringPiece& s) {
-    T t = *reinterpret_cast<const T*>(s.data);
-    return t;
+
+  template <class T>
+  static T from_string(const StringPiece& t) {
+    T t_marshal;
+    unmarshal(t, &t_marshal);
+    return t_marshal;
   }
 };
 
-template <>
-struct Marshal<string> {
-  static string to_string(const string& t) { return t; }
-  static string from_string(const StringPiece& s) { return s.AsString(); }
-};
 
 struct TableInfo {
 public:
@@ -105,17 +122,17 @@ public:
   virtual Iterator* get_typed_iterator() = 0;
 
   string get_str(const StringPiece &k) {
-    return Marshal<V>::to_string(get(Marshal<K>::from_string(k)));
+    return Data::to_string<V>(get(Data::from_string<K>(k)));
   }
 
   void put_str(const StringPiece &k, const StringPiece &v) {
-    const V& vt = Marshal<V>::from_string(v);
-    const K& kt = Marshal<K>::from_string(k);
+    const K& kt = Data::from_string<K>(k);
+    const V& vt = Data::from_string<V>(v);
     put(kt, vt);
   }
 
   void remove_str(const StringPiece &k) {
-    remove(Marshal<K>::from_string(k));
+    remove(Data::from_string<K>(k));
   }
 
   int get_shard(const K& k) {
