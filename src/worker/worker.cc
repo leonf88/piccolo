@@ -150,7 +150,7 @@ void Worker::NetworkLoop() {
     PERIODIC(10,
         LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.");
 
-    Sleep(0.01);
+    Sleep(0.0001);
     SendAndReceive();
 
     for (int i = 0; i < tables.size(); ++i) {
