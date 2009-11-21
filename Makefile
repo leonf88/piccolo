@@ -1,8 +1,8 @@
 .PRECIOUS : %.pb.cc %.pb.h
 
+MPI_INC := -I/usr/include/mpi
 VPATH := src/
 
-MPI_INC :=
 MPI_LINK := mpic++
 MPI_LIBDIR := 
 
@@ -40,7 +40,7 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 	@$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
-all: bin/test-shortest-path bin/test-tables bin/test-shortest-path-upc
+all: bin/test-shortest-path bin/test-tables bin/test-shortest-path-upc bin/test-pr
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -70,6 +70,9 @@ bin/test-tables: bin/libworker.a bin/libcommon.a bin/librpc.a src/test/test-tabl
 	
 bin/test-shortest-path-upc: bin/libcommon.a bin/libtest.a src/test/test-shortest-path.upc	 
 		$(UPCC) $(UPCFLAGS) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS) $(MPI_LIBS)
+
+bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
+	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
 	find src -name '*.o' -exec rm {} \;
