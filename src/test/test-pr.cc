@@ -7,6 +7,7 @@
 
 #define PROP 0.8
 #define TOTALRANK 10.0
+#define BLK 1
 
 static int NUM_NODES = 100;
 static int NUM_WORKERS = 2;
@@ -15,6 +16,8 @@ using namespace upc;
 
 static TypedTable<int, double>* curr_pr_hash;
 static TypedTable<int, double>* next_pr_hash;
+
+static int BlkModSharding(const int& key, int shards) { return (key/BLK) % shards; }
 
 void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
@@ -35,7 +38,7 @@ void BuildGraph(int shards, int nodes, int density) {
 			n.add_target(j);
 		}
 
-    out[i % shards]->write(n);
+    out[BlkModSharding(i,shards)]->write(n);
     LOG_EVERY_N(INFO, 10000) << "Working; created " << i << " nodes.";
   }
 
@@ -108,8 +111,8 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-		curr_pr_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::sum);
-		next_pr_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::sum);
+		curr_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
+		next_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
     w.Run(); 
   }
 }
