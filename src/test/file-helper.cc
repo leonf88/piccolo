@@ -25,6 +25,7 @@ GraphEntry* RecordFile_ReadGraphEntry(RFile *r) {
       e->neighbors[i] = n.target(i);
     }
     e->id = n.id();
+
     return e;
   }
 

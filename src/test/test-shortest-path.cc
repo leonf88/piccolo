@@ -5,8 +5,8 @@
 #include "test/test.pb.h"
 
 using namespace upc;
+DEFINE_int32(num_nodes, 100000, "");
 
-static int NUM_NODES = 100;
 static int NUM_WORKERS = 0;
 static TypedTable<int, double>* distance;
 
@@ -14,7 +14,7 @@ void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/nodes.rec-%05d-of-%05d", i, shards), "w");
+    out[i] = new RecordFile(StringPrintf("testdata/graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
   for (int i = 0; i < nodes; i++) {
@@ -35,7 +35,7 @@ void BuildGraph(int shards, int nodes, int density) {
 }
 
 void Initialize() {
-  for (int i = 0; i < NUM_NODES; ++i) {
+  for (int i = 0; i < FLAGS_num_nodes; ++i) {
     distance->put(i, 1e9);
   }
 
@@ -45,7 +45,7 @@ void Initialize() {
 
 void Propagate() {
   int my_thread = distance->info().owner_thread;
-  RecordFile r(StringPrintf("testdata/nodes.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
+  RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
   PathNode n;
   while (r.read(&n)) {
     for (int i = 0; i < n.target_size(); ++i) {
@@ -59,7 +59,7 @@ void DumpDistances() {
 
   f.Printf("digraph G{\n");
   for (int i = 0; i < NUM_WORKERS; ++i) {
-    RecordFile r(StringPrintf("testdata/nodes.rec-%05d-of-%05d", i, NUM_WORKERS), "r");
+    RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", i, NUM_WORKERS), "r");
     PathNode n;
     while (r.read(&n)) {
       f.Printf("node_%d [label=\"d=%d\"];\n", n.id(), (int)distance->get(n.id()));
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
   NUM_WORKERS = conf.num_workers();
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-    BuildGraph(NUM_WORKERS, NUM_NODES, 4);
+    BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 4);
 
     Master m(conf);
     m.run_one(&Initialize);
