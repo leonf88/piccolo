@@ -66,6 +66,25 @@ private:
   static const double kLogBase = 1.1;
 };
 
+template <class T>
+class Pool {
+public:
+  Pool(int capacity=100) : c_(capacity) {
+    for (int i = 0; i < c_; ++i) { entries_.push_back(new T); }
+  }
+
+  ~Pool() {
+    for (int i = 0; i < c_; ++i) { delete entries_[i]; }
+  }
+
+  T* get() { T* t = entries_.back(); entries_.pop_back(); t->Clear(); return t; }
+  void free(T* t) { entries_.push_back(t); }
+
+private:
+  int c_;
+  vector<T*> entries_;
+};
+
 class StringPiece {
 public:
   StringPiece();
