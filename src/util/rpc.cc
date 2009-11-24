@@ -4,9 +4,8 @@ DECLARE_bool(localtest);
 
 namespace upc {
 
-static void rpc_log(string msg, int src, int target, int rpc) {
-//  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg;
-}
+#define rpc_log(msg, src, target, rpc)\
+//  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
 // Try to read a message from the given peer and rpc channel.  Return
 // the number of bytes read, 0 if no message was available.
