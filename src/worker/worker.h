@@ -41,10 +41,12 @@ public:
     return t;
   }
 
+  Stats get_stats() { return stats_; }
+
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 1 << 20;
-  static const int32_t kNetworkTimeout = 10;
+  static const int32_t kNetworkTimeout = 20;
 
   deque<Table*> pending_writes_;
 
@@ -72,6 +74,8 @@ private:
 
   int64_t pending_network_bytes() const;
   int64_t pending_kernel_bytes() const;
+
+  Stats stats_;
 };
 
 }

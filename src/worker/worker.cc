@@ -5,8 +5,13 @@
 
 #include <boost/bind.hpp>
 #include <signal.h>
+#include <google/profiler.h>
 
 namespace upc {
+
+static Pool<HashRequest> request_pool_;
+static Pool<HashUpdate> update_pool_;
+
 
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
@@ -25,7 +30,7 @@ struct Worker::Peer {
       mpiReq = world->Isend(&payload[0], payload.size(), MPI::BYTE, target, rpc_type);
     }
 
-    double timedOut() {
+    double timed_out() {
       return Now() - startTime > kNetworkTimeout;
     }
   };
@@ -48,8 +53,8 @@ struct Worker::Peer {
     for (list<Request*>::iterator i = outgoingRequests.begin(); i
         != outgoingRequests.end(); ++i) {
       Request *r = (*i);
-      if (r->mpiReq.Test() || r->timedOut()) {
-        if (r->timedOut()) {
+      if (r->mpiReq.Test() || r->timed_out()) {
+        if (r->timed_out()) {
           LOG(INFO) << "Time out sending " << r;
         }
         delete r;
@@ -59,19 +64,26 @@ struct Worker::Peer {
   }
 
   void ReceiveIncomingData(RPCHelper *rpc) {
-    while (rpc->TryRead(id, MTYPE_KERNEL_DATA, &dataScratch)) {
-      VLOG(1) << "Read put request....";
-      HashUpdate *req = new HashUpdate;
-      req->CopyFrom(dataScratch);
-      incomingData.push_back(req);
-    }
+    do {
+      HashUpdate *req = update_pool_.get();
+      if (!rpc->TryRead(id, MTYPE_KERNEL_DATA, req)) {
+        update_pool_.free(req);
+        break;
+      }
 
-    while (rpc->TryRead(id, MTYPE_GET_REQUEST, &reqScratch)) {
+      VLOG(1) << "Read put request....";
+      incomingData.push_back(req);
+    } while(1);
+
+    do {
+      HashRequest *req = request_pool_.get();
+      if (!rpc->TryRead(id, MTYPE_GET_REQUEST, req)) {
+        request_pool_.free(req);
+        break;
+      }
       VLOG(1) << "Read get request....";
-      HashRequest *req = new HashRequest;
-      req->CopyFrom(reqScratch);
       incomingRequests.push_back(req);
-    }
+    } while(1);
   }
 
   int64_t write_bytes_pending() const {
@@ -126,10 +138,11 @@ Worker::Worker(const ConfigData &c) {
 
 void Worker::Run() {
   kernel_thread_ = new boost::thread(boost::bind(&Worker::KernelLoop, this));
-  network_thread_ = new boost::thread(boost::bind(&Worker::NetworkLoop, this));
+//  network_thread_ = new boost::thread(boost::bind(&Worker::NetworkLoop, this));
+//  network_thread_->join();
 
+  NetworkLoop();
   kernel_thread_->join();
-  network_thread_->join();
 }
 
 Worker::~Worker() {
@@ -147,10 +160,10 @@ Worker::~Worker() {
 void Worker::NetworkLoop() {
   deque<Table*> work;
   while (running) {
-    PERIODIC(10,
-        LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.");
+    PERIODIC(10, {
+        LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.";
+    });
 
-    Sleep(0.0001);
     SendAndReceive();
 
     for (int i = 0; i < tables.size(); ++i) {
@@ -187,7 +200,11 @@ void Worker::KernelLoop() {
   RPCHelper rpc(&world);
 	while (running) {
 	  MPI::Status probe_result;
-	  world_.Probe(config.master_id(), MPI_ANY_TAG, probe_result);
+
+	  if (!world_.Iprobe(config.master_id(), MPI_ANY_TAG, probe_result)) {
+	    Sleep(0.001);
+	    continue;
+	  }
 
 	  if (probe_result.Get_tag() == MTYPE_WORKER_SHUTDOWN) {
 	    LOG(INFO) << "Shutting down worker " << config.worker_id();
@@ -197,13 +214,13 @@ void Worker::KernelLoop() {
 
 		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
 
-		LOG(INFO) << "Received run request for kernel id: " << kernelRequest.kernel_id();
+		VLOG(1) << "Received run request for kernel id: " << kernelRequest.kernel_id();
 		KernelFunction f = KernelRegistry::get_kernel(kernelRequest.kernel_id());
 		f();
-		LOG(INFO) << "Waiting for network to finish: " << pending_network_bytes() + pending_kernel_bytes();
+		VLOG(1) << "Waiting for network to finish: " << pending_network_bytes() + pending_kernel_bytes();
 
 	  while (pending_kernel_bytes() + pending_network_bytes() > 0) {
-	    Sleep(0.1);
+	    Sleep(0.001);
 	  }
 
     // Send a message to master indicating that we've completed our kernel
@@ -211,7 +228,8 @@ void Worker::KernelLoop() {
 	  EmptyMessage m;
 	  rpc.Send(config.master_id(), MTYPE_KERNEL_DONE, m);
 
-	  LOG(INFO) << "Kernel done.";
+	  VLOG(1) << "Kernel done.";
+    ProfilerFlush();
 	}
 }
 
@@ -260,12 +278,14 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   Peer::Request *mpiReq = p->create_data_request(MTYPE_KERNEL_DATA, r);
 
+  stats_.set_put_out(stats_.put_out() + 1);
+  stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
+
   mpiReq->Send(&worker_comm_);
   ++count;
 }
 
 void Worker::SendAndReceive() {
-  MPI::Status probeResult;
   RPCHelper rpc(&worker_comm_);
 
   HashUpdate scratch;
@@ -277,13 +297,17 @@ void Worker::SendAndReceive() {
 
     while (!p->incomingData.empty()) {
       HashUpdate *r = p->pop_data();
+      stats_.set_put_in(stats_.put_in() + 1);
+      stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
       tables[r->table_id()]->ApplyUpdates(*r);
-      delete r;
+      update_pool_.free(r);
     }
 
     while (!p->incomingRequests.empty()) {
       HashRequest *r = p->pop_request();
+      stats_.set_get_in(stats_.get_in() + 1);
+      stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
       VLOG(1) << "Returning local result: " << r->key();
       string v = tables[r->table_id()]->get_local(r->key());
       scratch.Clear();
@@ -293,7 +317,7 @@ void Worker::SendAndReceive() {
       scratch.mutable_put(0)->set_key(r->key());
       scratch.mutable_put(0)->set_value(v);
       p->create_data_request(MTYPE_GET_RESPONSE, &scratch)->Send(&worker_comm_);
-      delete r;
+      request_pool_.free(r);
     }
   }
 }

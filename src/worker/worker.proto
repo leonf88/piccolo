@@ -19,6 +19,17 @@ enum NodeIds {
   MASTER_NODE = 0;
 }
 
+message Stats {
+  optional int64 bytes_out = 1;
+  optional int64 bytes_in = 2;
+	
+  optional int64 put_out = 3;
+  optional int64 put_in = 4;
+	
+  optional int64 get_out = 5;
+  optional int64 get_in = 6;
+}
+
 message Pair {
   required bytes key = 1;
   required bytes value = 2;

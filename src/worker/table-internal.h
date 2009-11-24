@@ -48,7 +48,9 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo) : TypedTable<K, V>(tinfo) {}
+  LocalTable(TableInfo tinfo) : TypedTable<K, V>(tinfo) {
+    data_.rehash(100000);
+  }
 
   bool contains(const K &k) { return data_.find(k) != data_.end(); }
   bool empty() { return data_.empty(); }
@@ -68,7 +70,6 @@ public:
   }
 
   void put(const K &k, const V &v) {
-//    LOG(INFO) << k << " : " << v;
     boost::recursive_mutex::scoped_lock sl(write_lock_);
     typename DataMap::iterator i = data_.find(k);
 
@@ -228,7 +229,9 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
     return partitions_[shard]->get(k);
   }
 
+  LOG(INFO) << "Non-local fetch for " << k;
   VLOG(1) << "Requesting key " << Data::to_string<K>(k) << " from shard " << shard;
+
   HashRequest req;
   HashUpdate resp;
   req.set_key(Data::to_string<K>(k));
