@@ -43,8 +43,7 @@ void Master::run_range(KernelFunction f, const vector<int> &nodes) {
 
   LOG(INFO) << "Waiting for response.";
 
-
-  string waiting(nodes.size() - 1, '0');
+  string waiting(nodes.size(), '0');
   int peer = 0;
   for (int i = 0; i < nodes.size(); ++i) {
     EmptyMessage msg;
