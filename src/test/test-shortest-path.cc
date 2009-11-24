@@ -43,35 +43,26 @@ void Initialize() {
   distance->put(0, 0);
 }
 
+static vector<PathNode> local_nodes;
 void Propagate() {
-  int my_thread = distance->info().owner_thread;
-  RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
-  PathNode n;
-  while (r.read(&n)) {
-    for (int i = 0; i < n.target_size(); ++i) {
-      distance->put(n.target(i), distance->get(n.id()) + 1);
+  if (local_nodes.empty()) {
+    int my_thread = distance->info().owner_thread;
+    RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
+    PathNode n;
+    while (r.read(&n)) {
+      local_nodes.push_back(n);
+    }
+  }
+
+  for (int i = 0; i < local_nodes.size(); ++i) {
+    const PathNode &n = local_nodes[i];
+    for (int j = 0; j < n.target_size(); ++j) {
+      distance->put(n.target(j), distance->get(n.id()) + 1);
     }
   }
 }
 
 void DumpDistances() {
-  LocalFile f("testdata/distances.dot", "w");
-
-  f.Printf("digraph G{\n");
-  for (int i = 0; i < NUM_WORKERS; ++i) {
-    RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", i, NUM_WORKERS), "r");
-    PathNode n;
-    while (r.read(&n)) {
-      f.Printf("node_%d [label=\"d=%d\"];\n", n.id(), (int)distance->get(n.id()));
-      for (int i = 0; i < n.target_size(); ++i) {
-        if (distance->get(n.target(i)) == distance->get(n.id()) + 1) {
-          f.Printf("node_%d -> node_%d;\n", n.id(), n.target(i));
-        }
-      }
-    }
-  }
-
-  f.Printf("}");
 }
 
 REGISTER_KERNEL(Initialize);
@@ -99,6 +90,8 @@ int main(int argc, char **argv) {
     Worker w(conf);
     distance = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::min);
     w.Run();
+
+    LOG(INFO) << "Statistics: " << w.get_stats();
   }
 
   LOG(INFO) << "Exiting.";
