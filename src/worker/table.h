@@ -2,9 +2,10 @@
 #define ACCUMULATOR_H
 
 #include "util/common.h"
-#include "util/rpc.h"
 
+#include "worker/table-msgs.h"
 #include "worker/worker.pb.h"
+
 #include <algorithm>
 
 namespace upc {

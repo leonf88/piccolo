@@ -48,17 +48,4 @@ message RunKernelRequest {
   required int32 kernel_id = 1;
 }
 
-message HashUpdate {
-  required int32 source = 1;
-  required int32 table_id = 2;
-  
-  repeated Pair put = 3;
-  repeated string remove = 4;
-}
-
-message HashRequest {
-  required int32 table_id = 1;
-  required bytes key = 2;
-}
-
 message EmptyMessage {}

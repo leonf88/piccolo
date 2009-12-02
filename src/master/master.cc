@@ -14,7 +14,7 @@ Master::~Master() {
   EmptyMessage msg;
   LOG(INFO) << "Shutting down workers.";
   for (int i = 1; i < world_.Get_size(); ++i) {
-    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
+    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, ProtoWrapper(msg));
   }
 }
 
@@ -38,16 +38,15 @@ void Master::run_range(KernelFunction f, const vector<int> &nodes) {
   msg.set_kernel_id(id);
 
   for (int i = 0; i < nodes.size(); ++i) {
-    rpc_->Send(nodes[i], MTYPE_RUN_KERNEL, msg);
+    rpc_->Send(nodes[i], MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
-
-  LOG(INFO) << "Waiting for response.";
 
   string waiting(nodes.size(), '0');
   int peer = 0;
   for (int i = 0; i < nodes.size(); ++i) {
     EmptyMessage msg;
-    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &msg);
+    ProtoWrapper wrapper(msg);
+    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
     waiting[peer - 1] = '1';
     LOG(INFO) << "Finished kernel: " << waiting;
   }

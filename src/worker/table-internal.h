@@ -2,6 +2,7 @@
 #define TABLEINTERNAL_H_
 
 #include "worker/table.h"
+#include "worker/table-msgs.h"
 
 namespace upc {
 
@@ -35,7 +36,7 @@ public:
       return Data::to_string<K>(key());
     }
     string value_str() { return Data::to_string<V>(value()); }
-    bool done() { return it_ == owner_->data_.end(); }
+    bool done() { return  it_ == owner_->data_.end(); }
     void Next() { ++it_; }
 
     const K& key() { return it_->first; }
@@ -44,7 +45,7 @@ public:
     Table* owner() { return owner_; }
 
   private:
-    typename unordered_map<K, V>::iterator it_;
+    typename DataMap::iterator it_;
     LocalTable<K, V> *owner_;
   };
 
@@ -65,12 +66,12 @@ public:
   }
 
   V get(const K &k) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
+//    boost::recursive_mutex::scoped_lock sl(write_lock_);
     return data_[k];
   }
 
   void put(const K &k, const V &v) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
+//    boost::recursive_mutex::scoped_lock sl(write_lock_);
     typename DataMap::iterator i = data_.find(k);
 
     if (i != data_.end()) {
@@ -90,11 +91,11 @@ public:
     data_.clear();
   }
 
-  void applyUpdates(const HashUpdate& req) {
+  void ApplyUpdates(const HashUpdate& req) {
     boost::recursive_mutex::scoped_lock sl(write_lock_);
     for (int i = 0; i < req.put_size(); ++i) {
-      const Pair &p = req.put(i);
-      this->put_str(p.key(), p.value());
+      const pair<string, string>&p = req.put(i);
+      this->put_str(p.first, p.second);
     }
 
     for (int i = 0; i < req.remove_size(); ++i) {
@@ -163,7 +164,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
 
 template <class K, class V>
 void TypedPartitionedTable<K, V>::ApplyUpdates(const upc::HashUpdate& req) {
-  partitions_[info().owner_thread]->applyUpdates(req);
+  partitions_[info().owner_thread]->ApplyUpdates(req);
 }
 
 template <class K, class V>
@@ -229,8 +230,7 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
     return partitions_[shard]->get(k);
   }
 
-  LOG(INFO) << "Non-local fetch for " << k;
-  VLOG(1) << "Requesting key " << Data::to_string<K>(k) << " from shard " << shard;
+  VLOG(1) << "Fetching non-local key " << k << " from shard " << shard << " : " << info().table_id;
 
   HashRequest req;
   HashUpdate resp;
@@ -240,7 +240,7 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
   info().rpc->Send(shard, MTYPE_GET_REQUEST, req);
   info().rpc->Read(shard, MTYPE_GET_RESPONSE, &resp);
 
-  V v = Data::from_string<V>(resp.put(0).value());
+  V v = Data::from_string<V>(resp.put(0).second);
   VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;
 
   return v;

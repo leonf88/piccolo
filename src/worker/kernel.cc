@@ -1,4 +1,5 @@
 #include "worker/kernel.h"
+#include <stdio.h>
 
 namespace upc {
 
@@ -24,7 +25,7 @@ int KernelRegistry::get_id(KernelFunction kf) {
 }
 
 KernelRegistry::StaticHelper::StaticHelper(const char* name, KernelFunction kf) {
-  fprintf(stderr, "Registering... %s\n", name);
+//  fprintf(stderr, "Registering... %s\n", name);
   map<int, KernelFunction> &k = *KernelRegistry::get_mapping();
   k[k.size()] = kf;
 }

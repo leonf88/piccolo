@@ -15,6 +15,7 @@
 #include <sys/time.h>
 
 #include <mpi.h>
+//#include <google/profiler.h>
 
 DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
@@ -174,11 +175,11 @@ void Init(int argc, char** argv) {
   FLAGS_logtostderr = true;
   FLAGS_logbuflevel = -1;
 
+  MPI::Init_thread(argc, argv, MPI::THREAD_MULTIPLE);
+
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
-
-  MPI::Init_thread(argc, argv, MPI::THREAD_MULTIPLE);
 
   MPI::Comm *world = &MPI::COMM_WORLD;
   MPI_Errhandler handler;
@@ -203,6 +204,7 @@ void Init(int argc, char** argv) {
 
   srandom(time(NULL));
 
+//  ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
   LOG(INFO) << "Initialization done.";
 }
 }

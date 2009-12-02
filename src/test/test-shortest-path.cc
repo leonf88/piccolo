@@ -5,7 +5,7 @@
 #include "test/test.pb.h"
 
 using namespace upc;
-DEFINE_int32(num_nodes, 100000, "");
+DEFINE_int32(num_nodes, 10000, "");
 
 static int NUM_WORKERS = 0;
 static TypedTable<int, double>* distance;
@@ -63,6 +63,15 @@ void Propagate() {
 }
 
 void DumpDistances() {
+  for (int i = 0; i < FLAGS_num_nodes; ++i) {
+    if (i % 30 == 0) {
+      fprintf(stderr, "\n%5d: ", i);
+    }
+
+    int d = (int)distance->get(i);
+    if (d >= 1000) { d = -1; }
+    fprintf(stderr, "%3d ", d);
+  }
 }
 
 REGISTER_KERNEL(Initialize);
@@ -91,9 +100,6 @@ int main(int argc, char **argv) {
     distance = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::min);
     w.Run();
 
-    LOG(INFO) << "Statistics: " << w.get_stats();
+    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
-
-  LOG(INFO) << "Exiting.";
-
 }

@@ -12,7 +12,6 @@ namespace upc {
 static Pool<HashRequest> request_pool_;
 static Pool<HashUpdate> update_pool_;
 
-
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
   struct Request {
@@ -94,11 +93,11 @@ struct Worker::Peer {
     return t;
   }
 
-  Request* create_data_request(int rpc_type, google::protobuf::Message* ureq) {
+  Request* create_data_request(int rpc_type, RPCMessage* ureq) {
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
-    ureq->SerializeToString(&r->payload);
+    ureq->AppendToString(&r->payload);
     outgoingRequests.push_back(r);
     return r;
   }
@@ -161,7 +160,7 @@ void Worker::NetworkLoop() {
   deque<Table*> work;
   while (running) {
     PERIODIC(10, {
-        LOG(INFO) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.";
+        VLOG(1) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.";
     });
 
     SendAndReceive();
@@ -207,12 +206,13 @@ void Worker::KernelLoop() {
 	  }
 
 	  if (probe_result.Get_tag() == MTYPE_WORKER_SHUTDOWN) {
-	    LOG(INFO) << "Shutting down worker " << config.worker_id();
+	    VLOG(1) << "Shutting down worker " << config.worker_id();
 	    running = false;
 	    return;
 	  }
 
-		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &kernelRequest);
+	  ProtoWrapper wrapper(kernelRequest);
+		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &wrapper);
 
 		VLOG(1) << "Received run request for kernel id: " << kernelRequest.kernel_id();
 		KernelFunction f = KernelRegistry::get_kernel(kernelRequest.kernel_id());
@@ -226,7 +226,7 @@ void Worker::KernelLoop() {
     // Send a message to master indicating that we've completed our kernel
      // and we are done transmitting.
 	  EmptyMessage m;
-	  rpc.Send(config.master_id(), MTYPE_KERNEL_DONE, m);
+	  rpc.Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(m));
 
 	  VLOG(1) << "Kernel done.";
     ProfilerFlush();
@@ -266,9 +266,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
 //    LOG(INFO) << " k " << k.len << " v " << v.len;
 
-    Pair &u = *r->add_put();
-    u.set_key(k.data(), k.size());
-    u.set_value(v.data(), v.size());
+    r->add_put(make_pair(k, v));
     ++count;
 
     bytesUsed += k.size() + v.size();
@@ -308,14 +306,13 @@ void Worker::SendAndReceive() {
       HashRequest *r = p->pop_request();
       stats_.set_get_in(stats_.get_in() + 1);
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
-      VLOG(1) << "Returning local result: " << r->key();
+
+      VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
       string v = tables[r->table_id()]->get_local(r->key());
       scratch.Clear();
       scratch.set_source(config.worker_id());
       scratch.set_table_id(r->table_id());
-      scratch.add_put();
-      scratch.mutable_put(0)->set_key(r->key());
-      scratch.mutable_put(0)->set_value(v);
+      scratch.add_put(std::make_pair(r->key(), v));
       p->create_data_request(MTYPE_GET_RESPONSE, &scratch)->Send(&worker_comm_);
       request_pool_.free(r);
     }
