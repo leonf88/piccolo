@@ -4,12 +4,22 @@ DECLARE_bool(localtest);
 
 namespace upc {
 
+void ProtoWrapper::AppendToCoder(Encoder *e) const {
+  string s = p_->SerializeAsString();
+  e->write_bytes(s.data(), s.size());
+}
+
+void ProtoWrapper::ParseFromCoder(Decoder *d) {
+  Clear();
+  p_->ParseFromArray(d->data_.data, d->data_.len);
+}
+
 #define rpc_log(msg, src, target, rpc)\
 //  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
 // Try to read a message from the given peer and rpc channel.  Return
 // the number of bytes read, 0 if no message was available.
-int RPCHelper::TryRead(int peerId, int rpcId, google::protobuf::Message *msg) {
+int RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
 
   rpc_log("IProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
@@ -26,7 +36,7 @@ int RPCHelper::TryRead(int peerId, int rpcId, google::protobuf::Message *msg) {
   return rSize;
 }
 
-int RPCHelper::Read(int peerId, int rpcId, google::protobuf::Message *msg) {
+int RPCHelper::Read(int peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
 
   rpc_log("BProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
@@ -41,7 +51,7 @@ int RPCHelper::Read(int peerId, int rpcId, google::protobuf::Message *msg) {
   return rSize;
 }
 
-int RPCHelper::ReadAny(int *peerId, int rpcId, google::protobuf::Message *msg) {
+int RPCHelper::ReadAny(int *peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
 
   rpc_log("BProbeStart", mpiWorld->Get_rank(), MPI_ANY_SOURCE, rpcId);
@@ -59,9 +69,10 @@ int RPCHelper::ReadAny(int *peerId, int rpcId, google::protobuf::Message *msg) {
   return rSize;
 }
 
-void RPCHelper::Send(int peerId, int rpcId, const google::protobuf::Message &msg) {
+void RPCHelper::Send(int peerId, int rpcId, const RPCMessage &msg) {
   rpc_log("SendStart", mpiWorld->Get_rank(), peerId, rpcId);
 
+  scratch.clear();
   msg.AppendToString(&scratch);
   mpiWorld->Send(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId);
   rpc_log("SendDone", mpiWorld->Get_rank(), peerId, rpcId);
@@ -69,7 +80,7 @@ void RPCHelper::Send(int peerId, int rpcId, const google::protobuf::Message &msg
 
 // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
 // here.
-void RPCHelper::Broadcast(int rpcId, const google::protobuf::Message &msg) {
+void RPCHelper::Broadcast(int rpcId, const RPCMessage &msg) {
   for (int i = 0; i < mpiWorld->Get_size(); ++i) {
     Send(i, rpcId, msg);
   }
