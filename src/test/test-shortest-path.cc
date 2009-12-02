@@ -63,15 +63,15 @@ void Propagate() {
 }
 
 void DumpDistances() {
-  for (int i = 0; i < FLAGS_num_nodes; ++i) {
-    if (i % 30 == 0) {
-      fprintf(stderr, "\n%5d: ", i);
-    }
-
-    int d = (int)distance->get(i);
-    if (d >= 1000) { d = -1; }
-    fprintf(stderr, "%3d ", d);
-  }
+//  for (int i = 0; i < FLAGS_num_nodes; ++i) {
+//    if (i % 30 == 0) {
+//      fprintf(stderr, "\n%5d: ", i);
+//    }
+//
+//    int d = (int)distance->get(i);
+//    if (d >= 1000) { d = -1; }
+//    fprintf(stderr, "%3d ", d);
+//  }
 }
 
 REGISTER_KERNEL(Initialize);
@@ -80,6 +80,8 @@ REGISTER_KERNEL(DumpDistances);
 
 int main(int argc, char **argv) {
   Init(argc, argv);
+
+  test_messages();
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);

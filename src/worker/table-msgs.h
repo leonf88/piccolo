@@ -60,6 +60,7 @@ public:
 #undef SETGET_LIST
 #undef SETGET
 
+extern void test_messages();
 }
 
 #endif /* TABLEMSGS_H_ */

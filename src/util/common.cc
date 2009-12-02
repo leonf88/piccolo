@@ -8,7 +8,6 @@
 #include <signal.h>
 #include <execinfo.h>
 
-#include <mpi.h>
 #include <math.h>
 
 #include <asm/msr.h>

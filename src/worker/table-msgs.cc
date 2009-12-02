@@ -101,16 +101,21 @@ void HashUpdate::ParseFromCoder(Decoder *d) {
   }
 }
 
-static void test_messages() {
+void test_messages() {
   HashUpdate h;
-  pair<string, string> put = make_pair("hahahahah", "hahahahahaha");
-  h.add_put(put);
+  for (int i = 0; i < 100000; ++i) {
+    pair<string, string> put = make_pair("hahahahah", "hahahahahaha");
+    h.add_put(put);
+  }
 
   string s;
   h.AppendToString(&s);
   h.ParseFromString(s);
 
-  CHECK(h.put(0) == put);
+  for (int i = 0; i < 100000; ++i) {
+    pair<string, string> put = make_pair("hahahahah", "hahahahahaha");
+    CHECK(h.put(i) == put);
+  }
 
   HashRequest req, req2;
   req.set_key("abc");

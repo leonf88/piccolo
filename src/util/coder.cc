@@ -37,6 +37,7 @@ void Decoder::read(string *v) {
   int32_t len;
   read(&len);
 //    LOG(INFO) << "Reading string of length: " << len << " : " << cur_.data + cur_.len - pos;
+  CHECK_LE(pos + len, data_.data + data_.len);
   v->assign(pos, len);
   pos += len;
 }

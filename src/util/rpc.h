@@ -55,7 +55,6 @@ public:
   void Broadcast(int rpcId, const RPCMessage &msg);
 private:
   MPI::Comm *mpiWorld;
-  string scratch;
 };
 }
 

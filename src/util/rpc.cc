@@ -21,6 +21,7 @@ void ProtoWrapper::ParseFromCoder(Decoder *d) {
 // the number of bytes read, 0 if no message was available.
 int RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
+  string scratch;
 
   rpc_log("IProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
   MPI::Status probeResult;
@@ -38,6 +39,7 @@ int RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
 
 int RPCHelper::Read(int peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
+  string scratch;
 
   rpc_log("BProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
   MPI::Status probeResult;
@@ -53,6 +55,7 @@ int RPCHelper::Read(int peerId, int rpcId, RPCMessage *msg) {
 
 int RPCHelper::ReadAny(int *peerId, int rpcId, RPCMessage *msg) {
   int rSize = 0;
+  string scratch;
 
   rpc_log("BProbeStart", mpiWorld->Get_rank(), MPI_ANY_SOURCE, rpcId);
   MPI::Status probeResult;
@@ -71,6 +74,7 @@ int RPCHelper::ReadAny(int *peerId, int rpcId, RPCMessage *msg) {
 
 void RPCHelper::Send(int peerId, int rpcId, const RPCMessage &msg) {
   rpc_log("SendStart", mpiWorld->Get_rank(), peerId, rpcId);
+  string scratch;
 
   scratch.clear();
   msg.AppendToString(&scratch);
