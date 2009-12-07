@@ -6,6 +6,7 @@
 
 using namespace upc;
 DEFINE_int32(num_nodes, 10000, "");
+DEFINE_bool(dump_output, false, "");
 
 static int NUM_WORKERS = 0;
 static TypedTable<int, double>* distance;
@@ -17,6 +18,8 @@ void BuildGraph(int shards, int nodes, int density) {
     out[i] = new RecordFile(StringPrintf("testdata/graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
+  fprintf(stderr, "Building graph: ");
+
   for (int i = 0; i < nodes; i++) {
     PathNode n;
     n.set_id(i);
@@ -26,8 +29,9 @@ void BuildGraph(int shards, int nodes, int density) {
     }
 
     out[i % shards]->write(n);
-    LOG_EVERY_N(INFO, 10000) << "Working; created " << i << " nodes.";
+    if (i % (nodes / 50) == 0) { fprintf(stderr, "."); }
   }
+  fprintf(stderr, "\n");
 
   for (int i = 0; i < shards; ++i) {
     delete out[i];
@@ -63,15 +67,15 @@ void Propagate() {
 }
 
 void DumpDistances() {
-//  for (int i = 0; i < FLAGS_num_nodes; ++i) {
-//    if (i % 30 == 0) {
-//      fprintf(stderr, "\n%5d: ", i);
-//    }
-//
-//    int d = (int)distance->get(i);
-//    if (d >= 1000) { d = -1; }
-//    fprintf(stderr, "%3d ", d);
-//  }
+  for (int i = 0; i < FLAGS_num_nodes; ++i) {
+    if (i % 30 == 0) {
+      fprintf(stderr, "\n%5d: ", i);
+    }
+
+    int d = (int)distance->get(i);
+    if (d >= 1000) { d = -1; }
+    fprintf(stderr, "%3d ", d);
+  }
 }
 
 REGISTER_KERNEL(Initialize);
@@ -80,8 +84,6 @@ REGISTER_KERNEL(DumpDistances);
 
 int main(int argc, char **argv) {
   Init(argc, argv);
-
-  test_messages();
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
@@ -95,7 +97,10 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 20; ++i) {
       m.run_all(&Propagate);
     }
-    m.run_one(&DumpDistances);
+
+    if (FLAGS_dump_output) {
+      m.run_one(&DumpDistances);
+    }
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);

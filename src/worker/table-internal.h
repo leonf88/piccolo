@@ -3,6 +3,7 @@
 
 #include "worker/table.h"
 #include "worker/table-msgs.h"
+#include "util/hashmap.h"
 
 namespace upc {
 
@@ -23,12 +24,11 @@ public:
 template <class K, class V>
 class LocalTable : public TypedTable<K, V> {
 public:
-  typedef unordered_map<K, V> DataMap;
+  typedef HashMap<K, V> DataMap;
 
   struct Iterator : public TypedTable<K, V>::Iterator {
-    Iterator(LocalTable<K, V> *owner) {
+    Iterator(LocalTable<K, V> *owner) : it_(owner->data_.begin()) {
       owner_ = owner;
-      it_ = owner->data_.begin();
     }
 
     string key_str() {
@@ -39,8 +39,8 @@ public:
     bool done() { return  it_ == owner_->data_.end(); }
     void Next() { ++it_; }
 
-    const K& key() { return it_->first; }
-    const V& value() { return it_->second; }
+    const K& key() { return it_.key(); }
+    const V& value() { return it_.value(); }
 
     Table* owner() { return owner_; }
 
@@ -49,11 +49,10 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo) : TypedTable<K, V>(tinfo) {
-    data_.rehash(100000);
+  LocalTable(TableInfo tinfo, int size=100000) : TypedTable<K, V>(tinfo), data_(size) {
   }
 
-  bool contains(const K &k) { return data_.find(k) != data_.end(); }
+  bool contains(const K &k) { return data_.contains(k); }
   bool empty() { return data_.empty(); }
   int64_t size() { return data_.size(); }
 
@@ -66,24 +65,23 @@ public:
   }
 
   V get(const K &k) {
-//    boost::recursive_mutex::scoped_lock sl(write_lock_);
+    boost::recursive_mutex::scoped_lock sl(write_lock_);
     return data_[k];
   }
 
   void put(const K &k, const V &v) {
-//    boost::recursive_mutex::scoped_lock sl(write_lock_);
-    typename DataMap::iterator i = data_.find(k);
-
-    if (i != data_.end()) {
-      i->second = this->accumulate(i->second, v);
+    boost::recursive_mutex::scoped_lock sl(write_lock_);
+    if (data_.contains(k)) {
+      V &cur_v = data_.get(k);
+      data_.put(k, this->accumulate(cur_v, v));
     } else {
-      data_.insert(make_pair(k, v));
+      data_.put(k, v);
     }
   }
 
   void remove(const K &k) {
     boost::recursive_mutex::scoped_lock sl(write_lock_);
-    data_.erase(data_.find(k));
+//    data_.erase(data_.find(k));
   }
 
   void clear() {
@@ -158,7 +156,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.owner_thread = i;
-    partitions_[i] = new LocalTable<K, V>(linfo);
+    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 10000000 : 100000);
   }
 }
 

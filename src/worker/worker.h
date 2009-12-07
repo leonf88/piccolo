@@ -45,7 +45,7 @@ public:
 
 private:
   // The largest amount of data we'll send over the network as a single piece.
-  static const int64_t kNetworkChunkSize = 1 << 20;
+  static const int64_t kNetworkChunkSize = 500 << 10;
   static const int32_t kNetworkTimeout = 20;
 
   deque<Table*> pending_writes_;

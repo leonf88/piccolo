@@ -32,7 +32,7 @@ void Master::run_one(KernelFunction f) {
   run_range(f, nodes);
 }
 
-void Master::run_range(KernelFunction f, const vector<int> &nodes) {
+void Master::run_range(KernelFunction f, vector<int> nodes) {
   int id = KernelRegistry::get_id(f);
   RunKernelRequest msg;
   msg.set_kernel_id(id);
@@ -42,13 +42,32 @@ void Master::run_range(KernelFunction f, const vector<int> &nodes) {
   }
 
   string waiting(nodes.size(), '0');
-  int peer = 0;
-  for (int i = 0; i < nodes.size(); ++i) {
-    EmptyMessage msg;
-    ProtoWrapper wrapper(msg);
-    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
-    waiting[peer - 1] = '1';
-    LOG(INFO) << "Finished kernel: " << waiting;
+//  int peer = 0;
+//  for (int i = 0; i < nodes.size(); ++i) {
+//    EmptyMessage msg;
+//    ProtoWrapper wrapper(msg);
+//    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
+//    waiting[peer - 1] = '1';
+//    LOG(INFO) << "Finished kernel: " << waiting;
+//  }
+
+  EmptyMessage empty;
+  ProtoWrapper wrapper(empty);
+
+  while (!nodes.empty()) {
+    bool found = false;
+    for (int j = 0; j < nodes.size(); ++j) {
+      if (rpc_->TryRead(nodes[j], MTYPE_KERNEL_DONE, &wrapper)) {
+        waiting[nodes[j] - 1] = '1';
+
+        nodes.erase(nodes.begin() + j);
+        found = true;
+        LOG(INFO) << "Kernels finished: " << waiting;
+        break;
+      }
+    }
+
+    if (!found) { Sleep(0.1); }
   }
 
   LOG(INFO) << "All kernels finished.";

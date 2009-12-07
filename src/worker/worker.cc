@@ -36,25 +36,26 @@ struct Worker::Peer {
 
   list<Request*> outgoingRequests;
   HashUpdate writeScratch;
-  HashUpdate dataScratch;
-  HashRequest reqScratch;
 
   // Incoming data from this peer that we have read from the network, but has yet to be
   // processed by the kernel.
   deque<HashUpdate*> incomingData;
   deque<HashRequest*> incomingRequests;
 
+  mutable boost::recursive_mutex pending_lock_;
+
   int32_t id;
   Peer(int id) : id(id) {
   }
 
   void CollectPendingSends() {
-    for (list<Request*>::iterator i = outgoingRequests.begin(); i
-        != outgoingRequests.end(); ++i) {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+    for (list<Request*>::iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       Request *r = (*i);
       if (r->mpiReq.Test() || r->timed_out()) {
         if (r->timed_out()) {
-          LOG(INFO) << "Time out sending " << r;
+          r->mpiReq.Cancel();
+          LOG(INFO) << "Time out sending " << r->rpc_type << " to " << r->target;
         }
         delete r;
         i = outgoingRequests.erase(i);
@@ -86,6 +87,8 @@ struct Worker::Peer {
   }
 
   int64_t write_bytes_pending() const {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+
     int64_t t = 0;
     for (list<Request*>::const_iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       t += (*i)->payload.size();
@@ -94,6 +97,8 @@ struct Worker::Peer {
   }
 
   Request* create_data_request(int rpc_type, RPCMessage* ureq) {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
@@ -170,6 +175,7 @@ void Worker::NetworkLoop() {
     }
 
     if (work.empty()) {
+      Sleep(0.1);
       continue;
     }
 
@@ -181,10 +187,7 @@ void Worker::NetworkLoop() {
 
     Table::Iterator *i = old->get_iterator();
     while (!i->done()) {
-      if (pending_network_bytes() < config.network_buffer()) {
-        ComputeUpdates(p, i);
-      }
-
+      ComputeUpdates(p, i);
       SendAndReceive();
     }
 
@@ -260,7 +263,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   int bytesUsed = 0;
   int count = 0;
-  for (; !it->done() && bytesUsed < kNetworkChunkSize; it->Next()) {
+  for (; !it->done(); it->Next()) {
     const string& k = it->key_str();
     const string& v = it->value_str();
 

@@ -23,7 +23,7 @@ public:
   void run_one(KernelFunction f);
 
   // Run the kernel function on the given set of nodes.
-  void run_range(KernelFunction f, const vector<int> &nodes);
+  void run_range(KernelFunction f, vector<int> nodes);
 
 private:
   ConfigData config_;
