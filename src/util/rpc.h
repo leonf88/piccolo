@@ -43,9 +43,8 @@ public:
     mpiWorld(mpi) {
   }
 
-  // Try to read a message from the given peer and rpc channel.  Return
-  // the number of bytes read, 0 if no message was available.
-  int TryRead(int peerId, int rpcId, RPCMessage *msg);
+  // Try to read a message from the given peer and rpc channel.
+  bool TryRead(int peerId, int rpcId, RPCMessage *msg);
   int Read(int peerId, int rpcId, RPCMessage *msg);
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
   void Send(int peerId, int rpcId, const RPCMessage &msg);

@@ -15,26 +15,27 @@ void ProtoWrapper::ParseFromCoder(Decoder *d) {
 }
 
 #define rpc_log(msg, src, target, rpc)\
-//  LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
+  VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
-// Try to read a message from the given peer and rpc channel.  Return
-// the number of bytes read, 0 if no message was available.
-int RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
-  int rSize = 0;
+bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
+  bool success = false;
   string scratch;
 
   rpc_log("IProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
   MPI::Status probeResult;
   if (mpiWorld->Iprobe(peerId, rpcId, probeResult)) {
     rpc_log("IProbeSuccess", mpiWorld->Get_rank(), peerId, rpcId);
-    rSize = probeResult.Get_count(MPI::BYTE);
+    int rSize = probeResult.Get_count(MPI::BYTE);
     scratch.resize(rSize);
+
+    success = true;
+
     mpiWorld->Recv(&scratch[0], rSize, MPI::BYTE, peerId, rpcId);
     msg->ParseFromString(scratch);
   }
 
   rpc_log("IProbeDone", mpiWorld->Get_rank(), peerId, rpcId);
-  return rSize;
+  return success;
 }
 
 int RPCHelper::Read(int peerId, int rpcId, RPCMessage *msg) {
