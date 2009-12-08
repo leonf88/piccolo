@@ -20,7 +20,7 @@ namespace upc {
 
 struct HashRequest : public RPCMessage {
 private:
-  int32_t table_id_;
+  uint32_t table_id_;
   string key_;
 
 public:
@@ -37,8 +37,8 @@ public:
 
 struct HashUpdate : public RPCMessage {
 private:
-  int32_t source_;
-  int32_t table_id_;
+  uint32_t source_;
+  uint32_t table_id_;
 
   vector<pair<string, string> > put_;
   vector<string> remove_;

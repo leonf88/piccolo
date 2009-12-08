@@ -11,82 +11,103 @@ void ProtoWrapper::AppendToCoder(Encoder *e) const {
 
 void ProtoWrapper::ParseFromCoder(Decoder *d) {
   Clear();
-  p_->ParseFromArray(d->data_.data, d->data_.len);
+  p_->ParseFromArray(&d->data_[0], d->data_.size());
 }
 
 #define rpc_log(msg, src, target, rpc)\
   VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
 bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
   bool success = false;
   string scratch;
+  MPI::Status status;
 
-  rpc_log("IProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
-  MPI::Status probeResult;
-  if (mpiWorld->Iprobe(peerId, rpcId, probeResult)) {
-    rpc_log("IProbeSuccess", mpiWorld->Get_rank(), peerId, rpcId);
-    int rSize = probeResult.Get_count(MPI::BYTE);
-    scratch.resize(rSize);
-
+  rpc_log("IProbeStart", my_rank_, peerId, rpcId);
+  MPI::Status probe_result;
+  if (mpi_world_->Iprobe(peerId, rpcId, probe_result)) {
     success = true;
 
-    mpiWorld->Recv(&scratch[0], rSize, MPI::BYTE, peerId, rpcId);
+    rpc_log("IProbeSuccess", my_rank_, peerId, rpcId);
+
+    scratch.resize(probe_result.Get_count(MPI::BYTE));
+
+    mpi_world_->Recv(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId, status);
+    VLOG(2) << "Read message of size: " << scratch.size();
+
     msg->ParseFromString(scratch);
   }
 
-  rpc_log("IProbeDone", mpiWorld->Get_rank(), peerId, rpcId);
+  rpc_log("IProbeDone", my_rank_, peerId, rpcId);
   return success;
 }
 
 int RPCHelper::Read(int peerId, int rpcId, RPCMessage *msg) {
-  int rSize = 0;
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+  int r_size = 0;
   string scratch;
+  MPI::Status status;
 
-  rpc_log("BProbeStart", mpiWorld->Get_rank(), peerId, rpcId);
-  MPI::Status probeResult;
-  mpiWorld->Probe(peerId, rpcId, probeResult);
-  rpc_log("BProbeDone", mpiWorld->Get_rank(), peerId, rpcId);
+  rpc_log("BProbeStart", my_rank_, peerId, rpcId);
+  MPI::Status probe_result;
+  mpi_world_->Probe(peerId, rpcId, probe_result);
+  rpc_log("BProbeDone", my_rank_, peerId, rpcId);
 
-  rSize = probeResult.Get_count(MPI::BYTE);
-  scratch.resize(rSize);
-  mpiWorld->Recv(&scratch[0], rSize, MPI::BYTE, peerId, rpcId);
+  r_size = probe_result.Get_count(MPI::BYTE);
+  scratch.resize(r_size);
+
+  VLOG(2) << "Reading message of size: " << r_size << " :: " << &scratch[0];
+
+  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, peerId, rpcId, status);
   msg->ParseFromString(scratch);
-  return rSize;
+  return r_size;
 }
 
 int RPCHelper::ReadAny(int *peerId, int rpcId, RPCMessage *msg) {
-  int rSize = 0;
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+  int r_size = 0;
   string scratch;
 
-  rpc_log("BProbeStart", mpiWorld->Get_rank(), MPI_ANY_SOURCE, rpcId);
-  MPI::Status probeResult;
-  mpiWorld->Probe(MPI_ANY_SOURCE, rpcId, probeResult);
+  rpc_log("BProbeStart", my_rank_, MPI_ANY_SOURCE, rpcId);
+  MPI::Status probe_result;
+  mpi_world_->Probe(MPI_ANY_SOURCE, rpcId, probe_result);
 
-  rpc_log("BProbeDone", mpiWorld->Get_rank(), MPI_ANY_SOURCE, rpcId);
+  rpc_log("BProbeDone", my_rank_, MPI_ANY_SOURCE, rpcId);
 
-  rSize = probeResult.Get_count(MPI::BYTE);
-  *peerId = probeResult.Get_source();
+  r_size = probe_result.Get_count(MPI::BYTE);
+  *peerId = probe_result.Get_source();
 
-  scratch.resize(rSize);
-  mpiWorld->Recv(&scratch[0], rSize, MPI::BYTE, *peerId, rpcId);
+  scratch.resize(r_size);
+  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, *peerId, rpcId);
   msg->ParseFromString(scratch);
-  return rSize;
+  return r_size;
 }
 
 void RPCHelper::Send(int peerId, int rpcId, const RPCMessage &msg) {
-  rpc_log("SendStart", mpiWorld->Get_rank(), peerId, rpcId);
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+  rpc_log("SendStart", my_rank_, peerId, rpcId);
   string scratch;
 
   scratch.clear();
   msg.AppendToString(&scratch);
-  mpiWorld->Send(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId);
-  rpc_log("SendDone", mpiWorld->Get_rank(), peerId, rpcId);
+  mpi_world_->Send(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId);
+  rpc_log("SendDone", my_rank_, peerId, rpcId);
 }
+
+void RPCHelper::SendData(int peerId, int rpcId, const string& msg) {
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+  rpc_log("SendStart", my_rank_, peerId, rpcId);
+
+  mpi_world_->Send(&msg[0], msg.size(), MPI::BYTE, peerId, rpcId);
+  rpc_log("SendDone", my_rank_, peerId, rpcId);
+}
+
 
 // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
 // here.
 void RPCHelper::Broadcast(int rpcId, const RPCMessage &msg) {
-  for (int i = 0; i < mpiWorld->Get_size(); ++i) {
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+  for (int i = 0; i < mpi_world_->Get_size(); ++i) {
     Send(i, rpcId, msg);
   }
 }

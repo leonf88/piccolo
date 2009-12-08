@@ -49,7 +49,7 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo, int size=100000) : TypedTable<K, V>(tinfo), data_(size) {
+  LocalTable(TableInfo tinfo, int size=10000) : TypedTable<K, V>(tinfo), data_(size) {
   }
 
   bool contains(const K &k) { return data_.contains(k); }
@@ -156,7 +156,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.owner_thread = i;
-    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 10000000 : 100000);
+    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 10000000 : 10000);
   }
 }
 
@@ -235,8 +235,8 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
   req.set_key(Data::to_string<K>(k));
   req.set_table_id(info().table_id);
 
-  info().rpc->Send(shard, MTYPE_GET_REQUEST, req);
-  info().rpc->Read(shard, MTYPE_GET_RESPONSE, &resp);
+  info().rpc->Send(shard + 1, MTYPE_GET_REQUEST, req);
+  info().rpc->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
 
   V v = Data::from_string<V>(resp.put(0).second);
   VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;

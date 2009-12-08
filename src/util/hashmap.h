@@ -45,7 +45,7 @@ public:
   }
 
   struct iterator {
-    iterator(const vector<Bucket>& b, const vector<bool>& f) : pos(-1), b_(b), f_(f) {
+    iterator(const vector<Bucket>& b, const vector<uint8_t>& f) : pos(-1), b_(b), f_(f) {
       ++(*this);
     }
 
@@ -63,15 +63,11 @@ public:
 
     int pos;
     const vector<Bucket>& b_;
-    const vector<bool>& f_;
+    const vector<uint8_t>& f_;
   };
 
   iterator begin() { return iterator(buckets_, filled_); }
-  iterator end() {
-    iterator i(buckets_, filled_);
-    i.pos = size_;
-    return i;
-  }
+  const iterator& end() { return *end_; }
 
 private:
   int hash(const K& k) {
@@ -91,23 +87,28 @@ private:
   }
 
   vector<Bucket> buckets_;
-  vector<bool> filled_;
+  vector<uint8_t> filled_;
 
   std::tr1::hash<K> hasher_;
   int entries_;
   int size_;
+
+  iterator *end_;
 };
 
 template <class K, class V>
 HashMap<K, V>::HashMap(int size) : buckets_(size), filled_(size), entries_(0), size_(size) {
   clear();
+
+  end_ = new iterator(buckets_, filled_);
+  end_->pos = size_;
 }
 
 template <class K, class V>
 void HashMap<K, V>::rehash(int size) {
 //  LOG(INFO) << "Rehashing... " << size << " : " << entries_;
   vector<Bucket> old_buckets = buckets_;
-  vector<bool> old_filled = filled_;
+  vector<uint8_t> old_filled = filled_;
 
   buckets_.resize(size);
   filled_.resize(size);
@@ -120,6 +121,7 @@ void HashMap<K, V>::rehash(int size) {
     }
   }
 
+  end_->pos = size_;
 }
 
 template <class K, class V>

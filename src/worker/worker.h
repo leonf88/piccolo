@@ -33,7 +33,7 @@ public:
     tinfo.sf = (void*)sf;
     tinfo.num_threads = config.num_workers();
     tinfo.table_id = tables.size();
-    tinfo.rpc = new RPCHelper(&worker_comm_);
+    tinfo.rpc = new RPCHelper(&world_);
     tinfo.owner_thread = config.worker_id();
 
     TypedPartitionedTable<K, V> *t = new TypedPartitionedTable<K, V>(tinfo);
@@ -49,11 +49,13 @@ private:
   static const int32_t kNetworkTimeout = 20;
 
   deque<Table*> pending_writes_;
+  deque<RunKernelRequest> kernel_requests_;
+
+  boost::recursive_mutex kernel_lock_;
 
   boost::thread *kernel_thread_, *network_thread_;
 
   MPI::Intracomm world_;
-  MPI::Intracomm worker_comm_;
 
   int num_peers_;
   bool running;
@@ -72,7 +74,7 @@ private:
   void ComputeUpdates(Peer *p, Table::Iterator *it);
   void SendAndReceive();
 
-  int64_t pending_network_bytes() const;
+  bool pending_network_writes() const;
   int64_t pending_kernel_bytes() const;
 
   Stats stats_;

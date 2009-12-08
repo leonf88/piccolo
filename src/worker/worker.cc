@@ -9,9 +9,6 @@
 
 namespace upc {
 
-static Pool<HashRequest> request_pool_;
-static Pool<HashUpdate> update_pool_;
-
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
   struct Request {
@@ -25,12 +22,11 @@ struct Worker::Peer {
       startTime = Now();
     }
 
-    void Send(MPI::Comm* world) {
-      mpiReq = world->Isend(&payload[0], payload.size(), MPI::BYTE, target, rpc_type);
+    ~Request() {
     }
 
-    double timed_out() {
-      return Now() - startTime > kNetworkTimeout;
+    void Send(MPI::Comm* world) {
+      world->Isend(&payload[0], payload.size(), MPI::BYTE, target, rpc_type);
     }
   };
 
@@ -52,12 +48,9 @@ struct Worker::Peer {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
     for (list<Request*>::iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       Request *r = (*i);
-      if (r->mpiReq.Test() || r->timed_out()) {
-        if (r->timed_out()) {
-          r->mpiReq.Cancel();
-          LOG(INFO) << "Time out sending " << r->rpc_type << " to " << r->target;
-        }
-        delete r;
+      if (r->mpiReq.Test()) {
+        LOG(INFO) << "Request of size " << r->payload.size() << " finished.";
+        //delete r;
         i = outgoingRequests.erase(i);
       }
     }
@@ -65,9 +58,9 @@ struct Worker::Peer {
 
   void ReceiveIncomingData(RPCHelper *rpc) {
     do {
-      HashUpdate *req = update_pool_.get();
+      HashUpdate *req = new HashUpdate;
       if (!rpc->TryRead(id, MTYPE_KERNEL_DATA, req)) {
-        update_pool_.free(req);
+        delete req; 
         break;
       }
 
@@ -76,11 +69,12 @@ struct Worker::Peer {
     } while(1);
 
     do {
-      HashRequest *req = request_pool_.get();
+      HashRequest *req = new HashRequest;
       if (!rpc->TryRead(id, MTYPE_GET_REQUEST, req)) {
-        request_pool_.free(req);
+        delete req;
         break;
       }
+
       VLOG(1) << "Read get request....";
       incomingRequests.push_back(req);
     } while(1);
@@ -96,13 +90,20 @@ struct Worker::Peer {
     return t;
   }
 
-  Request* create_data_request(int rpc_type, RPCMessage* ureq) {
+  bool write_pending() const {
+    return !outgoingRequests.empty();
+  }
+
+  Request* send_data_request(int rpc_type, RPCMessage* ureq, MPI::Comm* world) {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
     ureq->AppendToString(&r->payload);
+    ureq->ParseFromString(r->payload);
+    r->Send(world);
+
     outgoingRequests.push_back(r);
     return r;
   }
@@ -126,7 +127,7 @@ Worker::Worker(const ConfigData &c) {
   num_peers_ = config.num_workers();
   peers.resize(num_peers_);
   for (int i = 0; i < num_peers_; ++i) {
-    peers[i] = new Peer(i);
+    peers[i] = new Peer(i + 1);
   }
 
   running = true;
@@ -135,16 +136,15 @@ Worker::Worker(const ConfigData &c) {
 
   // Obtain a communicator that only includes workers.  This allows us to specify shards
   // conveniently (shard 0 == worker_comm.rank0), and express barriers on only workers.
-  worker_comm_ = world_.Split(WORKER_COLOR, world_.Get_rank());
+  // worker_comm_ = world_.Split(WORKER_COLOR, world_.Get_rank());
 
   kernel_thread_ = network_thread_ = NULL;
 }
 
 void Worker::Run() {
   kernel_thread_ = new boost::thread(boost::bind(&Worker::KernelLoop, this));
-//  network_thread_ = new boost::thread(boost::bind(&Worker::NetworkLoop, this));
-//  network_thread_->join();
 
+  MPI_Buffer_attach(new char[64000000], 64000000);
   NetworkLoop();
   kernel_thread_->join();
 }
@@ -175,7 +175,9 @@ void Worker::NetworkLoop() {
     }
 
     if (work.empty()) {
-      Sleep(0.1);
+      if (pending_network_writes() == 0) {
+        Sleep(0.1);
+      }
       continue;
     }
 
@@ -198,32 +200,28 @@ void Worker::NetworkLoop() {
 
 void Worker::KernelLoop() {
   MPI::Intracomm world = MPI::COMM_WORLD;
-  RunKernelRequest kernelRequest;
   RPCHelper rpc(&world);
 	while (running) {
-	  MPI::Status probe_result;
-
-	  if (!world_.Iprobe(config.master_id(), MPI_ANY_TAG, probe_result)) {
-	    Sleep(0.001);
+	  if (kernel_requests_.empty()) {
+	    Sleep(0.01);
 	    continue;
 	  }
 
-	  if (probe_result.Get_tag() == MTYPE_WORKER_SHUTDOWN) {
-	    VLOG(1) << "Shutting down worker " << config.worker_id();
-	    running = false;
-	    return;
+
+	  RunKernelRequest k;
+	  {
+	    boost::recursive_mutex::scoped_lock l(kernel_lock_);
+	    k = kernel_requests_.front();
+	    kernel_requests_.pop_front();
 	  }
 
-	  ProtoWrapper wrapper(kernelRequest);
-		rpc.Read(MPI_ANY_SOURCE, MTYPE_RUN_KERNEL, &wrapper);
-
-		VLOG(1) << "Received run request for kernel id: " << kernelRequest.kernel_id();
-		KernelFunction f = KernelRegistry::get_kernel(kernelRequest.kernel_id());
+		VLOG(1) << "Received run request for kernel id: " << k.kernel_id();
+		KernelFunction f = KernelRegistry::get_kernel(k.kernel_id());
 		f();
-		VLOG(1) << "Waiting for network to finish: " << pending_network_bytes() + pending_kernel_bytes();
+		VLOG(1) << "Waiting for network to finish: " << pending_network_writes() << " : " << pending_kernel_bytes();
 
-	  while (pending_kernel_bytes() + pending_network_bytes() > 0) {
-	    Sleep(0.001);
+	  while (pending_kernel_bytes() > 0 || pending_network_writes()) {
+	    Sleep(0.01);
 	  }
 
     // Send a message to master indicating that we've completed our kernel
@@ -236,12 +234,13 @@ void Worker::KernelLoop() {
 	}
 }
 
-int64_t Worker::pending_network_bytes() const {
-  int64_t t = 0;
+bool Worker::pending_network_writes() const {
   for (int i = 0; i < peers.size(); ++i) {
-    t += peers[i]->write_bytes_pending();
+    if (peers[i]->write_pending()) {
+      return true;
+    }
   }
-  return t;
+  return false;
 }
 
 int64_t Worker::pending_kernel_bytes() const {
@@ -263,11 +262,9 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   int bytesUsed = 0;
   int count = 0;
-  for (; !it->done(); it->Next()) {
+  for (; !it->done() && bytesUsed < 100000; it->Next()) {
     const string& k = it->key_str();
     const string& v = it->value_str();
-
-//    LOG(INFO) << " k " << k.len << " v " << v.len;
 
     r->add_put(make_pair(k, v));
     ++count;
@@ -277,17 +274,15 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
 
-  Peer::Request *mpiReq = p->create_data_request(MTYPE_KERNEL_DATA, r);
+  p->send_data_request(MTYPE_KERNEL_DATA, r, &world_);
 
   stats_.set_put_out(stats_.put_out() + 1);
   stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
-
-  mpiReq->Send(&worker_comm_);
   ++count;
 }
 
 void Worker::SendAndReceive() {
-  RPCHelper rpc(&worker_comm_);
+  RPCHelper rpc(&world_);
 
   HashUpdate scratch;
 
@@ -302,7 +297,7 @@ void Worker::SendAndReceive() {
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
       tables[r->table_id()]->ApplyUpdates(*r);
-      update_pool_.free(r);
+      delete r;
     }
 
     while (!p->incomingRequests.empty()) {
@@ -316,10 +311,31 @@ void Worker::SendAndReceive() {
       scratch.set_source(config.worker_id());
       scratch.set_table_id(r->table_id());
       scratch.add_put(std::make_pair(r->key(), v));
-      p->create_data_request(MTYPE_GET_RESPONSE, &scratch)->Send(&worker_comm_);
-      request_pool_.free(r);
+      p->send_data_request(MTYPE_GET_RESPONSE, &scratch, &world_);
+      delete r;
     }
   }
+
+  {
+    EmptyMessage msg;
+    ProtoWrapper wrapper(msg);
+
+    if (rpc.TryRead(config.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
+      VLOG(1) << "Shutting down worker " << config.worker_id();
+      running = false;
+      return;
+    }
+  }
+
+  {
+    RunKernelRequest k;
+    ProtoWrapper wrapper(k);
+    if (rpc.TryRead(config.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
+      boost::recursive_mutex::scoped_lock sl(kernel_lock_);
+      kernel_requests_.push_back(k);
+    }
+  }
+
 }
 
 } // end namespace

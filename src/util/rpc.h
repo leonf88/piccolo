@@ -40,7 +40,7 @@ public:
   typedef google::protobuf::Message Message;
 
   RPCHelper(MPI::Comm *mpi) :
-    mpiWorld(mpi) {
+    mpi_world_(mpi), my_rank_(mpi->Get_rank()) {
   }
 
   // Try to read a message from the given peer and rpc channel.
@@ -49,11 +49,16 @@ public:
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
   void Send(int peerId, int rpcId, const RPCMessage &msg);
 
+  void SendData(int peer_id, int rpc_id, const string& data);
+
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
   void Broadcast(int rpcId, const RPCMessage &msg);
 private:
-  MPI::Comm *mpiWorld;
+  boost::recursive_mutex mpi_lock_;
+
+  MPI::Comm *mpi_world_;
+  int my_rank_;
 };
 }
 

@@ -30,22 +30,11 @@ int32_t HashRequest::ByteSize() { return key_.size() + sizeof(table_id_); }
 void HashRequest::AppendToCoder(Encoder *e) const {
   e->write(table_id_);
   e->write(key_);
-
-//  LOG(INFO) << table_id_ << " : " << key_.size() << e->data()->size();
-
-  Decoder d(*e->data());
-  string key2;
-  int tid;
-  d.read(&tid);
-  d.read(&key2);
-//  LOG(INFO) << tid << " : " << key2.size();
 }
 
 void HashRequest::ParseFromCoder(Decoder *d) {
   d->read(&table_id_);
   d->read(&key_);
-
-//  LOG(INFO) << table_id_ << " : " << key_;
 }
 
 SETGET(HashUpdate, source);
@@ -60,7 +49,7 @@ void HashUpdate::Clear() {
 }
 
 int32_t HashUpdate::ByteSize() {
-  int32_t b;
+  int32_t b = 0;
   for (int i = 0; i < put_.size(); ++i) { b += put_[i].first.size() + put_[i].second.size(); }
   for (int i = 0; i < remove_.size(); ++i) { b += remove_[i].size(); }
   b += sizeof(table_id_);
@@ -71,13 +60,13 @@ int32_t HashUpdate::ByteSize() {
 void HashUpdate::AppendToCoder(Encoder *e) const {
   e->write(source_);
   e->write(table_id_);
-  e->write((int32_t)put_.size());
+  e->write((uint32_t)put_.size());
   for (int i = 0; i < put_.size(); ++i) {
     e->write(put_[i].first);
     e->write(put_[i].second);
   }
 
-  e->write((int32_t)remove_.size());
+  e->write((uint32_t)remove_.size());
   for (int i = 0; i < remove_.size(); ++i) {
     e->write(remove_[i]);
   }
@@ -86,7 +75,7 @@ void HashUpdate::AppendToCoder(Encoder *e) const {
 void HashUpdate::ParseFromCoder(Decoder *d) {
   d->read(&source_);
   d->read(&table_id_);
-  int put_size, remove_size;
+  uint32_t put_size, remove_size;
   d->read(&put_size);
   put_.resize(put_size);
   for (int i = 0; i < put_.size(); ++i) {

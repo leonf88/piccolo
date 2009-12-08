@@ -6,8 +6,6 @@ Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
   rpc_ = new RPCHelper(&world_);
-
-  world_.Split(MASTER_COLOR, world_.Get_rank());
 }
 
 Master::~Master() {

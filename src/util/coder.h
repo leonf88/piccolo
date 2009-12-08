@@ -7,7 +7,7 @@ namespace upc {
 class Encoder {
 public:
   Encoder(string *s) : out_(s) {}
-  void write(const int32_t & v);
+  void write(const uint32_t & v);
   void write(const float & v);
   void write(const double & v);
   void write(const string& v);
@@ -20,11 +20,11 @@ private:
 };
 
 struct Decoder {
-  StringPiece data_;
+  const string& data_;
   const char* pos;
-  Decoder(StringPiece data) : data_(data), pos(data_.data) {}
+  Decoder(const string& data) : data_(data), pos(&data_[0]) {}
 
-  void read(int32_t *v);
+  void read(uint32_t *v);
   void read(float *v);
   void read(double *v);
   void read(string *v);
