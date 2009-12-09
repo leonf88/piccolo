@@ -43,8 +43,11 @@ public:
     mpi_world_(mpi), my_rank_(mpi->Get_rank()) {
   }
 
-  // Try to read a message from the given peer and rpc channel.
+  // Try to read a message from the given peer and rpc channel; return false if no
+  // message is immediately available.
   bool TryRead(int peerId, int rpcId, RPCMessage *msg);
+  bool HasData(int peerId, int rpcId);
+
   int Read(int peerId, int rpcId, RPCMessage *msg);
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
   void Send(int peerId, int rpcId, const RPCMessage &msg);

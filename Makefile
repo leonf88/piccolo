@@ -43,8 +43,7 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
-all: bin/test-shortest-path bin/mpi-test 
-#bin/test-tables bin/test-shortest-path-upc bin/test-pr bin/pr-upc 
+all: bin/test-shortest-path bin/mpi-test bin/test-tables bin/test-shortest-path-upc bin/test-pr bin/pr-upc 
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 

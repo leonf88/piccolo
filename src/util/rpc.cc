@@ -17,6 +17,13 @@ void ProtoWrapper::ParseFromCoder(Decoder *d) {
 #define rpc_log(msg, src, target, rpc)\
   VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
+bool RPCHelper::HasData(int peerId, int rpcId) {
+  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
+
+  rpc_log("IProbe", my_rank_, peerId, rpcId);
+  return mpi_world_->Iprobe(peerId, rpcId);
+}
+
 bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
   boost::recursive_mutex::scoped_lock sl(mpi_lock_);
   bool success = false;

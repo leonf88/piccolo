@@ -46,7 +46,7 @@ struct Worker::Peer {
     for (list<Request*>::iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       Request *r = (*i);
       if (r->mpi_req.Test()) {
-        LOG(INFO) << "Request of size " << r->payload.size() << " finished.";
+        VLOG(2) << "Request of size " << r->payload.size() << " finished.";
         delete r;
         i = outgoingRequests.erase(i);
       }
@@ -54,27 +54,18 @@ struct Worker::Peer {
   }
 
   void ReceiveIncomingData(RPCHelper *rpc) {
-    do {
+    while (rpc->HasData(id, MTYPE_KERNEL_DATA)) {
       HashUpdate *req = new HashUpdate;
-      if (!rpc->TryRead(id, MTYPE_KERNEL_DATA, req)) {
-        delete req; 
-        break;
-      }
-
-      VLOG(1) << "Read put request....";
+      rpc->Read(id, MTYPE_KERNEL_DATA, req);
       incomingData.push_back(req);
-    } while(1);
+    }
 
-    do {
+    while (rpc->HasData(id, MTYPE_GET_REQUEST)) {
       HashRequest *req = new HashRequest;
-      if (!rpc->TryRead(id, MTYPE_GET_REQUEST, req)) {
-        delete req;
-        break;
-      }
-
+      rpc->Read(id, MTYPE_GET_REQUEST, req);
       VLOG(1) << "Read get request....";
       incomingRequests.push_back(req);
-    } while(1);
+    }
   }
 
   int64_t write_bytes_pending() const {
