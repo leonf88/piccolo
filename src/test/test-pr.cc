@@ -5,11 +5,16 @@
 
 #include "test/test.pb.h"
 
-#define PROP 0.8
-#define TOTALRANK 10.0
-#define BLK 1
+#include <algorithm>
 
-static int NUM_NODES = 100;
+using std::swap;
+
+#define PROP 0.8
+#define BLK 1
+static double TOTALRANK = 0;
+
+DEFINE_int32(num_nodes, 100, "");
+
 static int NUM_WORKERS = 2;
 
 using namespace upc;
@@ -23,19 +28,20 @@ void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/nodes.rec-%05d-of-%05d", i, shards), "w");
+    out[i] = new RecordFile(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
+  PathNode n;
   for (int i = 0; i < nodes; i++) {
-    PathNode n;
+    n.Clear();
     n.set_id(i);
 /*
     for (int j = 0; j < density; j++) {
       n.add_target(random() % nodes);
     }
 		*/
-		for (int j = 0; j < nodes; j++) {
-			n.add_target(j);
+		for (int j = 0; j < density; j++) {
+			n.add_target(i + j % nodes);
 		}
 
     out[BlkModSharding(i,shards)]->write(n);
@@ -48,44 +54,55 @@ void BuildGraph(int shards, int nodes, int density) {
 }
 
 void Initialize() {
-  for (int i = 0; i < NUM_NODES; i++) {
-		curr_pr_hash->put(i,TOTALRANK/NUM_NODES);
+  for (int i = 0; i < FLAGS_num_nodes; i++) {
+		curr_pr_hash->put(i, (1-PROP)*(TOTALRANK/FLAGS_num_nodes));
   }
 }
 
+static int iter = 0;
+
+void WriteStatus() {
+  LOG(INFO) << "iter: " << iter;
+
+  fprintf(stderr, "PR:: ");
+  for (int i = 0; i < 20; ++i) {
+    fprintf(stderr, "%.2f ", curr_pr_hash->get(i));
+  }
+  fprintf(stderr, "\n");
+}
 
 void PageRankIter() {
 	int my_thread = curr_pr_hash->get_typed_iterator()->owner()->info().owner_thread;
-	LOG(INFO) << "PageRankIter " << my_thread << " iter ??";
+  ++iter;
 
-	LOG(INFO) << "Iter pr[0] " << curr_pr_hash->get(0);
-
-	RecordFile r(StringPrintf("testdata/nodes.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
+	RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
   PathNode n;
 	while (r.read(&n)) {
-   for (int i = 0; i < n.target_size(); ++i) {
-     next_pr_hash->put(n.target(i), PROP*curr_pr_hash->get(n.id())/n.target_size());
+	  double v = curr_pr_hash->get(n.id());
+//	  LOG(INFO) << n.id();
+    for (int i = 0; i < n.target_size(); ++i) {
+//      LOG(INFO) << "Adding: " << PROP * v / n.target_size() << " to " << n.target(i);
+      next_pr_hash->put(n.target(i), PROP*v/n.target_size());
     }
 	}
 }
 
 void ClearTable() {
-	TypedTable<int, double>* tmp;
+  // Move the values computed from the last iteration into the current table, and reset
+  // the values local to our node to the random restart value.
 
-	curr_pr_hash->clear();
-	tmp = curr_pr_hash;
-	curr_pr_hash = next_pr_hash;
-	next_pr_hash = tmp;
-
+	swap(curr_pr_hash, next_pr_hash);
+	next_pr_hash->clear();
 	TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator();
 	while (!it->done()) {
-		curr_pr_hash->put(it->key(), (1-PROP)*(TOTALRANK/NUM_NODES));
+//	  LOG(INFO) << "Setting: " << it->key() << " :: " << (1-PROP)*(TOTALRANK/FLAGS_num_nodes);
+		next_pr_hash->put(it->key(), (1-PROP)*(TOTALRANK/FLAGS_num_nodes));
 		it->Next();
 	}
-
 }
 
 REGISTER_KERNEL(Initialize);
+REGISTER_KERNEL(WriteStatus);
 REGISTER_KERNEL(PageRankIter);
 REGISTER_KERNEL(ClearTable);
 
@@ -96,17 +113,18 @@ int main(int argc, char **argv) {
 	ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
 	NUM_WORKERS = conf.num_workers();
+	TOTALRANK = FLAGS_num_nodes;
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-
 		if (argc > 1) { 
-			BuildGraph(NUM_WORKERS, NUM_NODES, 4); //only create new graph when there's extra argument
+			BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); //only create new graph when there's extra argument
 		}
     Master m(conf);
 		m.run_one(&Initialize);
-		for (int i = 0; i < 10; i++) { 
+		for (int i = 0; i < 50; i++) {
 			m.run_all(&PageRankIter);
 			m.run_all(&ClearTable);
+			m.run_one(&WriteStatus);
 		}
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);

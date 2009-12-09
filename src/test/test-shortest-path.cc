@@ -15,7 +15,7 @@ void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/graph.rec-%05d-of-%05d", i, shards), "w");
+    out[i] = new RecordFile(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
   fprintf(stderr, "Building graph: ");
@@ -51,7 +51,7 @@ static vector<PathNode> local_nodes;
 void Propagate() {
   if (local_nodes.empty()) {
     int my_thread = distance->info().owner_thread;
-    RecordFile r(StringPrintf("testdata/graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
+    RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
     PathNode n;
     while (r.read(&n)) {
       local_nodes.push_back(n);
