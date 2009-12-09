@@ -175,7 +175,7 @@ void Init(int argc, char** argv) {
   FLAGS_logtostderr = true;
   FLAGS_logbuflevel = -1;
 
-  MPI::Init_thread(argc, argv, MPI::THREAD_MULTIPLE);
+  MPI::Init_thread(argc, argv, MPI::THREAD_SINGLE);
 
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);

@@ -2,18 +2,18 @@
 
 VPATH := src/
 
-#MPI_INC := -I/usr/lib/openmpi/include/
-#MPI_LINK := mpic++.openmpi
-#MPI_LIBDIR := -L/usr/local/lib
-#MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
+MPI_INC := -I/usr/lib/openmpi/include/
+MPI_LINK := mpic++.openmpi
+MPI_LIBDIR := -L/usr/local/lib
+MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 
-MPI_LINK := /home/power/local/mpich2/bin/mpic++ -mpe=mpicheck
-MPI_INC := -I/home/power/local/mpich2/include
-MPI_LIBDIR := -L/home/power/local/mpich2/lib
-MPI_LIBS := -lmpichcxx -lmpich
+#MPI_LINK := /home/power/local/mpich2/bin/mpic++ -mpe=mpicheck
+#MPI_INC := -I/home/power/local/mpich2/include
+#MPI_LIBDIR := -L/home/power/local/mpich2/lib
+#MPI_LIBS := -lmpichcxx -lmpich
 
 CDEBUG := -ggdb2
-COPT := 
+COPT :=  -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)

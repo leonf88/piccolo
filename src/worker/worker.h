@@ -56,9 +56,11 @@ private:
   boost::thread *kernel_thread_, *network_thread_;
 
   MPI::Intracomm world_;
+  RPCHelper *rpc_;
 
   int num_peers_;
-  bool running;
+  bool running_;
+  bool kernel_done_;
 
   ConfigData config;
 
@@ -70,9 +72,8 @@ private:
 
   // Network operations.
   void ProcessUpdates(Peer *p);
-  void GetIncomingUpdates();
   void ComputeUpdates(Peer *p, Table::Iterator *it);
-  void SendAndReceive();
+  void Poll();
 
   bool pending_network_writes() const;
   int64_t pending_kernel_bytes() const;

@@ -94,12 +94,10 @@ void RPCHelper::Send(int peerId, int rpcId, const RPCMessage &msg) {
   rpc_log("SendDone", my_rank_, peerId, rpcId);
 }
 
-void RPCHelper::SendData(int peerId, int rpcId, const string& msg) {
+MPI::Request RPCHelper::SendData(int peerId, int rpcId, const string& msg) {
   boost::recursive_mutex::scoped_lock sl(mpi_lock_);
-  rpc_log("SendStart", my_rank_, peerId, rpcId);
-
-  mpi_world_->Send(&msg[0], msg.size(), MPI::BYTE, peerId, rpcId);
-  rpc_log("SendDone", my_rank_, peerId, rpcId);
+  rpc_log("SendData", my_rank_, peerId, rpcId);
+  return mpi_world_->Isend(&msg[0], msg.size(), MPI::BYTE, peerId, rpcId);
 }
 
 

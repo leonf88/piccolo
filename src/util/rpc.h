@@ -49,7 +49,7 @@ public:
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
   void Send(int peerId, int rpcId, const RPCMessage &msg);
 
-  void SendData(int peer_id, int rpc_id, const string& data);
+  MPI::Request SendData(int peer_id, int rpc_id, const string& data);
 
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.

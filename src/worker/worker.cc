@@ -8,6 +8,7 @@
 #include <google/profiler.h>
 
 namespace upc {
+static const int kMaxNetworkChunk = 1 << 20;
 
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
@@ -15,7 +16,7 @@ struct Worker::Peer {
     int target;
     int rpc_type;
     string payload;
-    MPI::Request mpiReq;
+    MPI::Request mpi_req;
     double startTime;
 
     Request() {
@@ -23,10 +24,6 @@ struct Worker::Peer {
     }
 
     ~Request() {
-    }
-
-    void Send(MPI::Comm* world) {
-      world->Isend(&payload[0], payload.size(), MPI::BYTE, target, rpc_type);
     }
   };
 
@@ -48,9 +45,9 @@ struct Worker::Peer {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
     for (list<Request*>::iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
       Request *r = (*i);
-      if (r->mpiReq.Test()) {
+      if (r->mpi_req.Test()) {
         LOG(INFO) << "Request of size " << r->payload.size() << " finished.";
-        //delete r;
+        delete r;
         i = outgoingRequests.erase(i);
       }
     }
@@ -94,7 +91,7 @@ struct Worker::Peer {
     return !outgoingRequests.empty();
   }
 
-  Request* send_data_request(int rpc_type, RPCMessage* ureq, MPI::Comm* world) {
+  Request* send_data_request(int rpc_type, RPCMessage* ureq, RPCHelper *rpc) {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
     Request* r = new Request();
@@ -102,7 +99,8 @@ struct Worker::Peer {
     r->rpc_type = rpc_type;
     ureq->AppendToString(&r->payload);
     ureq->ParseFromString(r->payload);
-    r->Send(world);
+
+    r->mpi_req = rpc->SendData(r->target, r->rpc_type, r->payload);
 
     outgoingRequests.push_back(r);
     return r;
@@ -130,15 +128,17 @@ Worker::Worker(const ConfigData &c) {
     peers[i] = new Peer(i + 1);
   }
 
-  running = true;
+  running_ = true;
 
   world_ = MPI::COMM_WORLD;
+  rpc_ = new RPCHelper(&world_);
 
   // Obtain a communicator that only includes workers.  This allows us to specify shards
   // conveniently (shard 0 == worker_comm.rank0), and express barriers on only workers.
   // worker_comm_ = world_.Split(WORKER_COLOR, world_.Get_rank());
 
   kernel_thread_ = network_thread_ = NULL;
+  kernel_done_ = false;
 }
 
 void Worker::Run() {
@@ -150,7 +150,7 @@ void Worker::Run() {
 }
 
 Worker::~Worker() {
-  running = false;
+  running_ = false;
   delete kernel_thread_;
   delete network_thread_;
 
@@ -163,12 +163,12 @@ Worker::~Worker() {
 
 void Worker::NetworkLoop() {
   deque<Table*> work;
-  while (running) {
+  while (running_) {
     PERIODIC(10, {
         VLOG(1) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.";
     });
 
-    SendAndReceive();
+    Poll();
 
     for (int i = 0; i < tables.size(); ++i) {
       tables[i]->GetPendingUpdates(&work);
@@ -190,7 +190,7 @@ void Worker::NetworkLoop() {
     Table::Iterator *i = old->get_iterator();
     while (!i->done()) {
       ComputeUpdates(p, i);
-      SendAndReceive();
+      Poll();
     }
 
     delete i;
@@ -200,8 +200,8 @@ void Worker::NetworkLoop() {
 
 void Worker::KernelLoop() {
   MPI::Intracomm world = MPI::COMM_WORLD;
-  RPCHelper rpc(&world);
-	while (running) {
+
+	while (running_) {
 	  if (kernel_requests_.empty()) {
 	    Sleep(0.01);
 	    continue;
@@ -224,10 +224,7 @@ void Worker::KernelLoop() {
 	    Sleep(0.01);
 	  }
 
-    // Send a message to master indicating that we've completed our kernel
-     // and we are done transmitting.
-	  EmptyMessage m;
-	  rpc.Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(m));
+	  kernel_done_ = true;
 
 	  VLOG(1) << "Kernel done.";
     ProfilerFlush();
@@ -262,7 +259,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   int bytesUsed = 0;
   int count = 0;
-  for (; !it->done() && bytesUsed < 100000; it->Next()) {
+  for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
     const string& k = it->key_str();
     const string& v = it->value_str();
 
@@ -274,22 +271,20 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
 
-  p->send_data_request(MTYPE_KERNEL_DATA, r, &world_);
+  p->send_data_request(MTYPE_KERNEL_DATA, r, rpc_);
 
   stats_.set_put_out(stats_.put_out() + 1);
   stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
   ++count;
 }
 
-void Worker::SendAndReceive() {
-  RPCHelper rpc(&world_);
-
+void Worker::Poll() {
   HashUpdate scratch;
 
   for (int i = 0; i < peers.size(); ++i) {
     Peer *p = peers[i];
     p->CollectPendingSends();
-    p->ReceiveIncomingData(&rpc);
+    p->ReceiveIncomingData(rpc_);
 
     while (!p->incomingData.empty()) {
       HashUpdate *r = p->pop_data();
@@ -311,7 +306,7 @@ void Worker::SendAndReceive() {
       scratch.set_source(config.worker_id());
       scratch.set_table_id(r->table_id());
       scratch.add_put(std::make_pair(r->key(), v));
-      p->send_data_request(MTYPE_GET_RESPONSE, &scratch, &world_);
+      p->send_data_request(MTYPE_GET_RESPONSE, &scratch, rpc_);
       delete r;
     }
   }
@@ -320,9 +315,9 @@ void Worker::SendAndReceive() {
     EmptyMessage msg;
     ProtoWrapper wrapper(msg);
 
-    if (rpc.TryRead(config.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
+    if (rpc_->TryRead(config.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
       VLOG(1) << "Shutting down worker " << config.worker_id();
-      running = false;
+      running_ = false;
       return;
     }
   }
@@ -330,10 +325,19 @@ void Worker::SendAndReceive() {
   {
     RunKernelRequest k;
     ProtoWrapper wrapper(k);
-    if (rpc.TryRead(config.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
+    if (rpc_->TryRead(config.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
       boost::recursive_mutex::scoped_lock sl(kernel_lock_);
       kernel_requests_.push_back(k);
     }
+  }
+
+  if (kernel_done_) {
+    // Send a message to master indicating that we've completed our kernel
+    // and we are done transmitting.
+    EmptyMessage m;
+    rpc_->Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(m));
+
+    kernel_done_ = false;
   }
 
 }
