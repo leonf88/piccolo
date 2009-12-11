@@ -1,0 +1,10 @@
+package upc;
+
+message FileParam {
+  required bytes key = 1;
+  required bytes value = 2;
+}
+
+message FileParams {
+  repeated FileParam param = 1;
+}
