@@ -4,21 +4,19 @@ namespace upc {
 // Hand defined serialization for hash request/update messages.  Painful, but
 // necessary as the protocol buffer serialization is too slow to be usable.
 
-#define CTYPE(klass, id) typeof(klass::id ## _)
+#define SETGET(klass, id, type)\
+  const type& klass:: id () const { return id ## _; }\
+  void klass::set_ ## id(const type& v) { id ## _ = v; }
 
-#define SETGET(klass, id)\
-  const CTYPE(klass, id)& klass:: id () const { return id ## _; }\
-  void klass::set_ ## id(const CTYPE(klass, id)& v) { id ## _ = v; }
-
-#define SETGET_LIST(klass, id)\
-  SETGET(klass, id)\
-  const typeof(klass::id ## _[0]) klass:: id(int idx) const { return id ## _[idx]; }\
+#define SETGET_LIST(klass, id, type)\
+  SETGET(klass, id, vector<type>)\
+  const type& klass:: id(int idx) const { return id ## _[idx]; }\
   int klass::id ## _size() const { return id ## _.size(); }\
-  void klass::add_ ## id(const typeof(klass::id ##_[0]) &e) { id ## _.push_back(e); }\
-  CTYPE(klass, id)*  klass::mutable_ ## id() { return &id ##_; }
+  void klass::add_ ## id(const type &e) { id ## _.push_back(e); }\
+  vector<type>*  klass::mutable_ ## id() { return &id ##_; }
 
-SETGET(HashRequest, table_id);
-SETGET(HashRequest, key);
+SETGET(HashRequest, table_id, uint32_t);
+SETGET(HashRequest, key, string);
 
 void HashRequest::Clear() {
   table_id_ = 0;
@@ -37,10 +35,10 @@ void HashRequest::ParseFromCoder(Decoder *d) {
   d->read(&key_);
 }
 
-SETGET(HashUpdate, source);
-SETGET(HashUpdate, table_id);
-SETGET_LIST(HashUpdate, put);
-SETGET_LIST(HashUpdate, remove);
+SETGET(HashUpdate, source, uint32_t);
+SETGET(HashUpdate, table_id, uint32_t);
+SETGET_LIST(HashUpdate, put, HashUpdate::KVPair);
+SETGET_LIST(HashUpdate, remove, string);
 
 void HashUpdate::Clear() {
   remove_.clear();

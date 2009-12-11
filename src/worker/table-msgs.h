@@ -7,16 +7,16 @@ namespace upc {
 // Hand defined serialization for hash request/update messages.  Painful, but
 // necessary as the protocol buffer serialization is too slow to be usable.
 
-#define SETGET(id)\
-  const typeof(id ## _)& id () const;\
-  void set_ ## id(const typeof(id ## _)& v);
+#define SETGET(id, type)\
+  const type& id () const;\
+  void set_ ## id(const type& v);
 
-#define SETGET_LIST(id)\
-  SETGET(id)\
-  const typeof(id ## _[0]) id(int idx) const;\
+#define SETGET_LIST(id, type)\
+  SETGET(id, vector<type>)\
+  const type& id(int idx) const;\
   int id ## _size() const;\
-  void add_ ## id(const typeof(id ##_[0]) &e);\
-  typeof(id ## _)*  mutable_ ## id();
+  void add_ ## id(const type &e);\
+  vector< type >* mutable_ ## id();
 
 struct HashRequest : public RPCMessage {
 private:
@@ -25,8 +25,8 @@ private:
 
 public:
   HashRequest() { Clear(); }
-  SETGET(table_id);
-  SETGET(key);
+  SETGET(table_id, uint32_t);
+  SETGET(key, string);
 
   void Clear();
   int32_t ByteSize();
@@ -40,15 +40,18 @@ private:
   uint32_t source_;
   uint32_t table_id_;
 
-  vector<pair<string, string> > put_;
+  // Typedef to allow the macros to work properly :p
+  typedef pair<string, string> KVPair;
+
+  vector<KVPair> put_;
   vector<string> remove_;
 public:
   HashUpdate() { Clear(); }
 
-  SETGET(source);
-  SETGET(table_id);
-  SETGET_LIST(put);
-  SETGET_LIST(remove);
+  SETGET(source, uint32_t);
+  SETGET(table_id, uint32_t);
+  SETGET_LIST(put, KVPair);
+  SETGET_LIST(remove, string);
 
   void Clear();
   int32_t ByteSize();

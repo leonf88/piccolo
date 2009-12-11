@@ -107,7 +107,6 @@ REGISTER_KERNEL(PageRankIter);
 REGISTER_KERNEL(ClearTable);
 
 int main(int argc, char **argv) {
-
 	Init(argc, argv);
 
 	ConfigData conf;

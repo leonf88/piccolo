@@ -13,7 +13,7 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 #MPI_LIBS := -lmpichcxx -lmpich
 
 CDEBUG := -ggdb2
-COPT :=  -O3
+COPT :=  
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
@@ -43,7 +43,7 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
-all: bin/test-shortest-path bin/mpi-test bin/test-tables bin/test-shortest-path-upc bin/test-pr bin/pr-upc 
+all: bin/test-shortest-path bin/mpi-test bin/test-tables bin/test-shortest-path-upc bin/test-pr bin/test-pr-upc 
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -74,7 +74,7 @@ bin/test-tables: bin/libworker.a bin/libcommon.a bin/librpc.a src/test/test-tabl
 bin/test-shortest-path-upc: bin/libtest.a bin/libcommon.a src/test/test-shortest-path.upc	 
 	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS) 
 
-bin/pr-upc: bin/libcommon.a bin/libtest.a src/test/pagerank.upc
+bin/test-pr-upc: bin/libcommon.a bin/libtest.a src/test/test-pr.upc
 	$(UPCC) -T $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
 
 bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 

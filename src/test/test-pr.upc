@@ -7,7 +7,7 @@
 2. the entire pagerank array must be ble to fit in the memory of a single node
 */
 
-#define N 100
+#define N 10000
 #define BLK 1
 #define NBRS 10 //completely bogus, fixed number of neighbors per node
 #define ITERN 10
@@ -24,15 +24,14 @@ shared [BLK] double pr[N/BLK][BLK];
 
 GraphEntry entries[N/THREADS];
 
-void
-load_graph() {
+void load_graph() {
 
 	char srcfile[1000];
   int current_entry = 0;
   struct RFile *r;
   GraphEntry *e;
 
-	sprintf(srcfile, "testdata/nodes.rec-%05d-of-%05d", MYTHREAD, THREADS);
+	sprintf(srcfile, "testdata/pr-graph.rec-%05d-of-%05d", MYTHREAD, THREADS);
 
   r = RecordFile_Open(srcfile, "r");
   while ((e = RecordFile_ReadGraphEntry(r))) {
@@ -43,8 +42,7 @@ load_graph() {
   RecordFile_Close(r);
 }
 
-int 
-main(int argc, char **argv) {
+int main(int argc, char **argv) {
 	int i, j, k, iter;
 	double *local_pr;
 	double (*local_tmp_pr)[BLK];
@@ -104,7 +102,13 @@ main(int argc, char **argv) {
 
 		upc_barrier;
 
-		printf("finish %d-th iteration pr[0][0] %.3f\n", iter, pr[0][0]);
+		printf("PR (%d)::", iter);
+		for (int i = 0; i < 20; ++i) {
+		  printf("%.2f ", pr[0][i]);
+		}
+		printf("\n");
+
+
 /*
 		upc_forall(i = 0; i < N; i++; &pr[i][0]) {
 			for (k = 0; k < BLK; k++) 
