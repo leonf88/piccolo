@@ -15,6 +15,12 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 CDEBUG := -ggdb2
 COPT :=  
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
+
+ifneq ($(USE_PROFILER),)
+	PROF_LIBS := -lprofiler -lunwind
+	CPPFLAGS := $(CPPFLAGS) -DCPUPROF=1 
+endif
+
 CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
@@ -27,7 +33,7 @@ LDFLAGS :=
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ -L/usr/local/lib/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
 DYNAMIC_LIBS := -lprotobuf
-STATIC_LIBS := -lglog -lgflags -lprofiler -lunwind -lboost_thread-mt
+STATIC_LIBS := -lglog -lgflags -lboost_thread-mt $(PROF_LIBS)
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r
@@ -85,6 +91,8 @@ bin/mpi-test: src/test/mpi-test.o
 
 clean:
 	find src -name '*.o' -exec rm {} \;
+	find src -name '*.pb.h' -exec rm {} \;
+	find src -name '*.pb.cc' -exec rm {} \;
 	rm -f bin/*
 
 %.pb.cc %.pb.h : %.proto
