@@ -19,7 +19,7 @@ CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFL
 CXXFLAGS := $(CFLAGS)
 
 UPCC := upcc
-UPCFLAGS := $(CPPFLAGS) --network=udp
+UPCFLAGS := $(CPPFLAGS) --network=smp -pthreads -DLOCAL=1
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
 UPC_THREADS := 2
 
@@ -27,7 +27,8 @@ LDFLAGS :=
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ -L/usr/local/lib/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
 DYNAMIC_LIBS := -lprotobuf
-STATIC_LIBS := -lglog -lgflags -lprofiler -lunwind -lboost_thread-mt
+#STATIC_LIBS := -lglog -lgflags -lprofiler -lunwind -lboost_thread-mt
+STATIC_LIBS := -lglog -lgflags -lboost_thread-mt 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r
@@ -84,7 +85,9 @@ bin/mpi-test: src/test/mpi-test.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
-	find src -name '*.o' -exec rm {} \;
+	find src -name '*.o'  -exec rm {} \;
+	find src -name '*.pb.h'  -exec rm {} \;
+	find src -name '*.pb.cc'  -exec rm {} \;
 	rm -f bin/*
 
 %.pb.cc %.pb.h : %.proto

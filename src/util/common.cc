@@ -14,7 +14,7 @@
 #include <sys/time.h>
 
 #include <mpi.h>
-#include <google/profiler.h>
+//#include <google/profiler.h>
 
 DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
@@ -204,7 +204,7 @@ void Init(int argc, char** argv) {
 
   srandom(time(NULL));
   if (FLAGS_cpu_profile) {
-    ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
+    //ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
   }
 
   LOG(INFO) << "Initialization done.";

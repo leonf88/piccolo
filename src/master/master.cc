@@ -65,7 +65,7 @@ void Master::run_range(KernelFunction f, vector<int> nodes) {
       }
     }
 
-    if (!found) { Sleep(0.1); }
+    if (!found) { Sleep(0.0001); }
   }
 
   LOG(INFO) << "All kernels finished.";

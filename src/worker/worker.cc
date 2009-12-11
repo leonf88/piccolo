@@ -5,7 +5,7 @@
 
 #include <boost/bind.hpp>
 #include <signal.h>
-#include <google/profiler.h>
+//#include <google/profiler.h>
 
 namespace upc {
 static const int kMaxNetworkChunk = 1 << 20;
@@ -167,7 +167,7 @@ void Worker::NetworkLoop() {
 
     if (work.empty()) {
       if (pending_network_writes() == 0) {
-        Sleep(0.1);
+        Sleep(0.01);
       }
       continue;
     }
@@ -218,7 +218,7 @@ void Worker::KernelLoop() {
 	  kernel_done_ = true;
 
 	  VLOG(1) << "Kernel done.";
-    ProfilerFlush();
+    //ProfilerFlush();
 	}
 }
 

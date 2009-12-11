@@ -10,10 +10,10 @@
 using std::swap;
 
 #define PROP 0.8
-#define BLK 1
+#define BLK 2
 static double TOTALRANK = 0;
 
-DEFINE_int32(num_nodes, 100, "");
+DEFINE_int32(num_nodes, 64, "");
 
 static int NUM_WORKERS = 2;
 
@@ -28,21 +28,22 @@ void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d", i, shards), "w");
+    out[i] = new RecordFile(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", i, shards, nodes), "w");
   }
 
   PathNode n;
   for (int i = 0; i < nodes; i++) {
     n.Clear();
     n.set_id(i);
-/*
     for (int j = 0; j < density; j++) {
       n.add_target(random() % nodes);
     }
-		*/
-		for (int j = 0; j < density; j++) {
-			n.add_target(i + j % nodes);
+
+		/* build complete graph
+		for (int j = 0; j < FLAGS_num_nodes; j++) {
+			n.add_target(j);
 		}
+		*/
 
     out[BlkModSharding(i,shards)]->write(n);
     LOG_EVERY_N(INFO, 10000) << "Working; created " << i << " nodes.";
@@ -65,7 +66,7 @@ void WriteStatus() {
   LOG(INFO) << "iter: " << iter;
 
   fprintf(stderr, "PR:: ");
-  for (int i = 0; i < 20; ++i) {
+  for (int i = 0; i < 10; ++i) {
     fprintf(stderr, "%.2f ", curr_pr_hash->get(i));
   }
   fprintf(stderr, "\n");
@@ -75,7 +76,7 @@ void PageRankIter() {
 	int my_thread = curr_pr_hash->get_typed_iterator()->owner()->info().owner_thread;
   ++iter;
 
-	RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
+	RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", my_thread, NUM_WORKERS, FLAGS_num_nodes), "r");
   PathNode n;
 	while (r.read(&n)) {
 	  double v = curr_pr_hash->get(n.id());
@@ -115,11 +116,10 @@ int main(int argc, char **argv) {
 	TOTALRANK = FLAGS_num_nodes;
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-		if (argc > 1) { 
-			BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); //only create new graph when there's extra argument
-		}
+		BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); 
     Master m(conf);
 		m.run_one(&Initialize);
+		m.run_one(&WriteStatus);
 		for (int i = 0; i < 50; i++) {
 			m.run_all(&PageRankIter);
 			m.run_all(&ClearTable);
