@@ -5,7 +5,9 @@
 
 #include <boost/bind.hpp>
 #include <signal.h>
-//#include <google/profiler.h>
+#ifdef CPUPROF
+#include <google/profiler.h>
+#endif
 
 namespace upc {
 static const int kMaxNetworkChunk = 1 << 20;
@@ -218,7 +220,13 @@ void Worker::KernelLoop() {
 	  kernel_done_ = true;
 
 	  VLOG(1) << "Kernel done.";
+<<<<<<< HEAD:src/worker/worker.cc
     //ProfilerFlush();
+=======
+#ifdef CPUPROF
+    ProfilerFlush();
+#endif
+>>>>>>> d6a7420e8f1547da1b135bae500d185eac5c8170:src/worker/worker.cc
 	}
 }
 

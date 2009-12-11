@@ -14,11 +14,13 @@
 #include <sys/time.h>
 
 #include <mpi.h>
-//#include <google/profiler.h>
+#ifdef CPUPROF
+#include <google/profiler.h>
+DEFINE_bool(cpu_profile, false, "");
+#endif
 
 DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
-DEFINE_bool(cpu_profile, false, "");
 
 namespace upc {
 
@@ -203,9 +205,11 @@ void Init(int argc, char** argv) {
   sigaction(SIGINT, &sig_action, NULL);
 
   srandom(time(NULL));
+#ifdef CPUPROF
   if (FLAGS_cpu_profile) {
     //ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
   }
+#endif
 
   LOG(INFO) << "Initialization done.";
 }
