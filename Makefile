@@ -18,7 +18,7 @@ CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI
 CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
-UPCC := upcc
+UPCC := /home/power/stuff/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
 UPC_THREADS := 2
