@@ -15,11 +15,17 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 CDEBUG := -ggdb2
 COPT :=  
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
+
+ifneq ($(USE_PROFILER),)
+	PROF_LIBS := -lprofiler -lunwind
+	CPPFLAGS := $(CPPFLAGS) -DCPUPROF=1 
+endif
+
 CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
-UPCC := upcc
-UPCFLAGS := $(CPPFLAGS) --network=smp -pthreads -DLOCAL=1
+UPCC := /home/power/stuff/bupc/bin/upcc
+UPCFLAGS := $(CPPFLAGS) --network=udp
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
 UPC_THREADS := 2
 
@@ -27,8 +33,7 @@ LDFLAGS :=
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ -L/usr/local/lib/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
 DYNAMIC_LIBS := -lprotobuf
-#STATIC_LIBS := -lglog -lgflags -lprofiler -lunwind -lboost_thread-mt
-STATIC_LIBS := -lglog -lgflags -lboost_thread-mt 
+STATIC_LIBS := -lglog -lgflags -lboost_thread-mt $(PROF_LIBS)
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r
@@ -85,9 +90,15 @@ bin/mpi-test: src/test/mpi-test.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
+<<<<<<< HEAD:Makefile
 	find src -name '*.o'  -exec rm {} \;
 	find src -name '*.pb.h'  -exec rm {} \;
 	find src -name '*.pb.cc'  -exec rm {} \;
+=======
+	find src -name '*.o' -exec rm {} \;
+	find src -name '*.pb.h' -exec rm {} \;
+	find src -name '*.pb.cc' -exec rm {} \;
+>>>>>>> d6a7420e8f1547da1b135bae500d185eac5c8170:Makefile
 	rm -f bin/*
 
 %.pb.cc %.pb.h : %.proto
