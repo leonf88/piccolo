@@ -45,7 +45,7 @@ public:
   }
 
   struct iterator {
-    iterator(const vector<Bucket>& b, const vector<uint8_t>& f) : pos(-1), b_(b), f_(f) {
+    iterator(vector<Bucket>& b, const vector<uint8_t>& f) : pos(-1), b_(b), f_(f) {
       ++(*this);
     }
 
@@ -59,10 +59,10 @@ public:
     }
 
     const K& key() { return b_[pos].key; }
-    const V& value() { return b_[pos].value; }
+    V& value() { return b_[pos].value; }
 
     int pos;
-    const vector<Bucket>& b_;
+    vector<Bucket>& b_;
     const vector<uint8_t>& f_;
   };
 

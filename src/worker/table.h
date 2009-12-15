@@ -30,14 +30,16 @@ struct Data {
   static void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
   static void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
 
-#define POD_MARSHAL(T)\
-  static void marshal(const T& t, string* out) { out->assign(reinterpret_cast<const char*>(&t), sizeof(t)); }\
-  static void unmarshal(const StringPiece& s, T *t) { *t = *reinterpret_cast<const T*>(s.data); }\
+  template <class T>
+  static void marshal(const T& t, string* out) {
+    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
+  }
 
-  POD_MARSHAL(int32_t);
-  POD_MARSHAL(int64_t);
-  POD_MARSHAL(double);
-  POD_MARSHAL(float);
+  template <class T>
+  static void unmarshal(const StringPiece& s, T *t) {
+    *t = *reinterpret_cast<const T*>(s.data);
+  }
+
 
   template <class T>
   static string to_string(const T& t) {
@@ -107,7 +109,7 @@ class TypedTable : public Table {
 public:
   struct Iterator : public Table::Iterator {
     virtual const K& key() = 0;
-    virtual const V& value() = 0;
+    virtual V& value() = 0;
   };
 
   TypedTable(const TableInfo& tinfo) : Table(tinfo) {}

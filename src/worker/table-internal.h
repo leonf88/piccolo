@@ -31,16 +31,14 @@ public:
       owner_ = owner;
     }
 
-    string key_str() {
-//      LOG(INFO) << key() << " : " << value();
-      return Data::to_string<K>(key());
-    }
+    string key_str() { return Data::to_string<K>(key()); }
     string value_str() { return Data::to_string<V>(value()); }
+
     bool done() { return  it_ == owner_->data_.end(); }
     void Next() { ++it_; }
 
     const K& key() { return it_.key(); }
-    const V& value() { return it_.value(); }
+    V& value() { return it_.value(); }
 
     Table* owner() { return owner_; }
 
@@ -215,8 +213,8 @@ string TypedPartitionedTable<K, V>::get_local(const StringPiece &k) {
 
   LocalTable<K, V> *h = partitions_[shard];
 
-  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
-          << " : " << Data::from_string<V>(h->get_str(k));
+//  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
+//          << " : " << Data::from_string<V>(h->get_str(k));
 
   return h->get_str(k);
 }
@@ -239,7 +237,7 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
   info().rpc->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
 
   V v = Data::from_string<V>(resp.put(0).second);
-  VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;
+//  VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;
 
   return v;
 }
