@@ -207,7 +207,7 @@ void Init(int argc, char** argv) {
   srandom(time(NULL));
 #ifdef CPUPROF
   if (FLAGS_cpu_profile) {
-    //ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
+    ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
   }
 #endif
 
