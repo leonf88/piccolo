@@ -49,7 +49,12 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
-all: bin/test-shortest-path bin/mpi-test bin/test-tables bin/test-shortest-path-upc bin/test-pr bin/test-pr-upc 
+all: bin/test-shortest-path\
+	 bin/test-shortest-path-upc\
+	 bin/mpi-test bin/test-tables\
+	 bin/test-pr\
+	 bin/test-pr-upc\
+	 bin/k-means 
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -86,19 +91,16 @@ bin/test-pr-upc: bin/libcommon.a bin/libtest.a src/test/test-pr.upc
 bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
+bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/k-means.o 
+	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
+
 bin/mpi-test: src/test/mpi-test.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
-<<<<<<< HEAD:Makefile
-	find src -name '*.o'  -exec rm {} \;
-	find src -name '*.pb.h'  -exec rm {} \;
-	find src -name '*.pb.cc'  -exec rm {} \;
-=======
 	find src -name '*.o' -exec rm {} \;
 	find src -name '*.pb.h' -exec rm {} \;
 	find src -name '*.pb.cc' -exec rm {} \;
->>>>>>> d6a7420e8f1547da1b135bae500d185eac5c8170:Makefile
 	rm -f bin/*
 
 %.pb.cc %.pb.h : %.proto
