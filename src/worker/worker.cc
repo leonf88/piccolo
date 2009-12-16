@@ -220,13 +220,9 @@ void Worker::KernelLoop() {
 	  kernel_done_ = true;
 
 	  VLOG(1) << "Kernel done.";
-<<<<<<< HEAD:src/worker/worker.cc
-    //ProfilerFlush();
-=======
 #ifdef CPUPROF
     ProfilerFlush();
 #endif
->>>>>>> d6a7420e8f1547da1b135bae500d185eac5c8170:src/worker/worker.cc
 	}
 }
 
