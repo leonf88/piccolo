@@ -142,6 +142,7 @@ int main(int argc, char **argv) {
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+  conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
@@ -154,7 +155,6 @@ int main(int argc, char **argv) {
     }
     m.run_one(&print_results);
   } else {
-    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
     dists = w.CreateTable<int, Distribution>(&ModSharding, &dist_merge);
     points = w.CreateTable<int, Point>(&ModSharding, &Accumulator<Point>::replace);
