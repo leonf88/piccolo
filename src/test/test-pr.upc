@@ -61,9 +61,14 @@ Initialize()
 {
 	//only master initializes, matching that in test-pr.cc
 	int i;
+	double scratch[BLK];
+	for (int i = 0; i < BLK; ++i) {
+	  scratch[i] = (1-PROP)*(TOTALRANK/N);
+	};
+
 	if (MYTHREAD == 0) {
-		for (i = 0; i < N; i++) {
-			pr[i/BLK][i%BLK] = (1-PROP)*(TOTALRANK/N);
+		for (i = 0; i < N / BLK; i++) {
+		  upc_memput(pr[i], scratch, BLK * sizeof(double));
 		}
 	}
 }

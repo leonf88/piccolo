@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
   local_copy = malloc(sizeof(int) * BS * THREADS);
 
   entries = (GraphEntry*)malloc(NUM_NODES * sizeof(GraphEntry));
-  sprintf(srcfile, "testdata/graph.rec-%05d-of-%05d", MYTHREAD, THREADS);
+  sprintf(srcfile, "testdata/sp-graph.rec-%05d-of-%05d", MYTHREAD, THREADS);
 
   r = RecordFile_Open(srcfile, "r");;
   while ((e = RecordFile_ReadGraphEntry(r))) {
