@@ -1,6 +1,7 @@
 #include <upc.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <stdio.h>
 
 #include "test/file-helper.h"
 
@@ -10,8 +11,8 @@
 2. the entire pagerank array must be ble to fit in the memory of a single node
 */
 
-#define N 64
-#define BLK 2
+#define N 1000000
+#define BLK 10000
 #define ITERN 50
 #define PROP 0.8
 
@@ -80,6 +81,9 @@ main(int argc, char **argv) {
 	TOTALRANK = N;
 
 	load_graph();
+	if (MYTHREAD == 0) {
+	  fprintf(stderr, "Graph loaded successfully, initializing pagerank matrix.\n");
+	}
 
 	srand(0);
 
@@ -89,7 +93,7 @@ main(int argc, char **argv) {
 	WriteStatus(-1,10);
 
 	if (MYTHREAD == 0) {
-		printf("finish initialization ..pr[0]=%.2f N=%d\n", pr[0][0],N);
+		fprintf(stderr, "Finished initialization ..pr[0]=%.2f N=%d\n", pr[0][0],N);
 	}
 
 	//hopefully, this is legal
@@ -129,5 +133,8 @@ main(int argc, char **argv) {
 		upc_barrier;
 		WriteStatus(iter,10);
 
+		if (MYTHREAD == 0) {
+		  fprintf(stderr, "Finished iteration %d\n", iter);
+		}
 	}
 }

@@ -10,6 +10,7 @@
 
 DEFINE_int32(num_dists, 2, "");
 DEFINE_int32(num_points, 100, "");
+DEFINE_bool(dump_results, false, "");
 
 using namespace upc;
 
@@ -153,7 +154,9 @@ int main(int argc, char **argv) {
       m.run_all(&initialize_maximization);
       m.run_all(&compute_maximization);
     }
-    m.run_one(&print_results);
+    if (FLAGS_dump_results) {
+      m.run_one(&print_results);
+    }
   } else {
     Worker w(conf);
     dists = w.CreateTable<int, Distribution>(&ModSharding, &dist_merge);
