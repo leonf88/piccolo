@@ -10,7 +10,7 @@
 using std::swap;
 
 #define PROP 0.8
-#define BLK 2
+#define BLK 10000
 static double TOTALRANK = 0;
 
 DEFINE_int32(num_nodes, 64, "");
@@ -36,7 +36,7 @@ void BuildGraph(int shards, int nodes, int density) {
     n.Clear();
     n.set_id(i);
     for (int j = 0; j < density; j++) {
-      n.add_target(random() % nodes);
+      n.add_target(1 + i + j);
     }
 
 		/* build complete graph
@@ -119,7 +119,6 @@ int main(int argc, char **argv) {
 		BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); 
     Master m(conf);
 		m.run_one(&Initialize);
-		m.run_one(&WriteStatus);
 		for (int i = 0; i < 50; i++) {
 			m.run_all(&PageRankIter);
 			m.run_all(&ClearTable);
