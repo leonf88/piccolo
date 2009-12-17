@@ -11,11 +11,11 @@ void ProtoWrapper::AppendToCoder(Encoder *e) const {
 
 void ProtoWrapper::ParseFromCoder(Decoder *d) {
   Clear();
-  p_->ParseFromArray(&d->data_[0], d->data_.size());
+  p_->ParseFromArray(&d->data()[0], d->data().size());
 }
 
 #define rpc_log(msg, src, target, rpc)\
-  VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
+//  VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
 
 bool RPCHelper::HasData(int peerId, int rpcId) {
   boost::recursive_mutex::scoped_lock sl(mpi_lock_);

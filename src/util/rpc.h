@@ -16,8 +16,16 @@ public:
   virtual void AppendToCoder(Encoder *e) const = 0;
   virtual void ParseFromCoder(Decoder *d) = 0;
 
-	void ParseFromString(const string &s) { Clear(); Decoder d(s); ParseFromCoder(&d); }
-	void AppendToString(string *s) const { Encoder e(s); AppendToCoder(&e); }
+	void ParseFromString(const string &s) {
+	  Clear();
+	  Decoder d(s);
+	  ParseFromCoder(&d);
+	}
+
+	void AppendToString(string *s) const {
+	  Encoder e(s);
+	  AppendToCoder(&e);
+	}
 
 	virtual void Clear() = 0;
 };

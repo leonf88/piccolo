@@ -47,7 +47,8 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo, int size=10000) : TypedTable<K, V>(tinfo), data_(size) {
+  LocalTable(TableInfo tinfo, int size=10000) :
+    TypedTable<K, V>(tinfo), data_(size) {
   }
 
   bool contains(const K &k) { return data_.contains(k); }
@@ -90,13 +91,9 @@ public:
   void ApplyUpdates(const HashUpdate& req) {
     boost::recursive_mutex::scoped_lock sl(write_lock_);
     for (int i = 0; i < req.put_size(); ++i) {
-      const pair<string, string>&p = req.put(i);
-      this->put_str(p.first, p.second);
-    }
-
-    for (int i = 0; i < req.remove_size(); ++i) {
-      const string& k = req.remove(i);
-      this->remove_str(k);
+      StringPiece k = req.key(i);
+      StringPiece v = req.value(i);
+      this->put_str(k, v);
     }
   }
   mutable boost::recursive_mutex write_lock_;
@@ -111,8 +108,14 @@ private:
 
   vector<LocalTable<K, V>*> partitions_;
   mutable boost::recursive_mutex pending_lock_;
+  volatile int pending_writes_;
 public:
   TypedPartitionedTable(TableInfo tinfo);
+  ~TypedPartitionedTable() {
+    for (int i = 0; i < partitions_.size(); ++i) {
+      delete partitions_[i];
+    }
+  }
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -154,8 +157,10 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.owner_thread = i;
-    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 10000000 : 10000);
+    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 100000 : 10000);
   }
+
+  pending_writes_ = 0;
 }
 
 template <class K, class V>
@@ -177,6 +182,7 @@ bool TypedPartitionedTable<K, V>::GetPendingUpdates(deque<Table*> *out) {
     }
   }
 
+  pending_writes_ = 0;
   return out->size() > 0;
 }
 
@@ -197,11 +203,18 @@ int TypedPartitionedTable<K, V>::pending_write_bytes() {
 
 template <class K, class V>
 void TypedPartitionedTable<K, V>::put(const K &k, const V &v) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
   int shard = this->get_shard(k);
-  LocalTable<K, V> *h = partitions_[shard];
-  h->put(k, v);
+
+  {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+    partitions_[shard]->put(k, v);
+  }
+
+  if (shard != info().owner_thread) {
+    ++pending_writes_;
+  }
+
+  while (pending_writes_ > 100000) { sched_yield(); }
 }
 
 template <class K, class V>
@@ -233,10 +246,13 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
   req.set_key(Data::to_string<K>(k));
   req.set_table_id(info().table_id);
 
+//  info().get_req = &req;
+//  while (!info().get_resp) { sched_yield(); }
+
   info().rpc->Send(shard + 1, MTYPE_GET_REQUEST, req);
   info().rpc->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
 
-  V v = Data::from_string<V>(resp.put(0).second);
+  V v = Data::from_string<V>(resp.value(0));
 //  VLOG(1) << "Got key " << Data::to_string<K>(k) << " : " << v;
 
   return v;

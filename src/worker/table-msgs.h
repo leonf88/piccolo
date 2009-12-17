@@ -40,24 +40,30 @@ private:
   uint32_t source_;
   uint32_t table_id_;
 
-  // Typedef to allow the macros to work properly :p
-  typedef pair<string, string> KVPair;
+  string encoded_pairs_;
 
-  vector<KVPair> put_;
-  vector<string> remove_;
+  Encoder e_;
+
+  vector<pair<uint32_t, uint32_t> > offsets_;
 public:
-  HashUpdate() { Clear(); }
+  HashUpdate();
 
   SETGET(source, uint32_t);
   SETGET(table_id, uint32_t);
-  SETGET_LIST(put, KVPair);
-  SETGET_LIST(remove, string);
 
-  void Clear();
-  int32_t ByteSize();
+  void add_put(const string& k, const string& v);
+  int put_size() const {
+    return offsets_.size();
+  }
+
+  StringPiece key(int idx) const;
+  StringPiece value(int idx) const;
 
   void AppendToCoder(Encoder *e) const;
   void ParseFromCoder(Decoder *d);
+
+  void Clear();
+  int32_t ByteSize();
 };
 
 #undef SETGET_LIST

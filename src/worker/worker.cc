@@ -258,13 +258,11 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
     const string& k = it->key_str();
     const string& v = it->value_str();
 
-    r->add_put(make_pair(k, v));
+    r->add_put(k, v);
     ++count;
-
-    bytesUsed += k.size() + v.size();
   }
 
-  VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
+  VLOG(2) << "Prepped " << count << " taking " << r->ByteSize();
 
   p->send_data_request(MTYPE_KERNEL_DATA, r, rpc_);
 
@@ -295,12 +293,15 @@ void Worker::Poll() {
       stats_.set_get_in(stats_.get_in() + 1);
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
-      VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
-      string v = tables[r->table_id()]->get_local(r->key());
       scratch.Clear();
       scratch.set_source(config.worker_id());
       scratch.set_table_id(r->table_id());
-      scratch.add_put(std::make_pair(r->key(), v));
+
+      VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
+      string v = tables[r->table_id()]->get_local(r->key());
+
+      scratch.add_put(r->key(), v);
+
       p->send_data_request(MTYPE_GET_RESPONSE, &scratch, rpc_);
       delete r;
     }
