@@ -19,10 +19,13 @@ private:
     V value;
   };
 
-  static const double kLoadFactor = 0.5;
+  static const double kLoadFactor = 0.2;
 
 public:
   HashMap(int size);
+  ~HashMap() {
+    delete end_;
+  }
 
   V& operator[](const K& k);
   V& get(const K& k);
@@ -38,7 +41,7 @@ public:
 
   void clear() {
     for (int i = 0; i < buckets_.size(); ++i) {
-      filled_[i] = false;
+      filled_[i] = 0;
     }
 
     entries_ = 0;
@@ -70,7 +73,12 @@ public:
   const iterator& end() { return *end_; }
 
 private:
-  int hash(const K& k) {
+  int hash(K k) {
+    k = (k ^ 61) ^ (k >> 16);
+    k = k + (k << 3);
+    k = k ^ (k >> 4);
+    k = k * 0x27d4eb2d;
+    k = k ^ (k >> 15);
     return k % size_;
   }
 
@@ -161,7 +169,7 @@ void HashMap<K, V>::put(const K& k, const V& v) {
   } while(b != bucket);
 
   if (!filled_[b]) {
-    filled_[b] = true;
+    filled_[b] = 1;
     buckets_[b].key = k;
     buckets_[b].value = v;
     ++entries_;

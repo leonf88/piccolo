@@ -35,85 +35,65 @@ void HashRequest::ParseFromCoder(Decoder *d) {
   d->read(&key_);
 }
 
+HashUpdate::HashUpdate() :e_(&encoded_pairs_) {}
+
 SETGET(HashUpdate, source, uint32_t);
 SETGET(HashUpdate, table_id, uint32_t);
-SETGET_LIST(HashUpdate, put, HashUpdate::KVPair);
-SETGET_LIST(HashUpdate, remove, string);
 
 void HashUpdate::Clear() {
-  remove_.clear();
-  put_.clear();
+  encoded_pairs_.clear();
+  offsets_.clear();
   source_ = table_id_ = 0;
 }
 
 int32_t HashUpdate::ByteSize() {
-  int32_t b = 0;
-  for (int i = 0; i < put_.size(); ++i) { b += put_[i].first.size() + put_[i].second.size(); }
-  for (int i = 0; i < remove_.size(); ++i) { b += remove_[i].size(); }
-  b += sizeof(table_id_);
-  b += sizeof(source_);
-  return b;
+  return 8 + encoded_pairs_.size() + offsets_.size() * 8;
+}
+
+void HashUpdate::add_put(const string& k, const string& v) {
+  offsets_.push_back(make_pair(encoded_pairs_.size(), encoded_pairs_.size() + k.size()));
+
+  e_.write_bytes(k);
+  e_.write_bytes(v);
 }
 
 void HashUpdate::AppendToCoder(Encoder *e) const {
   e->write(source_);
   e->write(table_id_);
-  e->write((uint32_t)put_.size());
-  for (int i = 0; i < put_.size(); ++i) {
-    e->write(put_[i].first);
-    e->write(put_[i].second);
+
+  e->write((uint32_t)offsets_.size());
+  for (int i = 0; i < offsets_.size(); ++i) {
+    e->write(offsets_[i].first);
+    e->write(offsets_[i].second);
   }
 
-  e->write((uint32_t)remove_.size());
-  for (int i = 0; i < remove_.size(); ++i) {
-    e->write(remove_[i]);
-  }
+  e->write(encoded_pairs_);
 }
 
 void HashUpdate::ParseFromCoder(Decoder *d) {
   d->read(&source_);
   d->read(&table_id_);
-  uint32_t put_size, remove_size;
-  d->read(&put_size);
-  put_.resize(put_size);
-  for (int i = 0; i < put_.size(); ++i) {
-    d->read(&put_[i].first);
-    d->read(&put_[i].second);
+
+  int num_offsets = d->read_uint32();
+  offsets_.resize(num_offsets);
+  for (int i = 0; i < num_offsets; ++i) {
+    d->read(&offsets_[i].first);
+    d->read(&offsets_[i].second);
   }
 
-  d->read(&remove_size);
-  remove_.resize(remove_size);
-  for (int i = 0; i < remove_.size(); ++i) {
-    d->read(&remove_[i]);
-  }
+  d->read(&encoded_pairs_);
 }
 
-void test_messages() {
-  HashUpdate h;
-  for (int i = 0; i < 100000; ++i) {
-    pair<string, string> put = make_pair("hahahahah", "hahahahahaha");
-    h.add_put(put);
-  }
+StringPiece HashUpdate::value(int idx) const {
+  int start = offsets_[idx].second;
+  int end = idx == offsets_.size() - 1 ? encoded_pairs_.size() : offsets_[idx + 1].first;
+  return StringPiece(&encoded_pairs_[0] + start, end - start);
+}
 
-  string s;
-  h.AppendToString(&s);
-  h.ParseFromString(s);
-
-  for (int i = 0; i < 100000; ++i) {
-    pair<string, string> put = make_pair("hahahahah", "hahahahahaha");
-    CHECK(h.put(i) == put);
-  }
-
-  HashRequest req, req2;
-  req.set_key("abc");
-  req.set_table_id(0);
-
-  s.clear();
-  req.AppendToString(&s);
-  req2.ParseFromString(s);
-
-  CHECK_EQ(req2.table_id(), 0);
-  CHECK_EQ(req2.key(), "abc");
+StringPiece HashUpdate::key(int idx) const {
+  int start = offsets_[idx].first;
+  int end = offsets_[idx].second;
+  return StringPiece(&encoded_pairs_[0] + start, end - start);
 }
 
 }
