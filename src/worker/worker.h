@@ -33,7 +33,7 @@ public:
     tinfo.sf = (void*)sf;
     tinfo.num_threads = config.num_workers();
     tinfo.table_id = tables.size();
-    tinfo.rpc = new RPCHelper(&world_);
+    tinfo.rpc = rpc_;
     tinfo.owner_thread = config.worker_id();
 
     TypedPartitionedTable<K, V> *t = new TypedPartitionedTable<K, V>(tinfo);
