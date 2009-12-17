@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
 		curr_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
 		next_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
     w.Run(); 
+    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
 }
 
