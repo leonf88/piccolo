@@ -262,7 +262,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
     ++count;
   }
 
-  VLOG(2) << "Prepped " << count << " taking " << r->ByteSize();
+  VLOG(1) << "Prepped " << count << " taking " << r->ByteSize();
 
   p->send_data_request(MTYPE_KERNEL_DATA, r, rpc_);
 
