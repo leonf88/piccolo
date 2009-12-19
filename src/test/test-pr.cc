@@ -31,12 +31,14 @@ void BuildGraph(int shards, int nodes, int density) {
     out[i] = new RecordFile(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", i, shards, nodes), "w");
   }
 
+  fprintf(stderr, "Building graph: ");
   PathNode n;
   for (int i = 0; i < nodes; i++) {
     n.Clear();
     n.set_id(i);
+
     for (int j = 0; j < density; j++) {
-      n.add_target(1 + i + j);
+      n.add_target(random() % nodes);
     }
 
 		/* build complete graph
@@ -46,8 +48,10 @@ void BuildGraph(int shards, int nodes, int density) {
 		*/
 
     out[BlkModSharding(i,shards)]->write(n);
-    LOG_EVERY_N(INFO, 10000) << "Working; created " << i << " nodes.";
+    EVERY_N(nodes / 50, fprintf(stderr, "."));
   }
+
+  fprintf(stderr, " done.\n");
 
   for (int i = 0; i < shards; ++i) {
     delete out[i];
@@ -73,12 +77,21 @@ void WriteStatus() {
 }
 
 void PageRankIter() {
+  static vector<PathNode> nodes;
+
 	int my_thread = curr_pr_hash->get_typed_iterator()->owner()->info().owner_thread;
   ++iter;
 
-	RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", my_thread, NUM_WORKERS, FLAGS_num_nodes), "r");
-  PathNode n;
-	while (r.read(&n)) {
+  if (nodes.empty()) {
+    RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", my_thread, NUM_WORKERS, FLAGS_num_nodes), "r");
+    PathNode n;
+    while (r.read(&n)) {
+      nodes.push_back(n);
+    }
+  }
+
+  for (int i = 0; i < nodes.size(); ++i) {
+    PathNode &n = nodes[i];
 	  double v = curr_pr_hash->get(n.id());
 //	  LOG(INFO) << n.id();
     for (int i = 0; i < n.target_size(); ++i) {
@@ -122,7 +135,7 @@ int main(int argc, char **argv) {
 		for (int i = 0; i < 50; i++) {
 			m.run_all(&PageRankIter);
 			m.run_all(&ClearTable);
-			m.run_one(&WriteStatus);
+//			m.run_one(&WriteStatus);
 		}
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
