@@ -9,8 +9,24 @@
 #define HASHMAP_H_
 
 #include "util/common.h"
+#include "util/hash.h"
 
 namespace upc {
+
+template <class K>
+static int simple_hash(K k) {
+  k = (k ^ 61) ^ (k >> 16);
+  k = k + (k << 3);
+  k = k ^ (k >> 4);
+  k = k * 0x27d4eb2d;
+  return k ^ (k >> 15);
+}
+
+template<>
+int simple_hash(string s) {
+  return SuperFastHash(s.data(), s.size());
+}
+
 template <class K, class V>
 class HashMap {
 private:
@@ -19,7 +35,7 @@ private:
     V value;
   };
 
-  static const double kLoadFactor = 0.2;
+  static const double kLoadFactor = 0.4;
 
 public:
   HashMap(int size);
@@ -30,7 +46,7 @@ public:
   V& operator[](const K& k);
   V& get(const K& k);
   bool contains(const K& k);
-  void put(const K& k, const V& v);
+  V& put(const K& k, const V& v);
 
   void rehash(int size);
 
@@ -40,7 +56,7 @@ public:
   void remove(const K& k) {}
 
   void clear() {
-    for (int i = 0; i < buckets_.size(); ++i) {
+    for (int i = 0; i < filled_.size(); ++i) {
       filled_[i] = 0;
     }
 
@@ -69,27 +85,38 @@ public:
     const vector<uint8_t>& f_;
   };
 
-  iterator begin() { return iterator(buckets_, filled_); }
+  iterator begin() {
+    return iterator(buckets_, filled_);
+  }
+
   const iterator& end() { return *end_; }
 
 private:
+  // The STL default hash for integers gives us terrible performance:
+  // it trivially assigns hash(k) = k.
   int hash(K k) {
-    k = (k ^ 61) ^ (k >> 16);
-    k = k + (k << 3);
-    k = k ^ (k >> 4);
-    k = k * 0x27d4eb2d;
-    k = k ^ (k >> 15);
-    return k % size_;
+    return simple_hash<K>(k) % size_;
   }
 
-  Bucket* bucket_for_key(const K& k) { 
-    int bucket = hash(k);
-    int b = bucket;
+  Bucket* bucket_for_key(const K& k) {
+    static int misses = 0;
+    int start = hash(k);
+    int b = start;
+
+    //LOG_EVERY_N(INFO, 1000000) << "Misses: " << double(100 * misses) / LOG_OCCURRENCES;
+
     do {
-      if (!filled_[b]) { return NULL; }
-      if (buckets_[b].key == k) { return &buckets_[b]; }
-      b = (b == size_ - 1) ? 0 : b + 1;
-    } while(b != bucket);
+      if (!filled_[b]) {
+        return NULL;
+      }
+
+      if (buckets_[b].key == k) {
+        return &buckets_[b];
+      }
+
+      ++misses;
+      b = (b + 1) % size_;
+    } while(b != start);
 
     return NULL;
   }
@@ -97,7 +124,6 @@ private:
   vector<Bucket> buckets_;
   vector<uint8_t> filled_;
 
-  std::tr1::hash<K> hasher_;
   int entries_;
   int size_;
 
@@ -138,8 +164,7 @@ V& HashMap<K, V>::operator[](const K& k) {
     return get(k);
   }
 
-  put(k, V());
-  return get(k);
+  return put(k, V());
 }
 
 template <class K, class V>
@@ -158,28 +183,31 @@ V& HashMap<K, V>::get(const K& k) {
 }
 
 template <class K, class V>
-void HashMap<K, V>::put(const K& k, const V& v) {
-  int bucket = hash(k);
-  int b = bucket;
+V& HashMap<K, V>::put(const K& k, const V& v) {
+  int start = hash(k);
+  int b = start;
+
   do {
     if (!filled_[b] || buckets_[b].key == k) {
       break;
     }
-    b = (b == size_ - 1) ? 0 : b + 1;
-  } while(b != bucket);
+    b = (b + 1) % size_;
+  } while(b != start);
 
   if (!filled_[b]) {
+    if (entries_ > size_ * kLoadFactor) {
+      rehash(size_ * 3);
+    }
+
     filled_[b] = 1;
     buckets_[b].key = k;
     buckets_[b].value = v;
     ++entries_;
-
-    if (entries_ > size_ * kLoadFactor) {
-      rehash(size_ * 2);
-    }
   } else {
     buckets_[b].value = v;
   }
+
+  return buckets_[b].value;
 }
 
 }
