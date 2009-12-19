@@ -16,6 +16,10 @@ public:
   // Append to 'out' the list of accumulators that have pending network data.  Return
   // true if any updates were appended.
   virtual bool GetPendingUpdates(deque<Table*> *out) = 0;
+
+  // Give this table back to the partitioned table for use.
+  virtual void Free(Table* t) = 0;
+
   virtual void ApplyUpdates(const upc::HashUpdate& req) = 0;
   virtual int pending_write_bytes() = 0;
 };
@@ -31,8 +35,8 @@ public:
       owner_ = owner;
     }
 
-    string key_str() { return Data::to_string<K>(key()); }
-    string value_str() { return Data::to_string<V>(value()); }
+    void key_str(string *out) { Data::marshal<K>(key(), out); }
+    void value_str(string *out) { Data::marshal<V>(value(), out); }
 
     bool done() { return  it_ == owner_->data_.end(); }
     void Next() { ++it_; }
@@ -47,7 +51,7 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo, int size=10000) :
+  LocalTable(TableInfo tinfo, int size=100000) :
     TypedTable<K, V>(tinfo), data_(size) {
   }
 
@@ -64,12 +68,10 @@ public:
   }
 
   V get(const K &k) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
     return data_[k];
   }
 
   void put(const K &k, const V &v) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
     if (data_.contains(k)) {
       V &cur_v = data_.get(k);
       data_.put(k, this->accumulate(cur_v, v));
@@ -79,24 +81,22 @@ public:
   }
 
   void remove(const K &k) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
 //    data_.erase(data_.find(k));
   }
 
   void clear() {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
     data_.clear();
   }
 
   void ApplyUpdates(const HashUpdate& req) {
-    boost::recursive_mutex::scoped_lock sl(write_lock_);
     for (int i = 0; i < req.put_size(); ++i) {
       StringPiece k = req.key(i);
       StringPiece v = req.value(i);
       this->put_str(k, v);
     }
   }
-  mutable boost::recursive_mutex write_lock_;
+
+  mutable boost::recursive_mutex write_lock;
 private:
   DataMap data_;
 };
@@ -109,8 +109,11 @@ private:
   vector<LocalTable<K, V>*> partitions_;
   mutable boost::recursive_mutex pending_lock_;
   volatile int pending_writes_;
+
+  vector<LocalTable<K, V>*> table_pool_;
 public:
   TypedPartitionedTable(TableInfo tinfo);
+
   ~TypedPartitionedTable() {
     for (int i = 0; i < partitions_.size(); ++i) {
       delete partitions_[i];
@@ -141,6 +144,7 @@ public:
   bool GetPendingUpdates(deque<Table*> *out);
   void ApplyUpdates(const upc::HashUpdate& req);
   int pending_write_bytes();
+  void Free(Table *t);
 
   Table::Iterator* get_iterator();
   typename TypedTable<K, V>::Iterator* get_typed_iterator();
@@ -157,7 +161,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.owner_thread = i;
-    partitions_[i] = new LocalTable<K, V>(linfo, info().owner_thread == i ? 100000 : 10000);
+    partitions_[i] = new LocalTable<K, V>(linfo);
   }
 
   pending_writes_ = 0;
@@ -165,6 +169,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
 
 template <class K, class V>
 void TypedPartitionedTable<K, V>::ApplyUpdates(const upc::HashUpdate& req) {
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[info().owner_thread]->ApplyUpdates(req);
 }
 
@@ -177,7 +182,15 @@ bool TypedPartitionedTable<K, V>::GetPendingUpdates(deque<Table*> *out) {
     if (i != info().owner_thread && !a->empty()) {
       TableInfo linfo = info();
       linfo.owner_thread = i;
-      partitions_[i] = new LocalTable<K, V>(linfo);
+
+      if (table_pool_.empty()) {
+        partitions_[i] = new LocalTable<K, V>(linfo);
+      } else {
+        partitions_[i] = table_pool_.back();
+        partitions_[i]->set_info(linfo);
+        table_pool_.pop_back();
+      }
+
       out->push_back(a);
     }
   }
@@ -185,6 +198,24 @@ bool TypedPartitionedTable<K, V>::GetPendingUpdates(deque<Table*> *out) {
   pending_writes_ = 0;
   return out->size() > 0;
 }
+
+template <class K, class V>
+void TypedPartitionedTable<K, V>::Free(Table *used) {
+  delete used;
+  return;
+
+  if (table_pool_.size() > partitions_.size() * 10) {
+    delete used;
+    return;
+  }
+
+  LocalTable<K, V>* t = static_cast<LocalTable<K, V>* >(used);
+  t->clear();
+
+  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+  table_pool_.push_back(t);
+}
+
 
 template <class K, class V>
 int TypedPartitionedTable<K, V>::pending_write_bytes() {
@@ -214,7 +245,7 @@ void TypedPartitionedTable<K, V>::put(const K &k, const V &v) {
     ++pending_writes_;
   }
 
-  while (pending_writes_ > 100000) { sched_yield(); }
+  while (pending_writes_ > 1000000) { sched_yield(); }
 }
 
 template <class K, class V>

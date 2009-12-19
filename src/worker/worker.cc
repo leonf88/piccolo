@@ -163,8 +163,10 @@ void Worker::NetworkLoop() {
 
     Poll();
 
-    for (int i = 0; i < tables.size(); ++i) {
-      tables[i]->GetPendingUpdates(&work);
+    if (work.empty()) {
+      for (int i = 0; i < tables.size(); ++i) {
+        tables[i]->GetPendingUpdates(&work);
+      }
     }
 
     if (work.empty()) {
@@ -187,7 +189,8 @@ void Worker::NetworkLoop() {
     }
 
     delete i;
-    delete old;
+
+    tables[old->info().table_id]->Free(old);
   }
 }
 
@@ -254,9 +257,10 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   int bytesUsed = 0;
   int count = 0;
+  string k, v;
   for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
-    const string& k = it->key_str();
-    const string& v = it->value_str();
+    it->key_str(&k);
+    it->value_str(&v);
 
     r->add_put(k, v);
     ++count;
