@@ -35,6 +35,8 @@ void Master::run_range(KernelFunction f, vector<int> nodes) {
   RunKernelRequest msg;
   msg.set_kernel_id(id);
 
+  Timer t;
+
   for (int i = 0; i < nodes.size(); ++i) {
     rpc_->Send(nodes[i], MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
@@ -60,7 +62,7 @@ void Master::run_range(KernelFunction f, vector<int> nodes) {
 
         nodes.erase(nodes.begin() + j);
         found = true;
-        LOG(INFO) << "Kernels finished: " << waiting;
+//        LOG(INFO) << "Kernels finished: " << waiting;
         break;
       }
     }
@@ -68,7 +70,7 @@ void Master::run_range(KernelFunction f, vector<int> nodes) {
     if (!found) { Sleep(0.0001); }
   }
 
-  LOG(INFO) << "All kernels finished.";
+  LOG(INFO) << "Kernels finished in " << t.elapsed();
 }
 
 }
