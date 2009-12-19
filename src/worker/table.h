@@ -78,8 +78,8 @@ public:
 class Table {
 public:
   struct Iterator {
-    virtual string key_str() = 0;
-    virtual string value_str() = 0;
+    virtual void key_str(string *out) = 0;
+    virtual void value_str(string *out) = 0;
     virtual bool done() = 0;
     virtual void Next() = 0;
 
@@ -99,7 +99,14 @@ public:
 
   // Returns a view on the global table containing only local values.
   virtual Iterator* get_iterator() = 0;
-  const TableInfo& info() { return info_; }
+
+  const TableInfo& info() {
+    return info_;
+  }
+
+  void set_info(const TableInfo& t) {
+    info_ = t;
+  }
 
   TableInfo info_;
 };
