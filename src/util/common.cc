@@ -89,6 +89,14 @@ string Histogram::summary() {
   return out;
 }
 
+void Timer::Reset() {
+  start_time_ = Now();
+}
+
+double Timer::elapsed() const {
+  return Now() - start_time_;
+}
+
 static double processorFrequency() {
   static double freq = 0;
   if (freq == 0) {

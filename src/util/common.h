@@ -70,15 +70,32 @@ template <class T>
 class Pool {
 public:
   Pool(int capacity=100) : c_(capacity) {
-    for (int i = 0; i < c_; ++i) { entries_.push_back(new T); }
+    for (int i = 0; i < c_; ++i) {
+      entries_.push_back(new T);
+    }
   }
 
   ~Pool() {
-    for (int i = 0; i < c_; ++i) { delete entries_[i]; }
+    for (int i = 0; i < c_; ++i) {
+      delete entries_[i];
+    }
   }
 
-  T* get() { T* t = entries_.back(); entries_.pop_back(); t->Clear(); return t; }
-  void free(T* t) { entries_.push_back(t); }
+  T* get() {
+    T* t;
+    if (!entries_.empty()) {
+      t = entries_.back();
+      entries_.pop_back();
+    } else {
+      t = new T;
+    }
+
+    return t;
+  }
+
+  void free(T* t) {
+    entries_.push_back(t);
+  }
 
 private:
   int c_;
@@ -119,6 +136,20 @@ public:
   void unlock() volatile;
 private:
   volatile int d;
+};
+
+
+class Timer {
+public:
+  Timer() {
+    Reset();
+  }
+
+  void Reset();
+  double elapsed() const;
+
+private:
+  double start_time_;
 };
 
 #define EVERY_N(interval, operation)\
