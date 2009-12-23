@@ -122,6 +122,7 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
 extern string StringPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
 extern string VStringPrintf(const char* fmt, va_list args);
 
+extern uint64_t rdtsc(void);
 extern double Now();
 extern void Sleep(double t);
 
@@ -147,9 +148,11 @@ public:
 
   void Reset();
   double elapsed() const;
+  uint64_t cycles_elapsed() const;
 
 private:
   double start_time_;
+  uint64_t start_cycle_;
 };
 
 #define EVERY_N(interval, operation)\

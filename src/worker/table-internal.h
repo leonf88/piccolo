@@ -51,7 +51,7 @@ public:
     LocalTable<K, V> *owner_;
   };
 
-  LocalTable(TableInfo tinfo, int size=100000) :
+  LocalTable(TableInfo tinfo, int size=10000) :
     TypedTable<K, V>(tinfo), data_(size) {
   }
 
@@ -72,12 +72,7 @@ public:
   }
 
   void put(const K &k, const V &v) {
-    if (data_.contains(k)) {
-      V &cur_v = data_.get(k);
-      data_.put(k, this->accumulate(cur_v, v));
-    } else {
-      data_.put(k, v);
-    }
+    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.af));
   }
 
   void remove(const K &k) {

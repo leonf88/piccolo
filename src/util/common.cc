@@ -33,8 +33,7 @@ StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
 uint32_t StringPiece::hash() const { return Hash32(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
 
-
-static uint64_t rdtsc(void) {
+uint64_t rdtsc(void) {
     uint32_t hi, lo;
     __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
     return (((uint64_t)hi)<<32) | ((uint64_t)lo);
@@ -91,10 +90,15 @@ string Histogram::summary() {
 
 void Timer::Reset() {
   start_time_ = Now();
+  start_cycle_ = rdtsc();
 }
 
 double Timer::elapsed() const {
   return Now() - start_time_;
+}
+
+uint64_t Timer::cycles_elapsed() const {
+  return rdtsc() - start_cycle_;
 }
 
 static double processorFrequency() {

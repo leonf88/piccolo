@@ -11,6 +11,8 @@
 #include "util/common.h"
 #include "util/hash.h"
 
+#include <boost/dynamic_bitset.hpp>
+
 namespace upc {
 
 template <class K>
@@ -29,13 +31,54 @@ int simple_hash(string s) {
 
 template <class K, class V>
 class HashMap {
+public:
+  struct iterator;
+  typedef V (*AccumFunction)(const V& v1, const V& v2);
+
 private:
   struct Bucket {
+    bool in_use;
+
     K key;
     V value;
   };
 
-  static const double kLoadFactor = 0.4;
+  static const double kLoadFactor = 0.3;
+  typedef boost::dynamic_bitset<uint64_t> BitSet;
+
+  int bucket_idx(K k) {
+    return simple_hash<K>(k) & (size_ - 1);
+  }
+
+  Bucket* bucket_for_key(const K& k) {
+    //Timer timer;
+//    static int misses = 0;
+    int b = bucket_idx(k);
+
+//    LOG_EVERY_N(INFO, 1000000) << "calls: " << LOG_OCCURRENCES << "; misses: " << double(100 * misses) / LOG_OCCURRENCES;
+
+    while(1) {
+      if (buckets_[b].in_use) {
+        if (buckets_[b].key == k) {
+          return &buckets_[b];
+        }
+      } else {
+        return NULL;
+      }
+
+//      ++misses;
+      b = (b + 1) & (size_ - 1);
+    }
+
+
+    return NULL;
+  }
+
+  vector<Bucket> buckets_;
+
+  int entries_;
+  int size_;
+  iterator *end_;
 
 public:
   HashMap(int size);
@@ -44,9 +87,12 @@ public:
   }
 
   V& operator[](const K& k);
-  V& get(const K& k);
   bool contains(const K& k);
+
+  V& get(const K& k);
   V& put(const K& k, const V& v);
+
+  void accumulate(const K& k, const V& v, AccumFunction f);
 
   void rehash(int size);
 
@@ -56,101 +102,75 @@ public:
   void remove(const K& k) {}
 
   void clear() {
-    for (int i = 0; i < filled_.size(); ++i) {
-      filled_[i] = 0;
+    for (int i = 0; i < buckets_.size(); ++i) {
+      buckets_[i].in_use = 0;
     }
 
     entries_ = 0;
   }
 
-  struct iterator {
-    iterator(vector<Bucket>& b, const vector<uint8_t>& f) : pos(-1), b_(b), f_(f) {
-      ++(*this);
-    }
-
-    bool operator==(const iterator &o) { return o.pos == pos; }
-
-    iterator& operator++() {
-      do {
-        ++pos;
-      } while (pos < b_.size() && !f_[pos]);
-      return *this;
-    }
-
-    const K& key() { return b_[pos].key; }
-    V& value() { return b_[pos].value; }
-
-    int pos;
-    vector<Bucket>& b_;
-    const vector<uint8_t>& f_;
-  };
-
   iterator begin() {
-    return iterator(buckets_, filled_);
+    return iterator(buckets_);
   }
 
   const iterator& end() { return *end_; }
 
-private:
-  // The STL default hash for integers gives us terrible performance:
-  // it trivially assigns hash(k) = k.
-  int hash(K k) {
-    return simple_hash<K>(k) % size_;
-  }
+  struct iterator {
+     iterator(vector<Bucket>& b) : pos(-1), b_(b) {
+       ++(*this);
+     }
 
-  Bucket* bucket_for_key(const K& k) {
-    static int misses = 0;
-    int start = hash(k);
-    int b = start;
+     bool operator==(const iterator &o) { return o.pos == pos; }
 
-    //LOG_EVERY_N(INFO, 1000000) << "Misses: " << double(100 * misses) / LOG_OCCURRENCES;
+     iterator& operator++() {
+       do {
+         ++pos;
+       } while (pos < b_.size() && !b_[pos].in_use);
+       return *this;
+     }
 
-    do {
-      if (!filled_[b]) {
-        return NULL;
-      }
+     const K& key() { return b_[pos].key; }
+     V& value() { return b_[pos].value; }
 
-      if (buckets_[b].key == k) {
-        return &buckets_[b];
-      }
+     int pos;
+     vector<Bucket>& b_;
+  };
 
-      ++misses;
-      b = (b + 1) % size_;
-    } while(b != start);
-
-    return NULL;
-  }
-
-  vector<Bucket> buckets_;
-  vector<uint8_t> filled_;
-
-  int entries_;
-  int size_;
-
-  iterator *end_;
 };
 
 template <class K, class V>
-HashMap<K, V>::HashMap(int size) : buckets_(size), filled_(size), entries_(0), size_(size) {
+HashMap<K, V>::HashMap(int size) : buckets_(0), entries_(0), size_(0) {
   clear();
 
-  end_ = new iterator(buckets_, filled_);
+  end_ = new iterator(buckets_);
   end_->pos = size_;
+
+  rehash(size);
+}
+
+static int log2(int s) {
+  int l = 0;
+  while (s >>= 1) { ++l; }
+  return l;
 }
 
 template <class K, class V>
 void HashMap<K, V>::rehash(int size) {
-//  LOG(INFO) << "Rehashing... " << size << " : " << entries_;
+  if (size == 1 << log2(size)) {
+    size = 1 << log2(size);
+  } else {
+    size = 1 << (log2(size) + 1);
+  }
+
+  //LOG(INFO) << "Rehashing... " << size << " : " << entries_;
   vector<Bucket> old_buckets = buckets_;
-  vector<uint8_t> old_filled = filled_;
 
   buckets_.resize(size);
-  filled_.resize(size);
   size_ = size;
   clear();
 
   for (int i = 0; i < old_buckets.size(); ++i) {
-    if (old_filled[i]) {
+    if (old_buckets[i].in_use) {
       put(old_buckets[i].key, old_buckets[i].value);
     }
   }
@@ -165,6 +185,16 @@ V& HashMap<K, V>::operator[](const K& k) {
   }
 
   return put(k, V());
+}
+
+template <class K, class V>
+void HashMap<K, V>::accumulate(const K& k, const V& v, AccumFunction f) {
+  Bucket *b = bucket_for_key(k);
+  if (b) {
+    b->value = f(b->value, v);
+  } else {
+    put(k, v);
+  }
 }
 
 template <class K, class V>
@@ -184,22 +214,22 @@ V& HashMap<K, V>::get(const K& k) {
 
 template <class K, class V>
 V& HashMap<K, V>::put(const K& k, const V& v) {
-  int start = hash(k);
+  int start = bucket_idx(k);
   int b = start;
 
   do {
-    if (!filled_[b] || buckets_[b].key == k) {
+    if (!buckets_[b].in_use || buckets_[b].key == k) {
       break;
     }
     b = (b + 1) % size_;
   } while(b != start);
 
-  if (!filled_[b]) {
+  if (!buckets_[b].in_use) {
     if (entries_ > size_ * kLoadFactor) {
-      rehash(size_ * 3);
+      rehash((int)size_ / kLoadFactor);
     }
 
-    filled_[b] = 1;
+    buckets_[b].in_use = 1;
     buckets_[b].key = k;
     buckets_[b].value = v;
     ++entries_;
