@@ -13,23 +13,28 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 #MPI_LIBS := -lmpichcxx -lmpich
 
 CDEBUG := -ggdb2
-COPT :=  -O3
+COPT := -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
-USE_PROFILER := 0
+USE_GOOGLE_PROFILER :=
+USE_OPROFILE := 
 
-ifneq ($(USE_PROFILER),)
+ifneq ($(USE_GOOGLE_PROFILER),)
 	PROF_LIBS := -lprofiler -lunwind
 	CPPFLAGS := $(CPPFLAGS) -DCPUPROF=1 
 endif
 
-CFLAGS := $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
+ifneq ($(USE_OPROFILE),)
+	CFLAGS := $(CFLAGS) -fno-omit-frame-pointer
+endif
+
+CFLAGS := $(CFLAGS) $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
 UPCC := /home/power/stuff/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp -O
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
-UPC_THREADS := 5
+UPC_THREADS := 10
 
 LDFLAGS := 
 LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ -L/usr/local/lib/ $(MPI_LIBDIR) $(UPC_LIBDIR)
