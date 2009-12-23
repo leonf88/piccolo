@@ -40,15 +40,9 @@ void BuildGraph(int shards, int nodes, int density) {
     for (int j = 0; j < density; j++) {
       n.add_target(random() % nodes);
     }
-
-		/* build complete graph
-		for (int j = 0; j < FLAGS_num_nodes; j++) {
-			n.add_target(j);
-		}
-		*/
-
+    
     out[BlkModSharding(i,shards)]->write(n);
-    EVERY_N(nodes / 50, fprintf(stderr, "."));
+    EVERY_N((nodes / 50), fprintf(stderr, "."));
   }
 
   fprintf(stderr, " done.\n");
@@ -132,7 +126,7 @@ int main(int argc, char **argv) {
 		BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); 
     Master m(conf);
 		m.run_one(&Initialize);
-		for (int i = 0; i < 50; i++) {
+		for (int i = 0; i < 10; i++) {
 			m.run_all(&PageRankIter);
 			m.run_all(&ClearTable);
 //			m.run_one(&WriteStatus);
