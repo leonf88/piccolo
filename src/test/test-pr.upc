@@ -13,7 +13,7 @@
 
 #define N 1000000
 #define BLK 10000
-#define ITERN 50
+#define ITERN 10
 #define PROP 0.8
 
 #define EIDX(p) ((p/(BLK*THREADS))*BLK + (p % BLK))
