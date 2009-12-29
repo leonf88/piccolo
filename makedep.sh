@@ -1,9 +1,11 @@
 #!/bin/bash
 
-for f in `find src -name '*.cc'`; do 
-  gcc $CPPFLAGS -MM -MG -MT ${f/.cc/.o} $f
+mkdir -p .deps
+for f in `find src -name '*.cc'` `find src -name '*.c'`; do
+  if [[ .deps/$f -ot $f ]]; then
+    mkdir -p .deps/`dirname $f`
+    gcc $CPPFLAGS -MM -MG -MD -MT ${f/.cc/.o} $f -o .deps/$f
+  fi
 done
 
-for f in `find src -name '*.c'`; do 
-  gcc $CPPFLAGS -MM -MG -MT ${f/.c/.o} $f
-done
+ find .deps/ -type f | xargs cat > Makefile.dep
