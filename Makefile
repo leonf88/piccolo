@@ -37,14 +37,14 @@ UPC_LIBDIR := -L/home/power/local/upc/opt/lib
 UPC_THREADS := 10
 
 LDFLAGS := 
-LDDIRS := -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ -L/usr/local/lib/ $(MPI_LIBDIR) $(UPC_LIBDIR)
+LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
 DYNAMIC_LIBS := -lprotobuf
 STATIC_LIBS := -lglog -lgflags -lboost_thread-mt $(PROF_LIBS)
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
-LINK_LIB := ld -r
-LINK_BIN := $(MPI_LINK) 
+LINK_LIB := ld -r $(LDFLAGS)
+LINK_BIN := $(MPI_LINK)  $(LDFLAGS)
 
 
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/coder.o
@@ -55,7 +55,6 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
-
 all: bin/test-shortest-path\
 	 bin/test-shortest-path-upc\
 	 bin/mpi-test bin/test-tables\
@@ -65,11 +64,10 @@ all: bin/test-shortest-path\
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
-depend:
-	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
+depend: Makefile.dep
 
 Makefile.dep: $(ALL_SOURCES)
-	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh > Makefile.dep
+	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh
 
 bin/libcommon.a : $(LIBCOMMON_OBJS)
 	$(LINK_LIB) $^ -o $@
