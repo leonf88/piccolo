@@ -11,7 +11,8 @@
 2. the entire pagerank array must be ble to fit in the memory of a single node
 */
 
-#define N 1000000
+#define N 10000000
+#define TMP_BLK 1000000
 #define BLK 10000
 #define ITERN 10
 #define PROP 0.8
@@ -19,7 +20,7 @@
 #define EIDX(p) ((p/(BLK*THREADS))*BLK + (p % BLK))
 
 int TOTALRANK=0;
-shared [N] double tmp_pr[THREADS][N/BLK][BLK];
+shared [TMP_BLK] double tmp_pr[THREADS][N/BLK][BLK];
 shared [BLK] double pr[N/BLK][BLK];
 GraphEntry entries[N/THREADS];
 

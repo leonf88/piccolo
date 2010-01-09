@@ -1,9 +1,12 @@
-#include "worker/kernel.h"
 #include <stdio.h>
+
+#include "worker/registry.h"
+#include "worker/table.h"
 
 namespace upc {
 
 static map<int, KernelFunction> *kernels = NULL;
+static map<int, TableRegistry::TableCreator*> *tables = new map<int, TableRegistry::TableCreator*>;
 
 map<int, KernelFunction>* KernelRegistry::get_mapping() {
   if (kernels == NULL) {
@@ -28,6 +31,17 @@ KernelRegistry::StaticHelper::StaticHelper(const char* name, KernelFunction kf) 
 //  fprintf(stderr, "Registering... %s\n", name);
   map<int, KernelFunction> &k = *KernelRegistry::get_mapping();
   k[k.size()] = kf;
+}
+
+void TableRegistry::register_table_creator(int id, TableRegistry::TableCreator* t) {
+  (*tables)[id] = t;
+}
+
+static Table* get_table(int id, int shard) {
+  CHECK(tables->find(id) != tables->end());
+  Table *t = (*tables)[id]->create_table();
+  t->info_.shard = shard;
+  return t;
 }
 
 }

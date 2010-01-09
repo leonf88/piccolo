@@ -3,7 +3,7 @@
 
 #include "util/common.h"
 
-#include "worker/table-msgs.h"
+#include "worker/hash-msgs.h"
 #include "worker/worker.pb.h"
 
 #include <algorithm>
@@ -59,8 +59,13 @@ struct Data {
 
 struct TableInfo {
 public:
-  // The thread with ownership over this data.
-  int owner_thread;
+  // The shard this table corresponds to.
+  int shard;
+
+  // If this is a non-local portion of data, the shard this data was created by.
+  int owner_shard;
+
+  int num_shards;
 
   // The table to which this partition belongs.
   int table_id;
@@ -72,7 +77,6 @@ public:
 
   // Used for partitioned tables
   RPCHelper *rpc;
-  int num_threads;
 };
 
 class Table {
@@ -108,7 +112,27 @@ public:
     info_ = t;
   }
 
+  int id() { return info_.table_id; }
+  int shard() { return info_.shard; }
+  int owner_shard() { return info_.owner_shard; }
+
   TableInfo info_;
+
+  // The following functions are only available on partitioned tables:
+
+  // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
+  virtual string get_local(const StringPiece &k) { LOG(FATAL) << "Not implemented."; }
+
+  // Append to 'out' the list of accumulators that have pending network data.  Return
+  // true if any updates were appended.
+  virtual bool GetPendingUpdates(deque<Table*> *out) { LOG(FATAL) << "Not implemented."; }
+
+  // Give this table back to the partitioned table for use.
+  virtual void Free(Table* t) { LOG(FATAL) << "Not implemented."; }
+
+  virtual void ApplyUpdates(const upc::HashUpdate& req) { LOG(FATAL) << "Not implemented."; }
+  virtual int pending_write_bytes() { LOG(FATAL) << "Not implemented."; }
+
 };
 
 template <class K, class V>
@@ -146,7 +170,7 @@ public:
   }
 
   int get_shard(const K& k) {
-    return ((typename TypedTable<K, V>::ShardingFunction)info_.sf)(k, info_.num_threads);
+    return ((typename TypedTable<K, V>::ShardingFunction)info_.sf)(k, info_.num_shards);
   }
 
   V accumulate(const V& a, const V& b) {

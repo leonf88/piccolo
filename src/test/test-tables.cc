@@ -26,7 +26,7 @@ void TestPut() {
 REGISTER_KERNEL(TestPut);
 
 void TestGet() {
-  int num_threads = min_hash->info().num_threads;
+  int num_threads = min_hash->info().num_shards;
   for (int i = 0; i < 100; ++i) {
     CHECK_EQ((int)min_hash->get(i), i);
     CHECK_EQ((int)max_hash->get(i), i);
@@ -39,7 +39,7 @@ REGISTER_KERNEL(TestGet);
 
 void TestGetLocal() {
   TypedTable<int, double>::Iterator *it = min_hash->get_typed_iterator();
-  int num_threads = min_hash->info().num_threads;
+  int num_threads = min_hash->info().num_shards;
 
   while (!it->done()) {
     const int& k = it->key();
@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-    min_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::min);
-    max_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::max);
-    sum_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::sum);
-    replace_hash = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::replace);
-    pair_hash = w.CreateTable<int, Pair>(&ModSharding, &Accumulator<Pair>::replace);
+//    min_hash = TableRegistry::register_table<int, double>(0, &ModSharding, &Accumulator<double>::min);
+//    max_hash = TableRegistry::register_table<int, double>(1, &ModSharding, &Accumulator<double>::max);
+//    sum_hash = TableRegistry::register_table<int, double>(2, &ModSharding, &Accumulator<double>::sum);
+//    replace_hash = TableRegistry::register_table<int, double>(3, &ModSharding, &Accumulator<double>::replace);
+//    pair_hash = TableRegistry::register_table<int, Pair>(4, &ModSharding, &Accumulator<Pair>::replace);
     w.Run();
   }
 

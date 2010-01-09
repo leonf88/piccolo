@@ -1,18 +1,18 @@
-#include "util/common.h"
-
-#include "worker/worker.h"
-#include "worker/kernel.h"
-
 #include <boost/bind.hpp>
 #include <signal.h>
 #ifdef CPUPROF
 #include <google/profiler.h>
 #endif
 
+#include "util/common.h"
+#include "worker/worker.h"
+#include "worker/registry.h"
+
 namespace upc {
 static const int kMaxNetworkChunk = 1 << 20;
 
 struct Worker::Peer {
+
   // An update request containing changes to apply to a remote table.
   struct Request {
     int target;
@@ -25,12 +25,11 @@ struct Worker::Peer {
       startTime = Now();
     }
 
-    ~Request() {
-    }
+    ~Request() {}
   };
 
-  list<Request*> outgoingRequests;
   HashUpdate writeScratch;
+  list<Request*> outgoingRequests;
 
   // Incoming data from this peer that we have read from the network, but has yet to be
   // processed by the kernel.
@@ -70,21 +69,12 @@ struct Worker::Peer {
     }
   }
 
-  int64_t write_bytes_pending() const {
-    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
-    int64_t t = 0;
-    for (list<Request*>::const_iterator i = outgoingRequests.begin(); i != outgoingRequests.end(); ++i) {
-      t += (*i)->payload.size();
-    }
-    return t;
-  }
-
   bool write_pending() const {
     return !outgoingRequests.empty();
   }
 
-  Request* send_data_request(int rpc_type, RPCMessage* ureq, RPCHelper *rpc) {
+  // Send the given message type and data to this peer.
+  Request* Send(int rpc_type, RPCMessage* ureq, RPCHelper *rpc) {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
     Request* r = new Request();
@@ -94,8 +84,8 @@ struct Worker::Peer {
     ureq->ParseFromString(r->payload);
 
     r->mpi_req = rpc->SendData(r->target, r->rpc_type, r->payload);
-
     outgoingRequests.push_back(r);
+
     return r;
   }
 
@@ -126,10 +116,6 @@ Worker::Worker(const ConfigData &c) {
   world_ = MPI::COMM_WORLD;
   rpc_ = new RPCHelper(&world_);
 
-  // Obtain a communicator that only includes workers.  This allows us to specify shards
-  // conveniently (shard 0 == worker_comm.rank0), and express barriers on only workers.
-  // worker_comm_ = world_.Split(WORKER_COLOR, world_.Get_rank());
-
   kernel_thread_ = network_thread_ = NULL;
   kernel_done_ = false;
 }
@@ -137,7 +123,6 @@ Worker::Worker(const ConfigData &c) {
 void Worker::Run() {
   kernel_thread_ = new boost::thread(boost::bind(&Worker::KernelLoop, this));
 
-  MPI_Buffer_attach(new char[64000000], 64000000);
   NetworkLoop();
   kernel_thread_->join();
 }
@@ -164,33 +149,33 @@ void Worker::NetworkLoop() {
     Poll();
 
     if (work.empty()) {
-      for (int i = 0; i < tables.size(); ++i) {
-        tables[i]->GetPendingUpdates(&work);
+      for (TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+        i->second->GetPendingUpdates(&work);
       }
     }
 
-    if (work.empty()) {
-      if (pending_network_writes() == 0) {
-        Sleep(0.01);
-      }
-      continue;
+    if (work.empty() && pending_network_writes() == 0) {
+      Sleep(0.01);
     }
 
-    Table* old = work.front();
-    work.pop_front();
+    while (!work.empty()) {
+      Table* t = work.front();
+      work.pop_front();
 
-    VLOG(2) << "Accum " << old->info().owner_thread << " : " << old->size();
-    Peer * p = peers[old->info().owner_thread];
+      VLOG(2) << "Accum " << t->shard() << " : " << t->size();
+      Peer * p = peers[peer_for_shard(t->id(), t->shard())];
 
-    Table::Iterator *i = old->get_iterator();
-    while (!i->done()) {
-      ComputeUpdates(p, i);
+      Table::Iterator *i = t->get_iterator();
+      while (!i->done()) {
+        ComputeUpdates(p, i);
+        Poll();
+      }
+      delete i;
+
+      tables[make_pair(t->id(), t->shard())]->Free(t);
+
       Poll();
     }
-
-    delete i;
-
-    tables[old->info().table_id]->Free(old);
   }
 }
 
@@ -241,8 +226,8 @@ bool Worker::pending_network_writes() const {
 int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
-  for (int i = 0; i < tables.size(); ++i) {
-    t += tables[i]->pending_write_bytes();
+  for (TableMap::const_iterator i = tables.begin(); i != tables.end(); ++i) {
+    t += i->second->pending_write_bytes();
   }
 
   return t;
@@ -268,7 +253,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   VLOG(1) << "Prepped " << count << " taking " << r->ByteSize();
 
-  p->send_data_request(MTYPE_KERNEL_DATA, r, rpc_);
+  p->Send(MTYPE_KERNEL_DATA, r, rpc_);
 
   stats_.set_put_out(stats_.put_out() + 1);
   stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
@@ -288,7 +273,8 @@ void Worker::Poll() {
       stats_.set_put_in(stats_.put_in() + 1);
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
-      tables[r->table_id()]->ApplyUpdates(*r);
+      Table *t = get_table(r->table_id(), r->shard());
+      t->ApplyUpdates(*r);
       delete r;
     }
 
@@ -302,15 +288,16 @@ void Worker::Poll() {
       scratch.set_table_id(r->table_id());
 
       VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
-      string v = tables[r->table_id()]->get_local(r->key());
+      string v = tables[make_pair(r->table_id(), r->shard())]->get_local(r->key());
 
       scratch.add_put(r->key(), v);
 
-      p->send_data_request(MTYPE_GET_RESPONSE, &scratch, rpc_);
+      p->Send(MTYPE_GET_RESPONSE, &scratch, rpc_);
       delete r;
     }
   }
 
+  // Check for shutdown.
   {
     EmptyMessage msg;
     ProtoWrapper wrapper(msg);
@@ -322,6 +309,7 @@ void Worker::Poll() {
     }
   }
 
+  // Check for new kernels to run.
   {
     RunKernelRequest k;
     ProtoWrapper wrapper(k);
@@ -331,15 +319,14 @@ void Worker::Poll() {
     }
   }
 
+  // If the current kernel has completed, send a message to master indicating
+  // that we've completed our kernel and we are done transmitting.
   if (kernel_done_) {
-    // Send a message to master indicating that we've completed our kernel
-    // and we are done transmitting.
     EmptyMessage m;
     rpc_->Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(m));
 
     kernel_done_ = false;
   }
-
 }
 
 } // end namespace

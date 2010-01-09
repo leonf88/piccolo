@@ -1,7 +1,7 @@
 #ifndef MASTER_H_
 #define MASTER_H_
 
-#include "worker/kernel.h"
+#include "worker/registry.h"
 #include "worker/worker.h"
 #include "worker/worker.pb.h"
 #include "util/common.h"

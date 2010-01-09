@@ -16,7 +16,7 @@ CDEBUG := -ggdb2
 COPT := -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
-USE_GOOGLE_PROFILER :=
+USE_GOOGLE_PROFILER := 1
 USE_OPROFILE := 
 
 ifneq ($(USE_GOOGLE_PROFILER),)
@@ -34,7 +34,8 @@ CXXFLAGS := $(CFLAGS)
 UPCC := /home/power/stuff/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp -O
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
-UPC_THREADS := 10
+UPC_THREADS := -T 20
+#UPC_THREADS :=
 
 LDFLAGS := 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
@@ -50,7 +51,7 @@ LINK_BIN := $(MPI_LINK)  $(LDFLAGS)
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/coder.o
 LIBRPC_OBJS := src/util/rpc.o
 LIBTEST_OBJS := src/test/file-helper.o src/test/test.pb.o
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/kernel.o src/master/master.o src/worker/table-msgs.o
+LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/registry.o src/master/master.o src/worker/hash-msgs.o
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
@@ -91,7 +92,7 @@ bin/test-shortest-path-upc: bin/libtest.a bin/libcommon.a src/test/test-shortest
 	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS) 
 
 bin/test-pr-upc: bin/libcommon.a bin/libtest.a src/test/test-pr.upc
-	$(UPCC) -T $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
+	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
 
 bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)

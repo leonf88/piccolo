@@ -3,6 +3,7 @@
 
 #include "util/common.h"
 #include "util/rpc.h"
+#include "worker/registry.h"
 #include "worker/worker.pb.h"
 #include "worker/table-internal.h"
 
@@ -25,23 +26,31 @@ public:
 
   struct Peer;
 
-  template <class K, class V>
-  TypedTable<K, V>* CreateTable(typename TypedTable<K, V>::ShardingFunction sf,
-                                typename TypedTable<K, V>::AccumFunction af) {
-    TableInfo tinfo;
-    tinfo.af = (void*)af;
-    tinfo.sf = (void*)sf;
-    tinfo.num_threads = config.num_workers();
-    tinfo.table_id = tables.size();
-    tinfo.rpc = rpc_;
-    tinfo.owner_thread = config.worker_id();
+  // Returns a local reference to table indicated by 'id'.  Writes to 'shard'
+  // are performed locally; other writes will be forwarded to the appropriate
+  // foreign table.
+  Table* get_table(int id, int shard) {
+    if (tables[make_pair(id, shard)]) {
+      return tables[make_pair(id, shard)];
+    }
 
-    TypedPartitionedTable<K, V> *t = new TypedPartitionedTable<K, V>(tinfo);
-    tables.push_back(t);
+    Table *t = TableRegistry::get_instance(id, shard);
+    t->info_.rpc = rpc_;
+    tables[make_pair(id, shard)] = t;
     return t;
   }
 
-  Stats get_stats() { return stats_; }
+  // Convenience wrapper for get_table.
+  template <class K, class V>
+  TypedTable<K, V>* get_typed_table(int id, int shard) {
+    return (TypedTable<K, V>*)get_table(id, shard);
+  }
+
+  int peer_for_shard(int table_id, int shard);
+
+  Stats get_stats() {
+    return stats_;
+  }
 
 private:
   // The largest amount of data we'll send over the network as a single piece.
@@ -68,7 +77,8 @@ private:
   vector<Peer*> peers;
 
   // Tables registered in the system.
-  vector<PartitionedTable*> tables;
+  typedef unordered_map<pair<int, int>, Table*> TableMap;
+  TableMap tables;
 
   // Network operations.
   void ProcessUpdates(Peer *p);
