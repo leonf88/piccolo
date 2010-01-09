@@ -1,4 +1,4 @@
-#include "worker/table-msgs.h"
+#include "worker/hash-msgs.h"
 
 namespace upc {
 // Hand defined serialization for hash request/update messages.  Painful, but
@@ -16,10 +16,12 @@ namespace upc {
   vector<type>*  klass::mutable_ ## id() { return &id ##_; }
 
 SETGET(HashRequest, table_id, uint32_t);
+SETGET(HashRequest, shard, uint32_t);
 SETGET(HashRequest, key, string);
 
 void HashRequest::Clear() {
   table_id_ = 0;
+  shard_ = 0;
   key_.clear();
 }
 
@@ -27,11 +29,13 @@ int32_t HashRequest::ByteSize() { return key_.size() + sizeof(table_id_); }
 
 void HashRequest::AppendToCoder(Encoder *e) const {
   e->write(table_id_);
+  e->write(shard_);
   e->write(key_);
 }
 
 void HashRequest::ParseFromCoder(Decoder *d) {
   d->read(&table_id_);
+  d->read(&shard_);
   d->read(&key_);
 }
 
@@ -39,11 +43,12 @@ HashUpdate::HashUpdate() :e_(&encoded_pairs_) {}
 
 SETGET(HashUpdate, source, uint32_t);
 SETGET(HashUpdate, table_id, uint32_t);
+SETGET(HashUpdate, shard, uint32_t);
 
 void HashUpdate::Clear() {
   encoded_pairs_.clear();
   offsets_.clear();
-  source_ = table_id_ = 0;
+  source_ = table_id_ = shard_ = 0;
 }
 
 int32_t HashUpdate::ByteSize() {
@@ -60,6 +65,7 @@ void HashUpdate::add_put(const string& k, const string& v) {
 void HashUpdate::AppendToCoder(Encoder *e) const {
   e->write(source_);
   e->write(table_id_);
+  e->write(shard_);
 
   e->write((uint32_t)offsets_.size());
   for (int i = 0; i < offsets_.size(); ++i) {
@@ -73,6 +79,7 @@ void HashUpdate::AppendToCoder(Encoder *e) const {
 void HashUpdate::ParseFromCoder(Decoder *d) {
   d->read(&source_);
   d->read(&table_id_);
+  d->read(&shard_);
 
   int num_offsets = d->read_uint32();
   offsets_.resize(num_offsets);

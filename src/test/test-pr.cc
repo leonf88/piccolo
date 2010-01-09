@@ -9,11 +9,12 @@
 
 using std::swap;
 
-#define PROP 0.8
-#define BLK 10000
+static double PROP = 0.8;
+static int BLK = 10000;
 static double TOTALRANK = 0;
 
 DEFINE_int32(num_nodes, 64, "");
+DEFINE_bool(build_graph, false, "");
 
 static int NUM_WORKERS = 2;
 
@@ -53,6 +54,8 @@ void BuildGraph(int shards, int nodes, int density) {
 }
 
 void Initialize() {
+  TypedTable<int, double>* curr_pr_hash(w->get_typed_table<int, double>(0, shard));
+
   for (int i = 0; i < FLAGS_num_nodes; i++) {
 		curr_pr_hash->put(i, (1-PROP)*(TOTALRANK/FLAGS_num_nodes));
   }
@@ -61,6 +64,7 @@ void Initialize() {
 static int iter = 0;
 
 void WriteStatus() {
+  TypedTable<int, double>* curr_pr_hash(w->get_typed_table<int, double>(0, shard));
   LOG(INFO) << "iter: " << iter;
 
   fprintf(stderr, "PR:: ");
@@ -70,14 +74,13 @@ void WriteStatus() {
   fprintf(stderr, "\n");
 }
 
-void PageRankIter() {
+void PageRankIter(int shard) {
   static vector<PathNode> nodes;
 
-	int my_thread = curr_pr_hash->get_typed_iterator()->owner()->info().owner_thread;
   ++iter;
 
   if (nodes.empty()) {
-    RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", my_thread, NUM_WORKERS, FLAGS_num_nodes), "r");
+    RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", shard, NUM_WORKERS, FLAGS_num_nodes), "r");
     PathNode n;
     while (r.read(&n)) {
       nodes.push_back(n);
@@ -95,18 +98,22 @@ void PageRankIter() {
 	}
 }
 
-void ClearTable() {
+void ClearTable(int shard) {
   // Move the values computed from the last iteration into the current table, and reset
   // the values local to our node to the random restart value.
+  TypedTable<int, double>* curr_pr_hash(w->get_typed_table<int, double>(0, shard));
+  TypedTable<int, double>* next_pr_hash(w->get_typed_table<int, double>(1, shard));
 
-	swap(curr_pr_hash, next_pr_hash);
-	next_pr_hash->clear();
-	TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator();
+  curr_pr_hash->clear();
+	TypedTable<int, double>::Iterator *it = next_pr_hash->get_typed_iterator();
 	while (!it->done()) {
 //	  LOG(INFO) << "Setting: " << it->key() << " :: " << (1-PROP)*(TOTALRANK/FLAGS_num_nodes);
-		next_pr_hash->put(it->key(), (1-PROP)*(TOTALRANK/FLAGS_num_nodes));
+	  curr_pr_hash->put(it->key(), it->value());
 		it->Next();
 	}
+	delete it;
+
+	next_pr_hash->clear();
 }
 
 REGISTER_KERNEL(Initialize);
@@ -116,14 +123,18 @@ REGISTER_KERNEL(ClearTable);
 
 int main(int argc, char **argv) {
 	Init(argc, argv);
-
-	ConfigData conf;
+  
+  ConfigData conf;                                                            
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+
 	NUM_WORKERS = conf.num_workers();
 	TOTALRANK = FLAGS_num_nodes;
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-		BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10); 
+    if (FLAGS_build_graph) {
+      BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10);
+    }
+
     Master m(conf);
 		m.run_one(&Initialize);
 		for (int i = 0; i < 10; i++) {
@@ -132,12 +143,12 @@ int main(int argc, char **argv) {
 //			m.run_one(&WriteStatus);
 		}
   } else {
-    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-		curr_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
-		next_pr_hash = w.CreateTable<int, double>(&BlkModSharding, &Accumulator<double>::sum);
-    w.Run(); 
-    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
+    w.Run();
+    curr_pr_hash = w->get_typed_table<int, double>(0);
+    next_pr_hash = w->get_typed_table<int, double>(1);
+
+    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w->get_stats();
   }
 }
 

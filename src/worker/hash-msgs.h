@@ -21,11 +21,13 @@ namespace upc {
 struct HashRequest : public RPCMessage {
 private:
   uint32_t table_id_;
+  uint32_t shard_;
   string key_;
 
 public:
   HashRequest() { Clear(); }
   SETGET(table_id, uint32_t);
+  SETGET(shard, uint32_t);
   SETGET(key, string);
 
   void Clear();
@@ -39,6 +41,7 @@ struct HashUpdate : public RPCMessage {
 private:
   uint32_t source_;
   uint32_t table_id_;
+  uint32_t shard_;
 
   string encoded_pairs_;
 
@@ -50,6 +53,7 @@ public:
 
   SETGET(source, uint32_t);
   SETGET(table_id, uint32_t);
+  SETGET(shard, uint32_t);
 
   void add_put(const string& k, const string& v);
   int put_size() const {
