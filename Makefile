@@ -12,8 +12,8 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 #MPI_LIBDIR := -L/home/power/local/mpich2/lib
 #MPI_LIBS := -lmpichcxx -lmpich
 
-CDEBUG := -ggdb2
-COPT := -O3
+CDEBUG := -ggdb3
+COPT :=  -O0
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
 USE_GOOGLE_PROFILER := 1

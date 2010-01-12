@@ -5,11 +5,11 @@
 using namespace upc;
 
 
-static TypedTable<int, double>* min_hash;
-static TypedTable<int, double>* max_hash;
-static TypedTable<int, double>* sum_hash;
-static TypedTable<int, double>* replace_hash;
-static TypedTable<int, Pair>* pair_hash;
+static TypedTable<int, double>* min_hash = NULL;
+static TypedTable<int, double>* max_hash = NULL;
+static TypedTable<int, double>* sum_hash = NULL;
+static TypedTable<int, double>* replace_hash = NULL;
+static TypedTable<int, Pair>* pair_hash = NULL;
 
 void TestPut() {
   Pair p;
@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-//    min_hash = TableRegistry::register_table<int, double>(0, &ModSharding, &Accumulator<double>::min);
-//    max_hash = TableRegistry::register_table<int, double>(1, &ModSharding, &Accumulator<double>::max);
-//    sum_hash = TableRegistry::register_table<int, double>(2, &ModSharding, &Accumulator<double>::sum);
-//    replace_hash = TableRegistry::register_table<int, double>(3, &ModSharding, &Accumulator<double>::replace);
-//    pair_hash = TableRegistry::register_table<int, Pair>(4, &ModSharding, &Accumulator<Pair>::replace);
+    min_hash = w.create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
+    max_hash = w.create_table<int, double>(1, 10, &ModSharding, &Accumulator<double>::max);
+    sum_hash = w.create_table<int, double>(2, 10, &ModSharding, &Accumulator<double>::sum);
+    replace_hash = w.create_table<int, double>(3, 10, &ModSharding, &Accumulator<double>::replace);
+    pair_hash = w.create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
     w.Run();
   }
 

@@ -55,9 +55,9 @@ struct Worker::Peer {
   }
 
   void ReceiveIncomingData(RPCHelper *rpc) {
-    while (rpc->HasData(id, MTYPE_KERNEL_DATA)) {
+    while (rpc->HasData(id, MTYPE_PUT_REQUEST)) {
       HashUpdate *req = new HashUpdate;
-      rpc->Read(id, MTYPE_KERNEL_DATA, req);
+      rpc->Read(id, MTYPE_PUT_REQUEST, req);
       incomingData.push_back(req);
     }
 
@@ -106,9 +106,9 @@ Worker::Worker(const ConfigData &c) {
   config.CopyFrom(c);
 
   num_peers_ = config.num_workers();
-  peers.resize(num_peers_);
+  peers_.resize(num_peers_);
   for (int i = 0; i < num_peers_; ++i) {
-    peers[i] = new Peer(i + 1);
+    peers_[i] = new Peer(i + 1);
   }
 
   running_ = true;
@@ -133,8 +133,8 @@ Worker::~Worker() {
   delete network_thread_;
 
   for (int i = 0; i < pending_writes_.size(); ++i) {delete pending_writes_[i];}
-  for (int i = 0; i < peers.size(); ++i) {
-    delete peers[i];
+  for (int i = 0; i < peers_.size(); ++i) {
+    delete peers_[i];
   }
 }
 
@@ -149,7 +149,7 @@ void Worker::NetworkLoop() {
     Poll();
 
     if (work.empty()) {
-      for (TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+      for (TableMap::iterator i = tables_.begin(); i != tables_.end(); ++i) {
         i->second->GetPendingUpdates(&work);
       }
     }
@@ -162,8 +162,7 @@ void Worker::NetworkLoop() {
       Table* t = work.front();
       work.pop_front();
 
-      VLOG(2) << "Accum " << t->shard() << " : " << t->size();
-      Peer * p = peers[peer_for_shard(t->id(), t->shard())];
+      Peer * p = peers_[peer_for_shard(t->id(), t->shard())];
 
       Table::Iterator *i = t->get_iterator();
       while (!i->done()) {
@@ -172,7 +171,7 @@ void Worker::NetworkLoop() {
       }
       delete i;
 
-      tables[make_pair(t->id(), t->shard())]->Free(t);
+      tables_[t->id()]->Free(t);
 
       Poll();
     }
@@ -196,9 +195,24 @@ void Worker::KernelLoop() {
 	    kernel_requests_.pop_front();
 	  }
 
-		VLOG(1) << "Received run request for kernel id: " << k.kernel_id();
-		KernelFunction f = KernelRegistry::get_kernel(k.kernel_id());
-		f();
+		VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method();
+		KernelHelperBase *helper = Registry::get_helper(k.kernel());
+
+    DSMKernel* d = NULL;
+		if (!kernels_[k.kernel()]) {
+		  d = helper->create();
+		  kernels_[k.kernel()] = d;
+		  d->Init(this, k.table(), k.shard());
+		  d->KernelInit();
+		} else {
+		  d = kernels_[k.kernel()];
+		  d->Init(this, k.table(), k.shard());
+		}
+
+
+
+		helper->invoke_method(d, k.method());
+
 		VLOG(1) << "Waiting for network to finish: " << pending_network_writes() << " : " << pending_kernel_bytes();
 
 	  while (pending_kernel_bytes() > 0 || pending_network_writes()) {
@@ -215,8 +229,8 @@ void Worker::KernelLoop() {
 }
 
 bool Worker::pending_network_writes() const {
-  for (int i = 0; i < peers.size(); ++i) {
-    if (peers[i]->write_pending()) {
+  for (int i = 0; i < peers_.size(); ++i) {
+    if (peers_[i]->write_pending()) {
       return true;
     }
   }
@@ -226,7 +240,7 @@ bool Worker::pending_network_writes() const {
 int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
-  for (TableMap::const_iterator i = tables.begin(); i != tables.end(); ++i) {
+  for (TableMap::const_iterator i = tables_.begin(); i != tables_.end(); ++i) {
     t += i->second->pending_write_bytes();
   }
 
@@ -237,6 +251,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
   HashUpdate *r = &p->writeScratch;
   r->Clear();
 
+  r->set_shard(it->owner()->shard());
   r->set_source(config.worker_id());
   r->set_table_id(it->owner()->info().table_id);
 
@@ -253,7 +268,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 
   VLOG(1) << "Prepped " << count << " taking " << r->ByteSize();
 
-  p->Send(MTYPE_KERNEL_DATA, r, rpc_);
+  p->Send(MTYPE_PUT_REQUEST, r, rpc_);
 
   stats_.set_put_out(stats_.put_out() + 1);
   stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
@@ -263,8 +278,8 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
 void Worker::Poll() {
   HashUpdate scratch;
 
-  for (int i = 0; i < peers.size(); ++i) {
-    Peer *p = peers[i];
+  for (int i = 0; i < peers_.size(); ++i) {
+    Peer *p = peers_[i];
     p->CollectPendingSends();
     p->ReceiveIncomingData(rpc_);
 
@@ -273,7 +288,7 @@ void Worker::Poll() {
       stats_.set_put_in(stats_.put_in() + 1);
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
-      Table *t = get_table(r->table_id(), r->shard());
+      Table *t = tables_[r->table_id()];
       t->ApplyUpdates(*r);
       delete r;
     }
@@ -288,7 +303,7 @@ void Worker::Poll() {
       scratch.set_table_id(r->table_id());
 
       VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
-      string v = tables[make_pair(r->table_id(), r->shard())]->get_local(r->key());
+      string v = tables_[r->table_id()]->get_local(r->key());
 
       scratch.add_put(r->key(), v);
 

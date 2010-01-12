@@ -55,7 +55,7 @@ public:
   }
 
   void put(const K &k, const V &v) {
-    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.af));
+    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
   }
 
   void remove(const K &k) {
@@ -88,6 +88,9 @@ private:
   volatile int pending_writes_;
 
   vector<LocalTable<K, V>*> table_pool_;
+
+  vector<bool> local_shards_;
+
 public:
   TypedPartitionedTable(TableInfo tinfo);
 
@@ -112,36 +115,52 @@ public:
   // Remove this entry from the local and master table.
   void remove(const K &k);
 
+  // Clear any local data for which this table has ownership.  Pending updates
+  // are *not* cleared.
   void clear() {
-    partitions_[info().shard]->clear();
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+    for (int i = 0; i < local_shards_.size(); ++i) {
+      if (local_shards_[i]) {
+        partitions_[i]->clear();
+      }
+    }
   }
 
-  // Append to 'out' the list of accumulators that have pending network data.  Return
-  // true if any updates were appended.
+  // Append to 'out' the list of local tables that have pending network data.
+  // Return true if any updates were appended.
   bool GetPendingUpdates(deque<Table*> *out);
   void ApplyUpdates(const upc::HashUpdate& req);
-  int pending_write_bytes();
   void Free(Table *t);
+
+  int pending_write_bytes();
 
   Table::Iterator* get_iterator();
   typename TypedTable<K, V>::Iterator* get_typed_iterator();
 
   const TableInfo& info() { return this->info_; }
 
-  int64_t size() { return 1; }
-
-  bool is_local(int shard) {
-    return shard == info().shard;
+  bool is_local_shard(int shard) {
+    return local_shards_[shard];
   }
 
-  bool is_non_local(int shard) {
-    return shard != info().shard;
+  bool is_local_key(const StringPiece &k) {
+    return is_local_shard(this->get_shard(k));
+  }
+
+  void local_shards(vector<int>* v) {
+    v->clear();
+    for (int i = 0; i < local_shards_.size(); ++i) {
+      if (local_shards_[i]) {
+        v->push_back(i);
+      }
+    }
   }
 };
 
 template <class K, class V>
 TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable<K, V>(tinfo) {
   partitions_.resize(info().num_shards);
+  local_shards_.resize(info().num_shards);
 
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
@@ -155,7 +174,7 @@ TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable
 template <class K, class V>
 void TypedPartitionedTable<K, V>::ApplyUpdates(const upc::HashUpdate& req) {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  partitions_[info().shard]->ApplyUpdates(req);
+  partitions_[req.shard()]->ApplyUpdates(req);
 }
 
 template <class K, class V>
@@ -165,7 +184,7 @@ bool TypedPartitionedTable<K, V>::GetPendingUpdates(deque<Table*> *out) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable<K, V> *t = partitions_[i];
 
-    if (is_non_local(i) && !t->empty()) {
+    if (!is_local_shard(i) && !t->empty()) {
       out->push_back(t);
 
       TableInfo linfo = info();
@@ -190,7 +209,7 @@ void TypedPartitionedTable<K, V>::Free(Table *used) {
   delete used;
   return;
 
-  if (table_pool_.size() > partitions_.size() * 10) {
+  if (table_pool_.size() > partitions_.size() * 2) {
     delete used;
     return;
   }
@@ -210,7 +229,7 @@ int TypedPartitionedTable<K, V>::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable<K, V> *t = partitions_[i];
-    if (is_non_local(i)) {
+    if (!is_local_shard(i)) {
       s += t->size();
     }
   }
@@ -227,7 +246,7 @@ void TypedPartitionedTable<K, V>::put(const K &k, const V &v) {
     partitions_[shard]->put(k, v);
   }
 
-  if (is_non_local(shard)) {
+  if (!is_local_shard(shard)) {
     ++pending_writes_;
   }
 
@@ -239,7 +258,7 @@ string TypedPartitionedTable<K, V>::get_local(const StringPiece &k) {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   int shard = this->get_shard(Data::from_string<K>(k));
-  CHECK(is_local(shard));
+  CHECK(is_local_shard(shard));
 
   LocalTable<K, V> *h = partitions_[shard];
 
@@ -251,9 +270,8 @@ string TypedPartitionedTable<K, V>::get_local(const StringPiece &k) {
 
 template <class K, class V>
 V TypedPartitionedTable<K, V>::get(const K &k) {
-//  int shard = ((typename TypedTable<K, V>::ShardingFunction)info().sf)(k, partitions_.size());
   int shard = this->get_shard(k);
-  if (is_local(shard)) {
+  if (is_local_shard(shard)) {
     return partitions_[shard]->get(k);
   }
 

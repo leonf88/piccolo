@@ -17,19 +17,35 @@ public:
   // N.B.  All run_* methods are blocking.
 
   // Run the given kernel function on all worker nodes.
-  void run_all(KernelFunction f);
+  typedef void* KernelFunction;
+
+  void run_all(const string& kernel, int method);
 
   // Run the given kernel function on one (arbitrary) worker node.
-  void run_one(KernelFunction f);
+  void run_one(const string& kernel, int method);
 
-  // Run the kernel function on the given set of nodes.
-  void run_range(KernelFunction f, vector<int> nodes);
+  // Run the kernel function on the given set of shards.
+  void run_range(const string& kernel, int method, vector<int> shards);
 
 private:
   ConfigData config_;
   RPCHelper *rpc_;
   MPI::Intracomm world_;
+
+  int worker_for_shard(int shard);
 };
+
+#define METHOD_ID(klass, method)\
+    ((KernelHelper<klass>*)Registry::get_helper(#klass))->method_id(&klass::method)
+
+#define RUN_ONE(m, klass, method)\
+  m.run_one(#klass, METHOD_ID(klass, method))
+
+#define RUN_ALL(m, klass, method)\
+  m.run_all(#klass, METHOD_ID(klass, method))
+
+#define RUN_RANGE(m, klass, method)\
+  m.run_range(#klass, METHOD_ID(klass, method))
 
 }
 

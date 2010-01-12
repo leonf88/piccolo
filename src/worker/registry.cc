@@ -1,47 +1,40 @@
 #include <stdio.h>
 
 #include "worker/registry.h"
+#include "worker/worker.h"
 #include "worker/table.h"
 
 namespace upc {
 
-static map<int, KernelFunction> *kernels = NULL;
-static map<int, TableRegistry::TableCreator*> *tables = new map<int, TableRegistry::TableCreator*>;
+void DSMKernel::Init(Worker* w, int table_id, int shard) {
+  w_ = w;
+  table_id_ = table_id;
+  shard_ = shard;
+}
 
-map<int, KernelFunction>* KernelRegistry::get_mapping() {
+Table* DSMKernel::get_table(int id) {
+  return w_->get_table(id);
+}
+
+namespace Registry {
+
+static map<string, KernelHelperBase*> *kernels = NULL;
+
+map<string, KernelHelperBase*>* get_mapping() {
   if (kernels == NULL) {
-    kernels = new map<int, KernelFunction>;
+    kernels = new map<string, KernelHelperBase*>;
   }
   return kernels;
 }
 
-KernelFunction KernelRegistry::get_kernel(int id) {
-  return (*kernels)[id];
+DSMKernel* create_kernel(const string& name) {
+  return get_helper(name)->create();
 }
 
-int KernelRegistry::get_id(KernelFunction kf) {
-  map<int, KernelFunction> &k = *KernelRegistry::get_mapping();
-  for (map<int, KernelFunction>::iterator i = k.begin(); i != k.end(); ++i) {
-    if (i->second == kf) { return i->first; }
-  }
-  LOG(FATAL) << "Failed to find kernel " << kf << " in mapping.";
+KernelHelperBase* get_helper(const string& name) {
+  return (*get_mapping())[name];
 }
 
-KernelRegistry::StaticHelper::StaticHelper(const char* name, KernelFunction kf) {
-//  fprintf(stderr, "Registering... %s\n", name);
-  map<int, KernelFunction> &k = *KernelRegistry::get_mapping();
-  k[k.size()] = kf;
-}
-
-void TableRegistry::register_table_creator(int id, TableRegistry::TableCreator* t) {
-  (*tables)[id] = t;
-}
-
-static Table* get_table(int id, int shard) {
-  CHECK(tables->find(id) != tables->end());
-  Table *t = (*tables)[id]->create_table();
-  t->info_.shard = shard;
-  return t;
 }
 
 }

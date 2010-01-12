@@ -10,6 +10,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/scoped_array.hpp>
 #include <boost/thread.hpp>
+#include <boost/function.hpp>
 
 #include <map>
 #include <vector>
@@ -172,6 +173,8 @@ private:
   }\
 }
 
+#define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
+
 }
 
 namespace std {  namespace tr1 {
@@ -184,6 +187,7 @@ struct hash<upc::StringPiece> : public unary_function<upc::StringPiece, size_t> 
 
 }}
 
+// operator<< overload to allow protocol buffers to be output from the logging methods.
 #include <google/protobuf/message.h>
 namespace std{
 static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {

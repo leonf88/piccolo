@@ -38,49 +38,51 @@ void BuildGraph(int shards, int nodes, int density) {
   }
 }
 
-void Initialize() {
-  for (int i = 0; i < FLAGS_num_nodes; ++i) {
-    distance->put(i, 1e9);
+struct ShortestPathKernel : public DSMKernel {
+  vector<PathNode> local_nodes;
+  void Initialize() {
+    for (int i = 0; i < FLAGS_num_nodes; ++i) {
+      distance->put(i, 1e9);
+    }
+
+    // Initialize a root node.
+    distance->put(0, 0);
   }
 
-  // Initialize a root node.
-  distance->put(0, 0);
-}
+  void Propagate() {
+    if (local_nodes.empty()) {
+      RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", shard(), NUM_WORKERS), "r");
+      PathNode n;
+      while (r.read(&n)) {
+        local_nodes.push_back(n);
+      }
+    }
 
-static vector<PathNode> local_nodes;
-void Propagate() {
-  if (local_nodes.empty()) {
-    int my_thread = distance->info().owner_thread;
-    RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", my_thread, NUM_WORKERS), "r");
-    PathNode n;
-    while (r.read(&n)) {
-      local_nodes.push_back(n);
+    for (int i = 0; i < local_nodes.size(); ++i) {
+      const PathNode &n = local_nodes[i];
+      for (int j = 0; j < n.target_size(); ++j) {
+        distance->put(n.target(j), distance->get(n.id()) + 1);
+      }
     }
   }
 
-  for (int i = 0; i < local_nodes.size(); ++i) {
-    const PathNode &n = local_nodes[i];
-    for (int j = 0; j < n.target_size(); ++j) {
-      distance->put(n.target(j), distance->get(n.id()) + 1);
+  void DumpDistances() {
+    for (int i = 0; i < FLAGS_num_nodes; ++i) {
+      if (i % 30 == 0) {
+        fprintf(stderr, "\n%5d: ", i);
+      }
+
+      int d = (int)distance->get(i);
+      if (d >= 1000) { d = -1; }
+      fprintf(stderr, "%3d ", d);
     }
   }
-}
+};
 
-void DumpDistances() {
-  for (int i = 0; i < FLAGS_num_nodes; ++i) {
-    if (i % 30 == 0) {
-      fprintf(stderr, "\n%5d: ", i);
-    }
-
-    int d = (int)distance->get(i);
-    if (d >= 1000) { d = -1; }
-    fprintf(stderr, "%3d ", d);
-  }
-}
-
-REGISTER_KERNEL(Initialize);
-REGISTER_KERNEL(Propagate);
-REGISTER_KERNEL(DumpDistances);
+REGISTER_KERNEL(ShortestPathKernel);
+REGISTER_METHOD(ShortestPathKernel, Initialize);
+REGISTER_METHOD(ShortestPathKernel, Propagate);
+REGISTER_METHOD(ShortestPathKernel, DumpDistances);
 
 int main(int argc, char **argv) {
   Init(argc, argv);
@@ -93,18 +95,23 @@ int main(int argc, char **argv) {
     BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 4);
 
     Master m(conf);
-    m.run_one(&Initialize);
+    RUN_ONE(m, ShortestPathKernel, Initialize);
     for (int i = 0; i < 20; ++i) {
-      m.run_all(&Propagate);
+      RUN_ALL(m, ShortestPathKernel, Propagate);
     }
 
     if (FLAGS_dump_output) {
-      m.run_one(&DumpDistances);
+      RUN_ONE(m, ShortestPathKernel, DumpDistances);
     }
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-    distance = w.CreateTable<int, double>(&ModSharding, &Accumulator<double>::min);
+
+    TableInfo info;
+    info.num_shards = 10;
+    info.accum_function = (void*)&Accumulator<double>::min;
+    info.sharding_function = (void*)&ModSharding;
+    distance = w.create_table<int, double>(0, info);
     w.Run();
 
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();

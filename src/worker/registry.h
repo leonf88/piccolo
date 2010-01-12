@@ -7,62 +7,100 @@
 
 namespace upc {
 
-typedef void (*KernelFunction)(void);
+class Worker;
+class Master;
 
-struct KernelRegistry {
-  struct StaticHelper {
-    StaticHelper(const char* name, KernelFunction kf);
-  };
+class DSMKernel {
+public:
+  // The table and shard to be processed.
+  int shard() const { return shard_; }
+  int table_id() const { return table_id_; }
 
-  static KernelFunction get_kernel(int id);
-  static int get_id(KernelFunction kf);
-
-  static map<int, KernelFunction>* get_mapping();
-};
-
-struct TableRegistry {
-  struct TableCreator {
-    virtual Table* create_table() = 0;
-  };
+  Table* get_table(int id);
 
   template <class K, class V>
-  struct TemplateTableCreator {
-    TemplateTableCreator(TableInfo info) : info_(info) {}
-    ~TemplateTableCreator() {}
+  TypedTable<K, V>* get_table(int id) {
+    return (TypedTable<K, V>*)get_table(id);
+  }
 
-    Table* create_table() {
-      return new TypedPartitionedTable<K, V>(info_);
+  // Called once upon construction of the kernel, after the worker
+  // and table information has been setup.
+  virtual void KernelInit() = 0;
+
+private:
+  friend class Worker;
+  friend class Master;
+
+  void Init(Worker* w, int table_id, int shard);
+
+  Worker *w_;
+  int shard_;
+  int table_id_;
+};
+
+struct KernelHelperBase {
+  KernelHelperBase(const char* name) : name_(name) {}
+
+  virtual DSMKernel* create() = 0;
+  virtual void invoke_method(DSMKernel* obj, int method_idx) = 0;
+
+  string name_;
+};
+
+template <class C>
+struct KernelHelper : public KernelHelperBase {
+  KernelHelper(const char* name) : KernelHelperBase(name) {}
+
+  DSMKernel* create() { return new C; }
+
+  void invoke_method(DSMKernel* obj, int method_idx) {
+    boost::function<void (C*)> m(methods_[method_idx]);
+    m((C*)obj);
+  }
+
+  typedef void (C::*Method)();
+  int method_id(Method f) {
+     for (int i = 0; i < methods_.size(); ++i) {
+       if (methods_[i] == f) {
+         return i;
+       }
+     }
+
+     LOG(FATAL) << "Method not found!";
+  }
+
+  void register_method(Method m) {
+    methods_.push_back(m);
+  }
+
+  vector<Method> methods_;
+};
+
+namespace Registry {
+  KernelHelperBase* get_helper(const string& name);
+  DSMKernel* create_kernel(const string& name);
+  map<string, KernelHelperBase*>* get_mapping();
+
+  template <class C>
+  struct KernelRegistrationHelper {
+    KernelRegistrationHelper(const char* name) {
+      get_mapping()->insert(make_pair(name, new KernelHelper<C>(name)));
     }
-
-    TableInfo info_;
   };
 
-  template <class K, class V>
-  static void register_table(int id,int num_shards,
-                             void *sharding_function, void *accum_function) {
-    TableInfo info;
-    info.af = accum_function;
-    info.sf = sharding_function;
-    info.num_shards = num_shards;
-    info.table_id = id;
+  template <class C>
+  struct MethodRegistrationHelper {
+    MethodRegistrationHelper(const char* klass, void (C::*m)()) {
+      ((KernelHelper<C>*)get_helper(klass))->register_method(m);
+    }
+  };
+}
 
-    TableCreator *t = new TemplateTableCreator<K, V>(info);
+#define REGISTER_KERNEL(klass)\
+  Registry::KernelRegistrationHelper<klass> k_helper_ ## klass(#klass);
 
-    register_table_creator(id, t);
-  }
-
-  static void register_table_creator(int id, TableCreator* t);
-  static Table* get_instance(int id, int shard);
-};
-
-#define REGISTER_KERNEL(kf)\
-  namespace {\
-    struct StaticHelper_ ## kf : public KernelRegistry::StaticHelper {\
-      StaticHelper_ ## kf () : StaticHelper(#kf, kf) {}\
-    };\
-    static StaticHelper_ ## kf reg_helper_ ## kf;\
-  }
-
+#define REGISTER_METHOD(klass, method)\
+  static Registry::MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, &klass::method);
 
 } // end namespace
 #endif /* KERNEL_H_ */
