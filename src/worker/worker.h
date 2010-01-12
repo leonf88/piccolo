@@ -26,30 +26,49 @@ public:
 
   struct Peer;
 
-  // Returns a local reference to table indicated by 'id'.  Writes to 'shard'
-  // are performed locally; other writes will be forwarded to the appropriate
-  // foreign table.
-  Table* get_table(int id, int shard) {
-    if (tables[make_pair(id, shard)]) {
-      return tables[make_pair(id, shard)];
+  template <class K, class V>
+  TypedTable<K, V>* create_table(int id,
+                                 int shards,
+                                 typename TypedTable<K, V>::ShardingFunction sharding=&ModSharding,
+                                 typename TypedTable<K, V>::AccumFunction accum=&Accumulator<V>::replace) {
+    TableInfo info;
+    info.num_shards = shards;
+    info.accum_function = (void*)accum;
+    info.sharding_function = (void*)sharding;
+
+    return this->create_table<K, V>(id, info);
+  }
+
+  // Creates the table indicated by 'id' and registers it for use on this node.
+  template <class K, class V>
+  TypedTable<K, V>* create_table(int id, TableInfo info) {
+    if (tables_.find(id) != tables_.end()) {
+      LOG(FATAL) << "Requested duplicate table with id: " << id;
     }
 
-    Table *t = TableRegistry::get_instance(id, shard);
-    t->info_.rpc = rpc_;
-    tables[make_pair(id, shard)] = t;
+    info.table_id = id;
+    info.rpc = rpc_;
+
+    TypedTable<K, V> *t = new TypedPartitionedTable<K, V>(info);
+    tables_[id] = t;
+
     return t;
   }
 
-  // Convenience wrapper for get_table.
-  template <class K, class V>
-  TypedTable<K, V>* get_typed_table(int id, int shard) {
-    return (TypedTable<K, V>*)get_table(id, shard);
+  int peer_for_shard(int table_id, int shard) {
+    return shard % config.num_workers();
   }
-
-  int peer_for_shard(int table_id, int shard);
 
   Stats get_stats() {
     return stats_;
+  }
+
+  Table* get_table(int id) {
+    if (tables_.find(id) == tables_.end()) {
+      LOG(FATAL) << "Invalid table: " << id;
+    }
+
+    return tables_[id];
   }
 
 private:
@@ -74,11 +93,13 @@ private:
   ConfigData config;
 
   // The status of other workers.
-  vector<Peer*> peers;
+  vector<Peer*> peers_;
 
   // Tables registered in the system.
-  typedef unordered_map<pair<int, int>, Table*> TableMap;
-  TableMap tables;
+  typedef unordered_map<int, Table*> TableMap;
+  TableMap tables_;
+
+  map<string, DSMKernel*> kernels_;
 
   // Network operations.
   void ProcessUpdates(Peer *p);

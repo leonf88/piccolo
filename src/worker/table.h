@@ -56,26 +56,20 @@ struct Data {
   }
 };
 
-
 struct TableInfo {
 public:
-  // The shard this table corresponds to.
-  int shard;
-
-  // If this is a non-local portion of data, the shard this data was created by.
-  int owner_shard;
-
+  int table_id;
   int num_shards;
 
-  // The table to which this partition belongs.
-  int table_id;
+  // For local tables, the shard of the global table they represent.
+  int shard;
 
-  // We use void* to pass around the various accumulation and sharding functions; they
-  // are cast to the appropriate type at the time of use.
-  void *af;
-  void *sf;
+  // We use void* to pass around the various accumulation and sharding
+  // functions; they are cast to the appropriate type at the time of use.
+  void *accum_function;
+  void *sharding_function;
 
-  // Used for partitioned tables
+  // Used when fetching remote keys.
   RPCHelper *rpc;
 };
 
@@ -93,10 +87,9 @@ public:
   Table(TableInfo tinfo) : info_(tinfo) {}
   virtual ~Table() {}
 
+  // Generic routines to fetch and set entries as serialized strings.
   virtual string get_str(const StringPiece &k) = 0;
   virtual void put_str(const StringPiece &k, const StringPiece& v) = 0;
-  virtual int64_t size() = 0;
-
 
   // Clear the local portion of a shared table.
   virtual void clear() = 0;
@@ -114,11 +107,14 @@ public:
 
   int id() { return info_.table_id; }
   int shard() { return info_.shard; }
-  int owner_shard() { return info_.owner_shard; }
 
   TableInfo info_;
 
   // The following functions are only available on partitioned tables:
+  virtual bool is_local_shard(int shard) { LOG(FATAL) << "Not implemented."; }
+  virtual bool is_local_key(const StringPiece &k) { LOG(FATAL) << "Not implemented."; }
+
+  virtual void local_shards(vector<int>* v) { LOG(FATAL) << "Not implemented."; }
 
   // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
   virtual string get_local(const StringPiece &k) { LOG(FATAL) << "Not implemented."; }
@@ -169,12 +165,16 @@ public:
     remove(Data::from_string<K>(k));
   }
 
+  int get_shard(StringPiece k) {
+    return get_shard(Data::from_string<K>(k));
+  }
+
   int get_shard(const K& k) {
-    return ((typename TypedTable<K, V>::ShardingFunction)info_.sf)(k, info_.num_shards);
+    return ((typename TypedTable<K, V>::ShardingFunction)info_.sharding_function)(k, info_.num_shards);
   }
 
   V accumulate(const V& a, const V& b) {
-    return ((typename TypedTable<K, V>::AccumFunction)info_.af)(a, b);
+    return ((typename TypedTable<K, V>::AccumFunction)info_.accum_function)(a, b);
   }
 };
 

@@ -16,32 +16,35 @@ Master::~Master() {
   }
 }
 
-void Master::run_all(KernelFunction f) {
+void Master::run_all(const string& kernel, int method) {
   vector<int> nodes;
   for (int i = 1; i < world_.Get_size(); ++i) {
     nodes.push_back(i);
   }
-  run_range(f, nodes);
+  run_range(kernel, method, nodes);
 }
 
-void Master::run_one(KernelFunction f) {
+void Master::run_one(const string& kernel, int method) {
   vector<int> nodes;
   nodes.push_back(1);
-  run_range(f, nodes);
+  run_range(kernel, method, nodes);
 }
 
-void Master::run_range(KernelFunction f, vector<int> nodes) {
-  int id = KernelRegistry::get_id(f);
+int Master::worker_for_shard(int shard) {
+  return shard % config_.num_workers();
+}
+
+void Master::run_range(const string& kernel, int method, vector<int> shards) {
   RunKernelRequest msg;
-  msg.set_kernel_id(id);
+  msg.set_kernel(kernel);
+  msg.set_method(method);
 
   Timer t;
-
-  for (int i = 0; i < nodes.size(); ++i) {
-    rpc_->Send(nodes[i], MTYPE_RUN_KERNEL, ProtoWrapper(msg));
+  for (int i = 0; i < shards.size(); ++i) {
+    rpc_->Send(worker_for_shard(shards[i]), MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
 
-  string waiting(nodes.size(), '0');
+  string waiting(shards.size(), '0');
 //  int peer = 0;
 //  for (int i = 0; i < nodes.size(); ++i) {
 //    EmptyMessage msg;
@@ -54,13 +57,13 @@ void Master::run_range(KernelFunction f, vector<int> nodes) {
   EmptyMessage empty;
   ProtoWrapper wrapper(empty);
 
-  while (!nodes.empty()) {
+  while (!shards.empty()) {
     bool found = false;
-    for (int j = 0; j < nodes.size(); ++j) {
-      if (rpc_->TryRead(nodes[j], MTYPE_KERNEL_DONE, &wrapper)) {
-        waiting[nodes[j] - 1] = '1';
+    for (int j = 0; j < shards.size(); ++j) {
+      if (rpc_->TryRead(worker_for_shard(shards[j]), MTYPE_KERNEL_DONE, &wrapper)) {
+        waiting[shards[j] - 1] = '1';
 
-        nodes.erase(nodes.begin() + j);
+        shards.erase(shards.begin() + j);
         found = true;
 //        LOG(INFO) << "Kernels finished: " << waiting;
         break;
