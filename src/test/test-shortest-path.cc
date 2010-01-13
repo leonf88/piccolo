@@ -9,7 +9,7 @@ DEFINE_int32(num_nodes, 10000, "");
 DEFINE_bool(dump_output, false, "");
 
 static int NUM_WORKERS = 0;
-static TypedTable<int, double>* distance;
+static TypedGlobalTable<int, double>* distance;
 
 void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
@@ -95,23 +95,19 @@ int main(int argc, char **argv) {
     BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 4);
 
     Master m(conf);
-    RUN_ONE(m, ShortestPathKernel, Initialize);
+    RUN_ONE(m, ShortestPathKernel, Initialize, 0);
     for (int i = 0; i < 20; ++i) {
-      RUN_ALL(m, ShortestPathKernel, Propagate);
+      RUN_ALL(m, ShortestPathKernel, Propagate, 0);
     }
 
     if (FLAGS_dump_output) {
-      RUN_ONE(m, ShortestPathKernel, DumpDistances);
+      RUN_ONE(m, ShortestPathKernel, DumpDistances, 0);
     }
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
 
-    TableInfo info;
-    info.num_shards = 10;
-    info.accum_function = (void*)&Accumulator<double>::min;
-    info.sharding_function = (void*)&ModSharding;
-    distance = w.create_table<int, double>(0, info);
+    distance = w.create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
     w.Run();
 
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();

@@ -1,4 +1,4 @@
-//#include "util/common.h"
+#include "util/common.h"
 #include "util/file.h"
 #include "worker/worker.h"
 #include "master/master.h"
@@ -16,6 +16,8 @@ static const double kPropagationFactor = 0.8;
 static const int kBlocksize = 10000;
 
 DEFINE_int32(num_nodes, 64, "");
+DEFINE_int32(iterations, 10, "");
+DEFINE_int32(shards, 10, "");
 DEFINE_bool(build_graph, false, "");
 
 using namespace upc;
@@ -55,12 +57,20 @@ void BuildGraph(int shards, int nodes, int density) {
 class PRKernel : public DSMKernel {
 public:
   int iter;
-  TypedTable<int, double>* curr_pr_hash;
-  TypedTable<int, double>* next_pr_hash;
+  vector<PathNode> nodes;
+  TypedGlobalTable<int, double>* curr_pr_hash;
+  TypedGlobalTable<int, double>* next_pr_hash;
 
   void KernelInit() {
     curr_pr_hash = this->get_table<int, double>(0);
     next_pr_hash = this->get_table<int, double>(1);
+
+    RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d",
+                              shard(), curr_pr_hash->info().num_shards, FLAGS_num_nodes), "r");
+    PathNode n;
+    while (r.read(&n)) {
+      nodes.push_back(n);
+    }
   }
 
   void Initialize() {
@@ -80,23 +90,13 @@ public:
   }
 
   void PageRankIter() {
-    static vector<PathNode> nodes;
-
     ++iter;
-
-    if (nodes.empty()) {
-      RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d",
-                                shard(), NUM_WORKERS, FLAGS_num_nodes), "r");
-      PathNode n;
-      while (r.read(&n)) {
-        nodes.push_back(n);
-      }
-    }
 
     for (int i = 0; i < nodes.size(); ++i) {
       PathNode &n = nodes[i];
+//      LOG(INFO) << n.id();
       double v = curr_pr_hash->get(n.id());
-  //	  LOG(INFO) << n.id();
+
       for (int i = 0; i < n.target_size(); ++i) {
   //      LOG(INFO) << "Adding: " << PROP * v / n.target_size() << " to " << n.target(i);
         next_pr_hash->put(n.target(i), kPropagationFactor*v/n.target_size());
@@ -107,16 +107,14 @@ public:
   void ClearTable() {
     // Move the values computed from the last iteration into the current table, and reset
     // the values local to our node to the random restart value.
-    curr_pr_hash->clear();
-    TypedTable<int, double>::Iterator *it = next_pr_hash->get_typed_iterator();
+    swap(curr_pr_hash, next_pr_hash);
+    next_pr_hash->clear();
+
+    TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator(shard());
     while (!it->done()) {
-  //	  LOG(INFO) << "Setting: " << it->key() << " :: " << (1-PROP)*(TOTALRANK/FLAGS_num_nodes);
-      curr_pr_hash->put(it->key(), it->value());
+      next_pr_hash->put(it->key(), (1-kPropagationFactor)*(TOTALRANK/FLAGS_num_nodes));
       it->Next();
     }
-    delete it;
-
-    next_pr_hash->clear();
   }
 };
 
@@ -125,7 +123,6 @@ REGISTER_METHOD(PRKernel, Initialize);
 REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ClearTable);
-
 
 int main(int argc, char **argv) {
 	Init(argc, argv);
@@ -136,22 +133,23 @@ int main(int argc, char **argv) {
 	NUM_WORKERS = conf.num_workers();
 	TOTALRANK = FLAGS_num_nodes;
 
+	Registry::create_table<int, double>(0, FLAGS_shards, &BlkModSharding, &Accumulator<double>::sum);
+	Registry::create_table<int, double>(1, FLAGS_shards, &BlkModSharding, &Accumulator<double>::sum);
+
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     if (FLAGS_build_graph) {
-      BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 10);
+      BuildGraph(FLAGS_shards, FLAGS_num_nodes, 10);
     }
 
     Master m(conf);
-    RUN_ONE(m, PRKernel, Initialize);
-		for (int i = 0; i < 10; i++) {
-			RUN_ALL(m, PRKernel, PageRankIter);
-			RUN_ALL(m, PRKernel, ClearTable);
-			RUN_ONE(m, PRKernel, WriteStatus);
+    RUN_ONE(m, PRKernel, Initialize, 0);
+		for (int i = 0; i < FLAGS_iterations; i++) {
+			RUN_ALL(m, PRKernel, PageRankIter, 0);
+			RUN_ALL(m, PRKernel, ClearTable, 1);
+			RUN_ONE(m, PRKernel, WriteStatus, 0);
 		}
   } else {
     Worker w(conf);
-    w.create_table<int, double>(0, NUM_WORKERS, &BlkModSharding, &Accumulator<double>::sum);
-    w.create_table<int, double>(1, NUM_WORKERS, &BlkModSharding, &Accumulator<double>::sum);
     w.Run();
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }

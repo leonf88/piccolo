@@ -2,9 +2,10 @@
 
 mkdir -p .deps
 for f in `find src -name '*.cc'` `find src -name '*.c'`; do
-  if [[ .deps/$f -ot $f ]]; then
+  depfile=.deps/$f.d
+  if [[ $depfile -ot $f ]]; then
     mkdir -p .deps/`dirname $f`
-    gcc $CPPFLAGS -MM -MG -MF .deps/$f.d -MT ${f/.cc/.o} $f
+    gcc $CPPFLAGS -MM -MG -MF $depfile -MT ${f/.cc/.o} $f
   fi
 done
 

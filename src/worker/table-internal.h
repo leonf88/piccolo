@@ -9,12 +9,12 @@ namespace upc {
 
 // A local accumulated hash table.
 template <class K, class V>
-class LocalTable : public TypedTable<K, V> {
+class TypedLocalTable : public LocalTable {
 public:
   typedef HashMap<K, V> DataMap;
 
   struct Iterator : public TypedTable<K, V>::Iterator {
-    Iterator(LocalTable<K, V> *t) : it_(t->data_.begin()) {
+    Iterator(TypedLocalTable<K, V> *t) : it_(t->data_.begin()) {
       t_ = t;
     }
 
@@ -31,28 +31,25 @@ public:
 
   private:
     typename DataMap::iterator it_;
-    LocalTable<K, V> *t_;
+    TypedLocalTable<K, V> *t_;
   };
 
-  LocalTable(TableInfo tinfo, int size=10000) :
-    TypedTable<K, V>(tinfo), data_(size) {
+  TypedLocalTable(TableInfo tinfo, int size=10000) :
+    LocalTable(tinfo), data_(size) {
+  }
+
+  V accumulate(const V& a, const V& b) {
+    return ((typename TypedTable<K, V>::AccumFunction)info_.accum_function)(a, b);
   }
 
   bool contains(const K &k) { return data_.contains(k); }
   bool empty() { return data_.empty(); }
   int64_t size() { return data_.size(); }
 
-  Iterator* get_iterator() {
-    return new Iterator(this);
-  }
+  Iterator* get_iterator() { return new Iterator(this); }
+  Iterator* get_typed_iterator() { return new Iterator(this); }
 
-  Iterator* get_typed_iterator() {
-    return new Iterator(this);
-  }
-
-  V get(const K &k) {
-    return data_[k];
-  }
+  V get(const K &k) { return data_[k]; }
 
   void put(const K &k, const V &v) {
     data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
@@ -62,9 +59,7 @@ public:
 //    data_.erase(data_.find(k));
   }
 
-  void clear() {
-    data_.clear();
-  }
+  void clear() { data_.clear(); }
 
   void ApplyUpdates(const HashUpdate& req) {
     for (int i = 0; i < req.put_size(); ++i) {
@@ -74,37 +69,34 @@ public:
     }
   }
 
+  string get_str(const StringPiece &k) {
+    return Data::to_string<V>(get(Data::from_string<K>(k)));
+  }
+
+  void put_str(const StringPiece &k, const StringPiece &v) {
+    const K& kt = Data::from_string<K>(k);
+    const V& vt = Data::from_string<V>(v);
+    put(kt, vt);
+  }
+
+  void remove_str(const StringPiece &k) {
+    remove(Data::from_string<K>(k));
+  }
+
 private:
   DataMap data_;
 };
 
 template <class K, class V>
-class TypedPartitionedTable : public TypedTable<K, V> {
+class TypedGlobalTable : public GlobalTable {
 private:
   static const int32_t kMaxPeers = 8192;
-
-  vector<LocalTable<K, V>*> partitions_;
-  mutable boost::recursive_mutex pending_lock_;
-  volatile int pending_writes_;
-
-  vector<LocalTable<K, V>*> table_pool_;
-
-  vector<bool> local_shards_;
-
+  typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
 public:
-  TypedPartitionedTable(TableInfo tinfo);
-
-  ~TypedPartitionedTable() {
-    for (int i = 0; i < partitions_.size(); ++i) {
-      delete partitions_[i];
-    }
-  }
+  TypedGlobalTable(TableInfo tinfo);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
-
-  // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
-  string get_local(const StringPiece &k);
 
   // Store the given key-value pair in this hash, applying the accumulation
   // policy set at construction.  If 'k' has affinity for a remote thread,
@@ -115,135 +107,62 @@ public:
   // Remove this entry from the local and master table.
   void remove(const K &k);
 
-  // Clear any local data for which this table has ownership.  Pending updates
-  // are *not* cleared.
-  void clear() {
-    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-    for (int i = 0; i < local_shards_.size(); ++i) {
-      if (local_shards_[i]) {
-        partitions_[i]->clear();
-      }
-    }
-  }
-
-  // Append to 'out' the list of local tables that have pending network data.
-  // Return true if any updates were appended.
-  bool GetPendingUpdates(deque<Table*> *out);
-  void ApplyUpdates(const upc::HashUpdate& req);
-  void Free(Table *t);
-
-  int pending_write_bytes();
-
-  Table::Iterator* get_iterator();
-  typename TypedTable<K, V>::Iterator* get_typed_iterator();
+  Table::Iterator* get_iterator(int shard);
+  typename TypedTable<K, V>::Iterator* get_typed_iterator(int shard);
 
   const TableInfo& info() { return this->info_; }
 
-  bool is_local_shard(int shard) {
-    return local_shards_[shard];
+  LocalTable* create_local(int shard) {
+    TableInfo linfo = ((Table*)this)->info();
+    linfo.shard = shard;
+    return new TypedLocalTable<K, V>(linfo);
   }
 
-  bool is_local_key(const StringPiece &k) {
-    return is_local_shard(this->get_shard(k));
+  int get_shard(const K& k) {
+    ShardingFunction sf = (ShardingFunction)info().sharding_function;
+    return sf(k, info().num_shards);
   }
 
-  void local_shards(vector<int>* v) {
-    v->clear();
-    for (int i = 0; i < local_shards_.size(); ++i) {
-      if (local_shards_[i]) {
-        v->push_back(i);
-      }
-    }
+  int get_shard_str(StringPiece k) {
+    return get_shard(Data::from_string<K>(k));
+  }
+
+  string get_str(const StringPiece &k) {
+    return Data::to_string<V>(get(Data::from_string<K>(k)));
+  }
+
+  void put_str(const StringPiece &k, const StringPiece &v) {
+    const K& kt = Data::from_string<K>(k);
+    const V& vt = Data::from_string<V>(v);
+    put(kt, vt);
+  }
+
+  void remove_str(const StringPiece &k) {
+    remove(Data::from_string<K>(k));
   }
 };
 
 template <class K, class V>
-TypedPartitionedTable<K, V>::TypedPartitionedTable(TableInfo tinfo) : TypedTable<K, V>(tinfo) {
+TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
   partitions_.resize(info().num_shards);
   local_shards_.resize(info().num_shards);
 
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.shard = i;
-    partitions_[i] = new LocalTable<K, V>(linfo);
+    partitions_[i] = new TypedLocalTable<K, V>(linfo);
   }
 
   pending_writes_ = 0;
 }
 
 template <class K, class V>
-void TypedPartitionedTable<K, V>::ApplyUpdates(const upc::HashUpdate& req) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  partitions_[req.shard()]->ApplyUpdates(req);
-}
-
-template <class K, class V>
-bool TypedPartitionedTable<K, V>::GetPendingUpdates(deque<Table*> *out) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
-  for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable<K, V> *t = partitions_[i];
-
-    if (!is_local_shard(i) && !t->empty()) {
-      out->push_back(t);
-
-      TableInfo linfo = info();
-      linfo.shard = i;
-
-      if (table_pool_.empty()) {
-        partitions_[i] = new LocalTable<K, V>(linfo);
-      } else {
-        partitions_[i] = table_pool_.back();
-        partitions_[i]->set_info(linfo);
-        table_pool_.pop_back();
-      }
-    }
-  }
-
-  pending_writes_ = 0;
-  return out->size() > 0;
-}
-
-template <class K, class V>
-void TypedPartitionedTable<K, V>::Free(Table *used) {
-  delete used;
-  return;
-
-  if (table_pool_.size() > partitions_.size() * 2) {
-    delete used;
-    return;
-  }
-
-  LocalTable<K, V>* t = static_cast<LocalTable<K, V>* >(used);
-  t->clear();
-
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  table_pool_.push_back(t);
-}
-
-
-template <class K, class V>
-int TypedPartitionedTable<K, V>::pending_write_bytes() {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
-  int64_t s = 0;
-  for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable<K, V> *t = partitions_[i];
-    if (!is_local_shard(i)) {
-      s += t->size();
-    }
-  }
-
-  return s;
-}
-
-template <class K, class V>
-void TypedPartitionedTable<K, V>::put(const K &k, const V &v) {
+void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
   {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
-    partitions_[shard]->put(k, v);
+    static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
   }
 
   if (!is_local_shard(shard)) {
@@ -253,26 +172,12 @@ void TypedPartitionedTable<K, V>::put(const K &k, const V &v) {
   while (pending_writes_ > 1000000) { sched_yield(); }
 }
 
-template <class K, class V>
-string TypedPartitionedTable<K, V>::get_local(const StringPiece &k) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
-  int shard = this->get_shard(Data::from_string<K>(k));
-  CHECK(is_local_shard(shard));
-
-  LocalTable<K, V> *h = partitions_[shard];
-
-//  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
-//          << " : " << Data::from_string<V>(h->get_str(k));
-
-  return h->get_str(k);
-}
 
 template <class K, class V>
-V TypedPartitionedTable<K, V>::get(const K &k) {
+V TypedGlobalTable<K, V>::get(const K &k) {
   int shard = this->get_shard(k);
   if (is_local_shard(shard)) {
-    return partitions_[shard]->get(k);
+    return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
   VLOG(1) << "Fetching non-local key " << k << " from shard " << shard << " : " << info().table_id;
@@ -283,8 +188,8 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
   req.set_key(Data::to_string<K>(k));
   req.set_table_id(info().table_id);
 
-  info().rpc->Send(shard + 1, MTYPE_GET_REQUEST, req);
-  info().rpc->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
+  rpc_->Send(shard + 1, MTYPE_GET_REQUEST, req);
+  rpc_->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
 
   V v = Data::from_string<V>(resp.value(0));
 //  VLOG(1) << "Got result " << Data::to_string<K>(k) << " : " << v;
@@ -293,18 +198,18 @@ V TypedPartitionedTable<K, V>::get(const K &k) {
 }
 
 template <class K, class V>
-void TypedPartitionedTable<K, V>::remove(const K &k) {
+void TypedGlobalTable<K, V>::remove(const K &k) {
   LOG(FATAL) << "Not implemented!";
 }
 
 template <class K, class V>
-Table::Iterator* TypedPartitionedTable<K, V>::get_iterator() {
-  return partitions_[info().shard]->get_iterator();
+Table::Iterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
+  return partitions_[shard]->get_iterator();
 }
 
 template <class K, class V>
-typename TypedTable<K, V>::Iterator* TypedPartitionedTable<K, V>::get_typed_iterator() {
-  return partitions_[info().shard]->get_typed_iterator();
+typename TypedTable<K, V>::Iterator* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+  return (typename TypedTable<K, V>::Iterator*)partitions_[shard]->get_iterator();
 }
 
 

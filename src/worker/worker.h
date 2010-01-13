@@ -26,35 +26,6 @@ public:
 
   struct Peer;
 
-  template <class K, class V>
-  TypedTable<K, V>* create_table(int id,
-                                 int shards,
-                                 typename TypedTable<K, V>::ShardingFunction sharding=&ModSharding,
-                                 typename TypedTable<K, V>::AccumFunction accum=&Accumulator<V>::replace) {
-    TableInfo info;
-    info.num_shards = shards;
-    info.accum_function = (void*)accum;
-    info.sharding_function = (void*)sharding;
-
-    return this->create_table<K, V>(id, info);
-  }
-
-  // Creates the table indicated by 'id' and registers it for use on this node.
-  template <class K, class V>
-  TypedTable<K, V>* create_table(int id, TableInfo info) {
-    if (tables_.find(id) != tables_.end()) {
-      LOG(FATAL) << "Requested duplicate table with id: " << id;
-    }
-
-    info.table_id = id;
-    info.rpc = rpc_;
-
-    TypedTable<K, V> *t = new TypedPartitionedTable<K, V>(info);
-    tables_[id] = t;
-
-    return t;
-  }
-
   int peer_for_shard(int table_id, int shard) {
     return shard % config.num_workers();
   }
@@ -62,15 +33,6 @@ public:
   Stats get_stats() {
     return stats_;
   }
-
-  Table* get_table(int id) {
-    if (tables_.find(id) == tables_.end()) {
-      LOG(FATAL) << "Invalid table: " << id;
-    }
-
-    return tables_[id];
-  }
-
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 500 << 10;
@@ -95,11 +57,27 @@ private:
   // The status of other workers.
   vector<Peer*> peers_;
 
-  // Tables registered in the system.
-  typedef unordered_map<int, Table*> TableMap;
-  TableMap tables_;
+  struct KernelId {
+    string kname_;
+    int table_;
+    int shard_;
 
-  map<string, DSMKernel*> kernels_;
+    KernelId(string kname, int table, int shard) :
+      kname_(kname), table_(table), shard_(shard) {}
+
+#define CMP_LESS(a, b, member)\
+  if ((a).member < (b).member) { return true; }\
+  if ((b).member < (a).member) { return false; }
+
+    bool operator<(const KernelId& o) const {
+      CMP_LESS(*this, o, kname_);
+      CMP_LESS(*this, o, table_);
+      CMP_LESS(*this, o, shard_);
+      return false;
+    }
+  };
+
+  map<KernelId, DSMKernel*> kernels_;
 
   // Network operations.
   void ProcessUpdates(Peer *p);

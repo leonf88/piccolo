@@ -41,7 +41,7 @@ message ConfigData {
 
 message RunKernelRequest {
   required string kernel = 1;
-  required int32 method = 2;
+  required string method = 2;
   optional int32 table = 3;
   optional int32 shard = 4;
 }
