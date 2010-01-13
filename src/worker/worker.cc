@@ -104,6 +104,7 @@ struct Worker::Peer {
 
 Worker::Worker(const ConfigData &c) {
   config.CopyFrom(c);
+  config.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
   num_peers_ = config.num_workers();
   peers_.resize(num_peers_);
@@ -118,6 +119,22 @@ Worker::Worker(const ConfigData &c) {
 
   kernel_thread_ = network_thread_ = NULL;
   kernel_done_ = false;
+
+  // HACKHACKHACK - register ourselves with any existing tables
+  Registry::TableMap *t = Registry::get_tables();
+  for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
+    for (int j = 0; j < i->second->info().num_shards; ++j) {
+      if (peer_for_shard(i->first, j) == config.worker_id()) {
+        LOG(INFO) << "Worker " << config.worker_id() << " is local for " << j;
+        i->second->set_local(j, true);
+      } else {
+        i->second->set_local(j, false);
+      }
+    }
+
+    i->second->set_rpc_helper(rpc_);
+  }
+
 }
 
 void Worker::Run() {
@@ -140,7 +157,7 @@ Worker::~Worker() {
 
 
 void Worker::NetworkLoop() {
-  deque<Table*> work;
+  deque<LocalTable*> work;
   while (running_) {
     PERIODIC(10, {
         VLOG(1) << "Network loop working - " << pending_kernel_bytes() << " bytes in the processing queue.";
@@ -149,8 +166,9 @@ void Worker::NetworkLoop() {
     Poll();
 
     if (work.empty()) {
-      for (TableMap::iterator i = tables_.begin(); i != tables_.end(); ++i) {
-        i->second->GetPendingUpdates(&work);
+      Registry::TableMap *t = Registry::get_tables();
+      for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
+        ((GlobalTable*)i->second)->GetPendingUpdates(&work);
       }
     }
 
@@ -159,7 +177,7 @@ void Worker::NetworkLoop() {
     }
 
     while (!work.empty()) {
-      Table* t = work.front();
+      LocalTable* t = work.front();
       work.pop_front();
 
       Peer * p = peers_[peer_for_shard(t->id(), t->shard())];
@@ -170,8 +188,7 @@ void Worker::NetworkLoop() {
         Poll();
       }
       delete i;
-
-      tables_[t->id()]->Free(t);
+      delete t;
 
       Poll();
     }
@@ -187,7 +204,6 @@ void Worker::KernelLoop() {
 	    continue;
 	  }
 
-
 	  RunKernelRequest k;
 	  {
 	    boost::recursive_mutex::scoped_lock l(kernel_lock_);
@@ -195,31 +211,37 @@ void Worker::KernelLoop() {
 	    kernel_requests_.pop_front();
 	  }
 
-		VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method();
-		KernelHelperBase *helper = Registry::get_helper(k.kernel());
+		VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
 
-    DSMKernel* d = NULL;
-		if (!kernels_[k.kernel()]) {
-		  d = helper->create();
-		  kernels_[k.kernel()] = d;
-		  d->Init(this, k.table(), k.shard());
-		  d->KernelInit();
-		} else {
-		  d = kernels_[k.kernel()];
-		  d->Init(this, k.table(), k.shard());
+		if (peer_for_shard(k.table(), k.shard()) != config.worker_id()) {
+		  LOG(FATAL) << "Received a shard I can't work on!";
 		}
 
+		KernelInfo *helper = Registry::get_kernel_info(k.kernel());
 
+    KernelId id(k.kernel(), k.table(), k.shard());
+    DSMKernel* d = kernels_[id];
+
+		if (!d) {
+		  d = helper->create();
+		  kernels_[id] = d;
+		  d->Init(this, k.table(), k.shard());
+		  d->KernelInit();
+		}
 
 		helper->invoke_method(d, k.method());
 
 		VLOG(1) << "Waiting for network to finish: " << pending_network_writes() << " : " << pending_kernel_bytes();
 
-	  while (pending_kernel_bytes() > 0 || pending_network_writes()) {
+
+    kernel_done_ = true;
+
+    // Wait for the network thread to catch up.
+	  while (pending_kernel_bytes() > 0 ||
+           pending_network_writes() ||
+           kernel_done_) {
 	    Sleep(0.01);
 	  }
-
-	  kernel_done_ = true;
 
 	  VLOG(1) << "Kernel done.";
 #ifdef CPUPROF
@@ -240,8 +262,9 @@ bool Worker::pending_network_writes() const {
 int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
-  for (TableMap::const_iterator i = tables_.begin(); i != tables_.end(); ++i) {
-    t += i->second->pending_write_bytes();
+  Registry::TableMap *tmap = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tmap->begin(); i != tmap->end(); ++i) {
+    t += ((GlobalTable*)i->second)->pending_write_bytes();
   }
 
   return t;
@@ -288,7 +311,7 @@ void Worker::Poll() {
       stats_.set_put_in(stats_.put_in() + 1);
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
-      Table *t = tables_[r->table_id()];
+      Table *t = Registry::get_table(r->table_id());
       t->ApplyUpdates(*r);
       delete r;
     }
@@ -303,7 +326,7 @@ void Worker::Poll() {
       scratch.set_table_id(r->table_id());
 
       VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
-      string v = tables_[r->table_id()]->get_local(r->key());
+      string v = Registry::get_table(r->table_id())->get_local(r->key());
 
       scratch.add_put(r->key(), v);
 

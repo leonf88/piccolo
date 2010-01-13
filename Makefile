@@ -12,8 +12,9 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 #MPI_LIBDIR := -L/home/power/local/mpich2/lib
 #MPI_LIBS := -lmpichcxx -lmpich
 
+CXX := distcc g++
 CDEBUG := -ggdb3
-COPT :=  -O0
+COPT :=  -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
 USE_GOOGLE_PROFILER := 1
@@ -51,7 +52,9 @@ LINK_BIN := $(MPI_LINK)  $(LDFLAGS)
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/coder.o
 LIBRPC_OBJS := src/util/rpc.o
 LIBTEST_OBJS := src/test/file-helper.o src/test/test.pb.o
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o src/worker/registry.o src/master/master.o src/worker/hash-msgs.o
+LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
+				  src/worker/registry.o src/master/master.o\
+				  src/worker/hash-msgs.o src/worker/table.o
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@

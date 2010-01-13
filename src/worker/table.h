@@ -68,9 +68,6 @@ public:
   // functions; they are cast to the appropriate type at the time of use.
   void *accum_function;
   void *sharding_function;
-
-  // Used when fetching remote keys.
-  RPCHelper *rpc;
 };
 
 class Table {
@@ -93,9 +90,10 @@ public:
 
   // Clear the local portion of a shared table.
   virtual void clear() = 0;
+  virtual bool empty() = 0;
+  virtual int64_t size() = 0;
 
-  // Returns a view on the global table containing only local values.
-  virtual Iterator* get_iterator() = 0;
+  virtual void ApplyUpdates(const HashUpdate& up) = 0;
 
   const TableInfo& info() {
     return info_;
@@ -109,73 +107,80 @@ public:
   int shard() { return info_.shard; }
 
   TableInfo info_;
+};
 
-  // The following functions are only available on partitioned tables:
-  virtual bool is_local_shard(int shard) { LOG(FATAL) << "Not implemented."; }
-  virtual bool is_local_key(const StringPiece &k) { LOG(FATAL) << "Not implemented."; }
+class LocalTable : public Table {
+public:
+  LocalTable(const TableInfo& info) : Table(info) {}
+  // Returns a view on the global table containing values only from 'shard'.
+  // 'shard' must be local.
+  virtual Table::Iterator* get_iterator() = 0;
+};
 
-  virtual void local_shards(vector<int>* v) { LOG(FATAL) << "Not implemented."; }
+class GlobalTable : public Table {
+public:
+  GlobalTable(const TableInfo& info) : Table(info) {}
+
+  virtual ~GlobalTable() {
+    for (int i = 0; i < partitions_.size(); ++i) {
+      delete partitions_[i];
+    }
+  }
+
+  LocalTable *get_partition(int shard) { return partitions_[shard]; }
+  Table::Iterator* get_iterator(int shard) {
+    return partitions_[shard]->get_iterator();
+  }
+
+  virtual int get_shard_str(StringPiece k) = 0;
+
+  bool is_local_shard(int shard);
+  bool is_local_key(const StringPiece &k);
+
+  vector<int> local_shards();
+  void set_local(int s, bool local);
 
   // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
-  virtual string get_local(const StringPiece &k) { LOG(FATAL) << "Not implemented."; }
+  string get_local(const StringPiece &k);
 
   // Append to 'out' the list of accumulators that have pending network data.  Return
   // true if any updates were appended.
-  virtual bool GetPendingUpdates(deque<Table*> *out) { LOG(FATAL) << "Not implemented."; }
+  bool GetPendingUpdates(deque<LocalTable*> *out);
+  void ApplyUpdates(const upc::HashUpdate& req);
+  int pending_write_bytes();
 
-  // Give this table back to the partitioned table for use.
-  virtual void Free(Table* t) { LOG(FATAL) << "Not implemented."; }
+  // Clear any local data for which this table has ownership.  Pending updates
+  // are *not* cleared.
+  void clear();
+  bool empty();
+  int64_t size() { return 1; }
 
-  virtual void ApplyUpdates(const upc::HashUpdate& req) { LOG(FATAL) << "Not implemented."; }
-  virtual int pending_write_bytes() { LOG(FATAL) << "Not implemented."; }
+  void set_rpc_helper(RPCHelper* r) { rpc_ = r; }
 
+protected:
+  friend class Worker;
+  virtual LocalTable* create_local(int shard) = 0;
+
+  vector<uint8_t> local_shards_;
+  vector<LocalTable*> partitions_;
+  volatile int pending_writes_;
+  mutable boost::recursive_mutex pending_lock_;
+
+  // Used when fetching remote keys.
+  RPCHelper *rpc_;
 };
 
 template <class K, class V>
-class TypedTable : public Table {
+class TypedTable {
 public:
   struct Iterator : public Table::Iterator {
     virtual const K& key() = 0;
     virtual V& value() = 0;
   };
 
-  TypedTable(const TableInfo& tinfo) : Table(tinfo) {}
-
   // Functions for locating and accumulating data.
   typedef V (*AccumFunction)(const V& a, const V& b);
   typedef int (*ShardingFunction)(const K& k, int num_shards);
-
-  virtual V get(const K& k) = 0;
-  virtual void put(const K& k, const V &v) = 0;
-  virtual void remove(const K& k) { }
-
-  virtual Iterator* get_typed_iterator() = 0;
-
-  string get_str(const StringPiece &k) {
-    return Data::to_string<V>(get(Data::from_string<K>(k)));
-  }
-
-  void put_str(const StringPiece &k, const StringPiece &v) {
-    const K& kt = Data::from_string<K>(k);
-    const V& vt = Data::from_string<V>(v);
-    put(kt, vt);
-  }
-
-  void remove_str(const StringPiece &k) {
-    remove(Data::from_string<K>(k));
-  }
-
-  int get_shard(StringPiece k) {
-    return get_shard(Data::from_string<K>(k));
-  }
-
-  int get_shard(const K& k) {
-    return ((typename TypedTable<K, V>::ShardingFunction)info_.sharding_function)(k, info_.num_shards);
-  }
-
-  V accumulate(const V& a, const V& b) {
-    return ((typename TypedTable<K, V>::AccumFunction)info_.accum_function)(a, b);
-  }
 };
 
 }

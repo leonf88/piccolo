@@ -5,54 +5,58 @@
 using namespace upc;
 
 
-static TypedTable<int, double>* min_hash = NULL;
-static TypedTable<int, double>* max_hash = NULL;
-static TypedTable<int, double>* sum_hash = NULL;
-static TypedTable<int, double>* replace_hash = NULL;
-static TypedTable<int, Pair>* pair_hash = NULL;
+static TypedGlobalTable<int, double>* min_hash = NULL;
+static TypedGlobalTable<int, double>* max_hash = NULL;
+static TypedGlobalTable<int, double>* sum_hash = NULL;
+static TypedGlobalTable<int, double>* replace_hash = NULL;
+static TypedGlobalTable<int, Pair>* pair_hash = NULL;
 
-void TestPut() {
-  Pair p;
-  for (int i = 0; i < 100; ++i) {
-    min_hash->put(i, i);
-    max_hash->put(i, i);
-    sum_hash->put(i, i);
-    replace_hash->put(i, i);
-    p.set_key(StringPrintf("%d", i));
-    p.set_value(StringPrintf("%d", i));
-    pair_hash->put(i, p);
+class TableKernel : public DSMKernel {
+public:
+  void TestPut() {
+    Pair p;
+    for (int i = 0; i < 100; ++i) {
+      min_hash->put(i, i);
+      max_hash->put(i, i);
+      sum_hash->put(i, i);
+      replace_hash->put(i, i);
+      p.set_key(StringPrintf("%d", i));
+      p.set_value(StringPrintf("%d", i));
+      pair_hash->put(i, p);
+    }
   }
-}
-REGISTER_KERNEL(TestPut);
 
-void TestGet() {
-  int num_threads = min_hash->info().num_shards;
-  for (int i = 0; i < 100; ++i) {
-    CHECK_EQ((int)min_hash->get(i), i);
-    CHECK_EQ((int)max_hash->get(i), i);
-    CHECK_EQ((int)replace_hash->get(i), i);
-    CHECK_EQ((int)sum_hash->get(i), i * num_threads);
-    CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
+  void TestGet() {
+    int num_threads = min_hash->info().num_shards;
+    for (int i = 0; i < 100; ++i) {
+      CHECK_EQ((int)min_hash->get(i), i);
+      CHECK_EQ((int)max_hash->get(i), i);
+      CHECK_EQ((int)replace_hash->get(i), i);
+      CHECK_EQ((int)sum_hash->get(i), i * num_threads);
+      CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
+    }
   }
-}
-REGISTER_KERNEL(TestGet);
 
-void TestGetLocal() {
-  TypedTable<int, double>::Iterator *it = min_hash->get_typed_iterator();
-  int num_threads = min_hash->info().num_shards;
+  void TestGetLocal() {
+    TypedTable<int, double>::Iterator *it = min_hash->get_typed_iterator(shard());
+    int num_threads = min_hash->info().num_shards;
 
-  while (!it->done()) {
-    const int& k = it->key();
-    CHECK_EQ((int)min_hash->get(k), k);
-    CHECK_EQ((int)max_hash->get(k), k);
-    CHECK_EQ((int)replace_hash->get(k), k);
-    CHECK_EQ((int)sum_hash->get(k), k * num_threads);
-    CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
-    it->Next();
+    while (!it->done()) {
+      const int& k = it->key();
+      CHECK_EQ((int)min_hash->get(k), k);
+      CHECK_EQ((int)max_hash->get(k), k);
+      CHECK_EQ((int)replace_hash->get(k), k);
+      CHECK_EQ((int)sum_hash->get(k), k * num_threads);
+      CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
+      it->Next();
+    }
   }
-}
-REGISTER_KERNEL(TestGetLocal);
+};
 
+REGISTER_KERNEL(TableKernel);
+REGISTER_METHOD(TableKernel, TestPut);
+REGISTER_METHOD(TableKernel, TestGet);
+REGISTER_METHOD(TableKernel, TestGetLocal);
 
 static void TestMarshalling() {
   ConfigData c;
@@ -76,11 +80,13 @@ int main(int argc, char **argv) {
 
   TestMarshalling();
 
+
+
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    m.run_all(&TestPut);
-    m.run_all(&TestGetLocal);
-    m.run_all(&TestGet);
+    RUN_ALL(m, TableKernel, TestPut, 0);
+    RUN_ALL(m, TableKernel, TestGetLocal, 0);
+    RUN_ALL(m, TableKernel, TestGet, 0);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);

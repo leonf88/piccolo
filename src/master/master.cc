@@ -16,43 +16,37 @@ Master::~Master() {
   }
 }
 
-void Master::run_all(const string& kernel, int method) {
-  vector<int> nodes;
-  for (int i = 1; i < world_.Get_size(); ++i) {
-    nodes.push_back(i);
+void Master::run_all(const RunDescriptor& r) {
+  vector<int> shards;
+  for (int i = 0; i < Registry::get_table(r.table)->info().num_shards; ++i) {
+    shards.push_back(i);
   }
-  run_range(kernel, method, nodes);
+  run_range(r, shards);
 }
 
-void Master::run_one(const string& kernel, int method) {
-  vector<int> nodes;
-  nodes.push_back(1);
-  run_range(kernel, method, nodes);
+void Master::run_one(const RunDescriptor& r) {
+  vector<int> shards;
+  shards.push_back(0);
+  run_range(r, shards);
 }
 
 int Master::worker_for_shard(int shard) {
   return shard % config_.num_workers();
 }
 
-void Master::run_range(const string& kernel, int method, vector<int> shards) {
+void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   RunKernelRequest msg;
-  msg.set_kernel(kernel);
-  msg.set_method(method);
+  msg.set_kernel(r.kernel);
+  msg.set_method(r.method);
 
   Timer t;
   for (int i = 0; i < shards.size(); ++i) {
-    rpc_->Send(worker_for_shard(shards[i]), MTYPE_RUN_KERNEL, ProtoWrapper(msg));
+    msg.set_shard(shards[i]);
+    VLOG(1) << "Sending shard: " << shards[i] << " to " << worker_for_shard(shards[i]);
+    rpc_->Send(1 + worker_for_shard(shards[i]), MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
 
   string waiting(shards.size(), '0');
-//  int peer = 0;
-//  for (int i = 0; i < nodes.size(); ++i) {
-//    EmptyMessage msg;
-//    ProtoWrapper wrapper(msg);
-//    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
-//    waiting[peer - 1] = '1';
-//    LOG(INFO) << "Finished kernel: " << waiting;
-//  }
 
   EmptyMessage empty;
   ProtoWrapper wrapper(empty);
@@ -60,12 +54,13 @@ void Master::run_range(const string& kernel, int method, vector<int> shards) {
   while (!shards.empty()) {
     bool found = false;
     for (int j = 0; j < shards.size(); ++j) {
-      if (rpc_->TryRead(worker_for_shard(shards[j]), MTYPE_KERNEL_DONE, &wrapper)) {
+      if (rpc_->TryRead(1 + worker_for_shard(shards[j]),
+                        MTYPE_KERNEL_DONE, &wrapper)) {
         waiting[shards[j] - 1] = '1';
 
         shards.erase(shards.begin() + j);
         found = true;
-//        LOG(INFO) << "Kernels finished: " << waiting;
+        LOG(INFO) << "Kernels finished: " << waiting << " : " << waiting.size() - shards.size();
         break;
       }
     }

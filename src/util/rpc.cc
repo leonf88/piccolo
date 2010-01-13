@@ -1,6 +1,7 @@
 #include "util/rpc.h"
 
 DECLARE_bool(localtest);
+DEFINE_bool(rpc_log, false, "");
 
 namespace upc {
 
@@ -15,12 +16,14 @@ void ProtoWrapper::ParseFromCoder(Decoder *d) {
 }
 
 #define rpc_log(msg, src, target, rpc)\
-//  VLOG(2) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg
+  do {\
+  if (FLAGS_rpc_log) { LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg; }\
+  } while(0)
 
 bool RPCHelper::HasData(int peerId, int rpcId) {
   boost::recursive_mutex::scoped_lock sl(mpi_lock_);
 
-  rpc_log("IProbe", my_rank_, peerId, rpcId);
+//  rpc_log("IProbe", my_rank_, peerId, rpcId);
   return mpi_world_->Iprobe(peerId, rpcId);
 }
 
@@ -30,7 +33,7 @@ bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
   string scratch;
   MPI::Status status;
 
-  rpc_log("IProbeStart", my_rank_, peerId, rpcId);
+//  rpc_log("IProbeStart", my_rank_, peerId, rpcId);
   MPI::Status probe_result;
   if (mpi_world_->Iprobe(peerId, rpcId, probe_result)) {
     success = true;
@@ -45,7 +48,7 @@ bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
     msg->ParseFromString(scratch);
   }
 
-  rpc_log("IProbeDone", my_rank_, peerId, rpcId);
+//  rpc_log("IProbeDone", my_rank_, peerId, rpcId);
   return success;
 }
 
