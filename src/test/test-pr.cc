@@ -13,7 +13,7 @@ static double TOTALRANK = 0;
 static int NUM_WORKERS = 2;
 
 static const double kPropagationFactor = 0.8;
-static const int kBlocksize = 10000;
+static const int kBlocksize = 1000;
 
 DEFINE_int32(num_nodes, 64, "");
 DEFINE_int32(iterations, 10, "");
@@ -40,9 +40,15 @@ void BuildGraph(int shards, int nodes, int density) {
     n.set_id(i);
 
     for (int j = 0; j < density; j++) {
-      n.add_target(random() % nodes);
+      n.add_target((i + j * 1000) % nodes);
     }
     
+
+    for (int j = 0; j < density; j++) {
+      n.add_target(j);
+    }
+
+
     out[BlkModSharding(i,shards)]->write(n);
     EVERY_N((nodes / 50), fprintf(stderr, "."));
   }
@@ -83,7 +89,7 @@ public:
     LOG(INFO) << "iter: " << iter;
 
     fprintf(stderr, "PR:: ");
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 30; ++i) {
       fprintf(stderr, "%.2f ", curr_pr_hash->get(i));
     }
     fprintf(stderr, "\n");
@@ -98,7 +104,7 @@ public:
       double v = curr_pr_hash->get(n.id());
 
       for (int i = 0; i < n.target_size(); ++i) {
-  //      LOG(INFO) << "Adding: " << PROP * v / n.target_size() << " to " << n.target(i);
+//        LOG_EVERY_N(INFO, 1000) << "Adding: " << kPropagationFactor * v / n.target_size() << " to " << n.target(i);
         next_pr_hash->put(n.target(i), kPropagationFactor*v/n.target_size());
       }
     }
