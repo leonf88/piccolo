@@ -80,6 +80,11 @@ int main(int argc, char **argv) {
 
   TestMarshalling();
 
+  min_hash = Registry::create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
+  max_hash = Registry::create_table<int, double>(1, 10, &ModSharding, &Accumulator<double>::max);
+  sum_hash = Registry::create_table<int, double>(2, 10, &ModSharding, &Accumulator<double>::sum);
+  replace_hash = Registry::create_table<int, double>(3, 10, &ModSharding, &Accumulator<double>::replace);
+  pair_hash = Registry::create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
 
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
@@ -90,11 +95,6 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-    min_hash = w.create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
-    max_hash = w.create_table<int, double>(1, 10, &ModSharding, &Accumulator<double>::max);
-    sum_hash = w.create_table<int, double>(2, 10, &ModSharding, &Accumulator<double>::sum);
-    replace_hash = w.create_table<int, double>(3, 10, &ModSharding, &Accumulator<double>::replace);
-    pair_hash = w.create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
     w.Run();
   }
 

@@ -149,6 +149,9 @@ int main(int argc, char **argv) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
+  Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
+  Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
+
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
     RUN_ONE(m, KMeansKernel, initialize_world, 0);
@@ -163,8 +166,6 @@ int main(int argc, char **argv) {
     }
   } else {
     Worker w(conf);
-    dists = w.create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
-    points = w.create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
     w.Run();
   }
 }
