@@ -78,11 +78,12 @@ int RPCHelper::ReadAny(int *peerId, int rpcId, RPCMessage *msg) {
   int r_size = 0;
   string scratch;
 
-  rpc_log("BProbeStart", my_rank_, MPI_ANY_SOURCE, rpcId);
+  while (!HasData(MPI_ANY_SOURCE, rpcId)) {
+    Sleep(0.001);
+  }
+
   MPI::Status probe_result;
   mpi_world_->Probe(MPI_ANY_SOURCE, rpcId, probe_result);
-
-  rpc_log("BProbeDone", my_rank_, MPI_ANY_SOURCE, rpcId);
 
   r_size = probe_result.Get_count(MPI::BYTE);
   *peerId = probe_result.Get_source();

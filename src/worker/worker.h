@@ -39,7 +39,8 @@ private:
   static const int32_t kNetworkTimeout = 20;
 
   deque<Table*> pending_writes_;
-  deque<RunKernelRequest> kernel_requests_;
+  deque<KernelRequest> kernel_requests_;
+  deque<KernelRequest> kernel_done_;
 
   boost::recursive_mutex kernel_lock_;
 
@@ -50,7 +51,6 @@ private:
 
   int num_peers_;
   bool running_;
-  bool kernel_done_;
 
   ConfigData config;
 

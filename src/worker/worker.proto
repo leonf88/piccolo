@@ -39,7 +39,7 @@ message ConfigData {
   required int32 master_id = 3;  
 }
 
-message RunKernelRequest {
+message KernelRequest {
   required string kernel = 1;
   required string method = 2;
   optional int32 table = 3;
