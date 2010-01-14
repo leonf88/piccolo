@@ -118,7 +118,6 @@ Worker::Worker(const ConfigData &c) {
   rpc_ = new RPCHelper(&world_);
 
   kernel_thread_ = network_thread_ = NULL;
-  kernel_done_ = false;
 
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap *t = Registry::get_tables();
@@ -204,7 +203,7 @@ void Worker::KernelLoop() {
 	    continue;
 	  }
 
-	  RunKernelRequest k;
+	  KernelRequest k;
 	  {
 	    boost::recursive_mutex::scoped_lock l(kernel_lock_);
 	    k = kernel_requests_.front();
@@ -233,15 +232,12 @@ void Worker::KernelLoop() {
 
 		VLOG(1) << "Waiting for network to finish: " << pending_network_writes() << " : " << pending_kernel_bytes();
 
-
-    kernel_done_ = true;
-
-    // Wait for the network thread to catch up.
-	  while (pending_kernel_bytes() > 0 ||
-           pending_network_writes() ||
-           kernel_done_) {
+		// Wait for the network thread to catch up.
+	  while (pending_kernel_bytes() > 0 || pending_network_writes()) {
 	    Sleep(0.01);
 	  }
+
+	  kernel_done_.push_back(k);
 
 	  VLOG(1) << "Kernel done.";
 #ifdef CPUPROF
@@ -347,23 +343,20 @@ void Worker::Poll() {
     }
   }
 
-  // Check for new kernels to run.
+  boost::recursive_mutex::scoped_lock sl(kernel_lock_);
+
+  // Check for new kernels to run, and report finished kernels to the master.
   {
-    RunKernelRequest k;
+    KernelRequest k;
     ProtoWrapper wrapper(k);
     if (rpc_->TryRead(config.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
-      boost::recursive_mutex::scoped_lock sl(kernel_lock_);
       kernel_requests_.push_back(k);
     }
   }
 
-  // If the current kernel has completed, send a message to master indicating
-  // that we've completed our kernel and we are done transmitting.
-  if (kernel_done_) {
-    EmptyMessage m;
-    rpc_->Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(m));
-
-    kernel_done_ = false;
+  while (!kernel_done_.empty()) {
+    rpc_->Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
+    kernel_done_.pop_front();
   }
 }
 

@@ -35,7 +35,7 @@ int Master::worker_for_shard(int shard) {
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
-  RunKernelRequest msg;
+  KernelRequest msg;
   msg.set_kernel(r.kernel);
   msg.set_method(r.method);
 
@@ -48,27 +48,18 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   string waiting(shards.size(), '0');
 
-  EmptyMessage empty;
-  ProtoWrapper wrapper(empty);
+  KernelRequest done;
+  ProtoWrapper wrapper(done);
 
-  while (!shards.empty()) {
-    bool found = false;
-    for (int j = 0; j < shards.size(); ++j) {
-      if (rpc_->TryRead(1 + worker_for_shard(shards[j]),
-                        MTYPE_KERNEL_DONE, &wrapper)) {
-        waiting[shards[j] - 1] = '1';
-
-        shards.erase(shards.begin() + j);
-        found = true;
-        LOG(INFO) << "Kernels finished: " << waiting << " : " << waiting.size() - shards.size();
-        break;
-      }
-    }
-
-    if (!found) { Sleep(0.0001); }
+  for (int j = 0; j < shards.size(); ++j) {
+    int shard = shards[j];
+    int peer = 0;
+    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
+    waiting[done.shard()] = '1';
+    VLOG(1) << "Kernels finished: " << waiting << " : " << shard << " : " << waiting.size() - shards.size();
   }
 
-  LOG(INFO) << "Kernels finished in " << t.elapsed();
+  LOG(INFO) << "Kernel run finished in " << t.elapsed();
 }
 
 }
