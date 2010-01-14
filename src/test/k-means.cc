@@ -26,6 +26,7 @@ struct Distribution {
 
 static TypedGlobalTable<int, Point> *points;
 static TypedGlobalTable<int, Distribution> *dists;
+static TypedGlobalTable<int, Distribution> *actual;
 
 double rand_double() {
   return double(random()) / RAND_MAX;
@@ -41,6 +42,9 @@ public:
       double dy = 0.5 - rand_double();
 
       LOG(INFO) << "Distribution " << i << " center " << dx << " : " << dy;
+
+      Distribution d = { dx, dy };
+      actual->put(i, d);
 
       for (int j = 0; j < FLAGS_num_points / FLAGS_num_dists; ++j) {
         Point p = { dx + 0.1 * (rand_double() - 0.5),
@@ -115,14 +119,16 @@ public:
   }
 
   void print_results() {
+    for (int i = 0; i < FLAGS_num_dists; ++i) {
+      Distribution d = dists->get(i);
+      Distribution a = actual->get(i);
+      printf("%d guess: (%.2f %.2f) actual: (%.2f %.2f) error(%.2f, %.2f)\n",
+             i, d.x, d.y, a.x, a.y, fabs(d.x - a.x), fabs(d.y - a.y));
+    }
+
     for (int i = 0; i < FLAGS_num_points; ++i) {
       Point p = points->get(i);
       printf("%.2f %.2f %d\n", p.x, p.y, p.source);
-    }
-
-    for (int i = 0; i < FLAGS_num_dists; ++i) {
-      Distribution d = dists->get(i);
-      printf("%.2f %.2f %d\n", d.x, d.y, i);
     }
   }
 };
@@ -149,8 +155,9 @@ int main(int argc, char **argv) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
-  Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
-  Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
+  dists = Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
+  points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
+  actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
