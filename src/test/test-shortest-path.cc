@@ -6,6 +6,8 @@
 
 using namespace upc;
 DEFINE_int32(num_nodes, 10000, "");
+DEFINE_int32(shards, 10, "");
+
 DEFINE_bool(dump_output, false, "");
 
 static int NUM_WORKERS = 0;
@@ -51,7 +53,7 @@ struct ShortestPathKernel : public DSMKernel {
 
   void Propagate() {
     if (local_nodes.empty()) {
-      RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", shard(), NUM_WORKERS), "r");
+      RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", shard(), FLAGS_shards), "r");
       PathNode n;
       while (r.read(&n)) {
         local_nodes.push_back(n);
@@ -91,8 +93,10 @@ int main(int argc, char **argv) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   NUM_WORKERS = conf.num_workers();
 
+  distance = Registry::create_table<int, double>(0, FLAGS_shards, &ModSharding, &Accumulator<double>::min);
+
   if (MPI::COMM_WORLD.Get_rank() == 0) {
-    BuildGraph(NUM_WORKERS, FLAGS_num_nodes, 4);
+    BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);
 
     Master m(conf);
     RUN_ONE(m, ShortestPathKernel, Initialize, 0);
@@ -106,8 +110,6 @@ int main(int argc, char **argv) {
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
-
-    distance = w.create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
     w.Run();
 
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();

@@ -77,7 +77,7 @@ namespace Registry {
   TableMap *get_tables();
 
   template <class K, class V>
-  GlobalTable* create_table(int id, int shards,
+  TypedGlobalTable<K, V>* create_table(int id, int shards,
                               typename TypedTable<K, V>::ShardingFunction sharding,
                               typename TypedTable<K, V>::AccumFunction accum) {
     TableInfo info;
@@ -86,7 +86,7 @@ namespace Registry {
     info.sharding_function = (void*)sharding;
     info.table_id = id;
 
-    GlobalTable *t = new TypedGlobalTable<K, V>(info);
+    TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
     get_tables()->insert(make_pair(id, t));
     return t;
   }
