@@ -63,32 +63,24 @@ void BuildGraph(int shards, int nodes, int density) {
 class PRKernel : public DSMKernel {
 public:
   int iter;
-  vector<PathNode> nodes;
+  vector<Page> nodes;
   TypedGlobalTable<int, double>* curr_pr_hash;
   TypedGlobalTable<int, double>* next_pr_hash;
 
   void KernelInit() {
     curr_pr_hash = this->get_table<int, double>(0);
     next_pr_hash = this->get_table<int, double>(1);
-
-    RecordFile r(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d",
-                              shard(), curr_pr_hash->info().num_shards, FLAGS_num_nodes), "r");
-    PathNode n;
-    while (r.read(&n)) {
-      nodes.push_back(n);
-    }
   }
 
   void Initialize() {
-    for (int i = 0; i < FLAGS_num_nodes; i++) {
-      curr_pr_hash->put(i, (1-kPropagationFactor)*(TOTALRANK/FLAGS_num_nodes));
+    for (int i = current_shard(); i < FLAGS_nodes; i += get_table(0)->num_shards()) {
+      LOG_EVERY_N(INFO, 1000000) << "Initializing... " << LOG_OCCURRENCES;
+      curr_pr_hash->put(i, (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes));
     }
   }
 
   void WriteStatus() {
-    LOG(INFO) << "iter: " << iter;
-
-    fprintf(stderr, "PR:: ");
+    fprintf(stderr, "Iteration %d, PR:: ", iter);
     for (int i = 0; i < 30; ++i) {
       fprintf(stderr, "%.2f ", curr_pr_hash->get(i));
     }
@@ -98,9 +90,11 @@ public:
   void PageRankIter() {
     ++iter;
 
-    for (int i = 0; i < nodes.size(); ++i) {
-      PathNode &n = nodes[i];
-//      LOG(INFO) << n.id();
+    RecordFile r(StringPrintf(FLAGS_graph_prefix + "-%05d-of-%05d-N%05d",
+                              current_shard(), curr_pr_hash->info().num_shards, FLAGS_nodes), "r");
+    Page n;
+    Timer t;
+    while (r.read(&n)) {
       double v = curr_pr_hash->get(n.id());
 
       for (int i = 0; i < n.target_size(); ++i) {
@@ -108,27 +102,28 @@ public:
         next_pr_hash->put(n.target(i), kPropagationFactor*v/n.target_size());
       }
     }
+
+    LOG(INFO) << "Finished shard " << current_shard() << " in " << t.elapsed();
   }
 
-  void ClearTable() {
+  void ResetTable() {
     // Move the values computed from the last iteration into the current table, and reset
     // the values local to our node to the random restart value.
     swap(curr_pr_hash, next_pr_hash);
     next_pr_hash->clear();
 
-    TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator(shard());
+    TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
     while (!it->done()) {
-      next_pr_hash->put(it->key(), (1-kPropagationFactor)*(TOTALRANK/FLAGS_num_nodes));
+      next_pr_hash->put(it->key(), (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes));
       it->Next();
     }
   }
 };
-
 REGISTER_KERNEL(PRKernel);
 REGISTER_METHOD(PRKernel, Initialize);
 REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
-REGISTER_METHOD(PRKernel, ClearTable);
+REGISTER_METHOD(PRKernel, ResetTable);
 
 int main(int argc, char **argv) {
 	Init(argc, argv);
@@ -136,28 +131,36 @@ int main(int argc, char **argv) {
   ConfigData conf;                                                            
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
 
-	NUM_WORKERS = conf.num_workers();
-	TOTALRANK = FLAGS_num_nodes;
+  // Cap address space at 2G.
+  struct rlimit rl;
+  rl.rlim_cur = 1l << 31;
+  rl.rlim_max = 1l << 31;
+  setrlimit(RLIMIT_AS, &rl);
 
-	Registry::create_table<int, double>(0, FLAGS_shards, &BlkModSharding, &Accumulator<double>::sum);
-	Registry::create_table<int, double>(1, FLAGS_shards, &BlkModSharding, &Accumulator<double>::sum);
+  sharding = FLAGS_use_block_sharding ? &BlkModSharding : &ModSharding;
+
+	NUM_WORKERS = conf.num_workers();
+	TOTALRANK = FLAGS_nodes;
+
+	Registry::create_table<int, double>(0, FLAGS_shards, sharding, &Accumulator<double>::sum);
+	Registry::create_table<int, double>(1, FLAGS_shards, sharding, &Accumulator<double>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     if (FLAGS_build_graph) {
-      BuildGraph(FLAGS_shards, FLAGS_num_nodes, 10);
+      BuildGraph(FLAGS_shards, FLAGS_nodes, 10);
     }
 
     Master m(conf);
-    RUN_ONE(m, PRKernel, Initialize, 0);
+    RUN_ALL(m, PRKernel, Initialize, 0);
 		for (int i = 0; i < FLAGS_iterations; i++) {
 			RUN_ALL(m, PRKernel, PageRankIter, 0);
-			RUN_ALL(m, PRKernel, ClearTable, 1);
+			RUN_ALL(m, PRKernel, ResetTable, 1);
 			RUN_ONE(m, PRKernel, WriteStatus, 0);
 		}
   } else {
     Worker w(conf);
     w.Run();
-    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
+    LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
   }
 }
 
