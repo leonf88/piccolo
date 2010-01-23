@@ -8,8 +8,9 @@
 #include "worker/worker.h"
 #include "worker/registry.h"
 
-namespace upc {
-static const int kMaxNetworkChunk = 1 << 20;
+namespace dsm {
+static const int kMaxNetworkChunk = 1 << 10;
+static const int kNetworkTimeout = 2.0;
 
 struct Worker::Peer {
 

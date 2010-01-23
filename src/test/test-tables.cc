@@ -2,52 +2,53 @@
 #include "util/file.h"
 #include "worker/worker.h"
 #include "master/master.h"
-using namespace upc;
+using namespace dsm;
 
 
-static TypedGlobalTable<int, double>* min_hash = NULL;
-static TypedGlobalTable<int, double>* max_hash = NULL;
-static TypedGlobalTable<int, double>* sum_hash = NULL;
-static TypedGlobalTable<int, double>* replace_hash = NULL;
-static TypedGlobalTable<int, Pair>* pair_hash = NULL;
+static TypedGlobalTable<int, int>* min_hash = NULL;
+static TypedGlobalTable<int, int>* max_hash = NULL;
+static TypedGlobalTable<int, int>* sum_hash = NULL;
+static TypedGlobalTable<int, int>* replace_hash = NULL;
+//static TypedGlobalTable<int, Pair>* pair_hash = NULL;
 
 class TableKernel : public DSMKernel {
 public:
   void TestPut() {
+    LOG(INFO) << "Here: " << current_shard() << " : " << min_hash->num_shards();
     Pair p;
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 1000000; ++i) {
       min_hash->put(i, i);
       max_hash->put(i, i);
-      sum_hash->put(i, i);
+      sum_hash->put(i, 1);
       replace_hash->put(i, i);
-      p.set_key(StringPrintf("%d", i));
-      p.set_value(StringPrintf("%d", i));
-      pair_hash->put(i, p);
+//      p.set_key(StringPrintf("%d", i));
+//      p.set_value(StringPrintf("%d", i));
+//      pair_hash->put(i, p);
     }
   }
 
   void TestGet() {
-    int num_threads = min_hash->info().num_shards;
-    for (int i = 0; i < 100; ++i) {
-      CHECK_EQ((int)min_hash->get(i), i);
-      CHECK_EQ((int)max_hash->get(i), i);
-      CHECK_EQ((int)replace_hash->get(i), i);
-      CHECK_EQ((int)sum_hash->get(i), i * num_threads);
-      CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
+    int num_shards = min_hash->num_shards();
+    for (int i = 0; i < 1000000; ++i) {
+      CHECK_EQ((int)min_hash->get(i), i) << " i= " << i;
+      CHECK_EQ((int)max_hash->get(i), i) << " i= " << i;
+      CHECK_EQ((int)replace_hash->get(i), i) << " i= " << i;
+      CHECK_EQ((int)sum_hash->get(i), num_shards) << " i= " << i;
+//      CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
     }
   }
 
   void TestGetLocal() {
-    TypedTable<int, double>::Iterator *it = min_hash->get_typed_iterator(shard());
-    int num_threads = min_hash->info().num_shards;
+    TypedTable<int, int>::Iterator *it = min_hash->get_typed_iterator(current_shard());
+    int num_shards = min_hash->num_shards();
 
     while (!it->done()) {
       const int& k = it->key();
-      CHECK_EQ((int)min_hash->get(k), k);
-      CHECK_EQ((int)max_hash->get(k), k);
-      CHECK_EQ((int)replace_hash->get(k), k);
-      CHECK_EQ((int)sum_hash->get(k), k * num_threads);
-      CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
+      CHECK_EQ((int)min_hash->get(k), k) << " k= " << k;
+      CHECK_EQ((int)max_hash->get(k), k) << " k= " << k;
+      CHECK_EQ((int)replace_hash->get(k), k) << " k= " << k;
+      CHECK_EQ((int)sum_hash->get(k), num_shards) << " k= " << k;
+//      CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
       it->Next();
     }
   }
@@ -80,11 +81,11 @@ int main(int argc, char **argv) {
 
   TestMarshalling();
 
-  min_hash = Registry::create_table<int, double>(0, 10, &ModSharding, &Accumulator<double>::min);
-  max_hash = Registry::create_table<int, double>(1, 10, &ModSharding, &Accumulator<double>::max);
-  sum_hash = Registry::create_table<int, double>(2, 10, &ModSharding, &Accumulator<double>::sum);
-  replace_hash = Registry::create_table<int, double>(3, 10, &ModSharding, &Accumulator<double>::replace);
-  pair_hash = Registry::create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
+  min_hash = Registry::create_table<int, int>(0, 10, &ModSharding, &Accumulator<int>::min);
+  max_hash = Registry::create_table<int, int>(1, 10, &ModSharding, &Accumulator<int>::max);
+  sum_hash = Registry::create_table<int, int>(2, 10, &ModSharding, &Accumulator<int>::sum);
+  replace_hash = Registry::create_table<int, int>(3, 10, &ModSharding, &Accumulator<int>::replace);
+//  pair_hash = Registry::create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
 
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {

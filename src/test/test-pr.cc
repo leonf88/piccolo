@@ -5,51 +5,51 @@
 
 #include "test/test.pb.h"
 
+#include <sys/time.h>
+#include <sys/resource.h>
 #include <algorithm>
 
-using std::swap;
+using namespace dsm;
+using namespace std;
 
 static double TOTALRANK = 0;
 static int NUM_WORKERS = 2;
 
 static const double kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
+static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
-DEFINE_int32(num_nodes, 64, "");
-DEFINE_int32(iterations, 10, "");
 DEFINE_int32(shards, 10, "");
+DEFINE_int32(iterations, 10, "");
+
 DEFINE_bool(build_graph, false, "");
+DEFINE_int32(nodes, 10000, "");
 
-using namespace upc;
+DEFINE_bool(use_block_sharding, true, "");
 
-static int BlkModSharding(const int& key, int shards) {
-  return (key/kBlocksize) % shards;
-}
+DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
+
+static int (*sharding)(const int& key, int shards);
+static int BlkModSharding(const int& key, int shards) { return (key/kBlocksize) % shards; }
 
 void BuildGraph(int shards, int nodes, int density) {
+  fprintf(stderr, "Building graph: ");
   vector<RecordFile*> out(shards);
   Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/pr-graph.rec-%05d-of-%05d-N%05d", i, shards, nodes), "w");
+    out[i] = new RecordFile(StringPrintf("%s-%05d-of-%05d-N%05d",
+                                         kTestPrefix, i, shards, nodes), "w");
   }
 
-  fprintf(stderr, "Building graph: ");
-  PathNode n;
+  Page n;
   for (int i = 0; i < nodes; i++) {
     n.Clear();
     n.set_id(i);
 
-    for (int j = 0; j < density; j++) {
-      n.add_target((i + j * 1000) % nodes);
-    }
-    
+    for (int j = 0; j < density; j++) { n.add_target((i + j * 1000) % nodes); }
+    for (int j = 0; j < density; j++) { n.add_target(j); }
 
-    for (int j = 0; j < density; j++) {
-      n.add_target(j);
-    }
-
-
-    out[BlkModSharding(i,shards)]->write(n);
+    out[sharding(i,shards)]->write(n);
     EVERY_N((nodes / 50), fprintf(stderr, "."));
   }
 

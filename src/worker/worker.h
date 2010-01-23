@@ -12,7 +12,7 @@
 
 using boost::shared_ptr;
 
-namespace upc {
+namespace dsm {
 
 class Worker : private boost::noncopyable {
 public:
@@ -84,7 +84,7 @@ private:
   void ComputeUpdates(Peer *p, Table::Iterator *it);
   void Poll();
 
-  bool pending_network_writes() const;
+  int64_t pending_network_bytes() const;
   int64_t pending_kernel_bytes() const;
 
   Stats stats_;

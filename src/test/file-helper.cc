@@ -2,7 +2,7 @@
 #include "test/file-helper.h"
 #include "test/test.pb.h"
 
-using namespace upc;
+using namespace dsm;
 
 // Wrapper struct to return to C-land.
 struct RFile {

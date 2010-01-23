@@ -6,7 +6,7 @@
 #include <mpi.h>
 #include <google/protobuf/message.h>
 
-namespace upc {
+namespace dsm {
 
 class RPCHelper;
 

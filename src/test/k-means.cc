@@ -12,7 +12,7 @@ DEFINE_int32(num_dists, 2, "");
 DEFINE_int32(num_points, 100, "");
 DEFINE_bool(dump_results, false, "");
 
-using namespace upc;
+using namespace dsm;
 
 struct Point {
   double x, y;
@@ -64,7 +64,7 @@ public:
   }
 
   void initialize_expectation() {
-    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(shard());
+    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       it->value().min_dist = 2;
     }
@@ -75,7 +75,7 @@ public:
   void compute_expectation() {
     for (int i = 0; i < FLAGS_num_dists; ++i) {
       Distribution d = dists->get(i);
-      TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(shard());
+      TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
       for (; !it->done(); it->Next()) {
         Point &p = it->value();
         double dist = pow(p.x - d.x, 2) + pow(p.y - d.y, 2);
@@ -88,7 +88,7 @@ public:
   }
 
   void initialize_maximization() {
-    TypedTable<int, Distribution>::Iterator *it = dists->get_typed_iterator(shard());
+    TypedTable<int, Distribution>::Iterator *it = dists->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       Distribution &d = it->value();
       LOG(INFO) << "Distribution" << ":: " << it->key() << " :: "<< d.x << " : " << d.y;
@@ -109,7 +109,7 @@ public:
   // appropriate distribution.
   void compute_maximization() {
     Distribution d;
-    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(shard());
+    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       const Point &p = it->value();
       d.x = p.x * FLAGS_num_dists / FLAGS_num_points;

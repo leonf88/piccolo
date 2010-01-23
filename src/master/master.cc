@@ -1,6 +1,6 @@
 #include "master/master.h"
 
-namespace upc {
+namespace dsm {
 
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
@@ -40,23 +40,31 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   msg.set_method(r.method);
 
   Timer t;
+  vector<int> done(config_.num_workers());
   for (int i = 0; i < shards.size(); ++i) {
     msg.set_shard(shards[i]);
     VLOG(1) << "Sending shard: " << shards[i] << " to " << worker_for_shard(shards[i]);
     rpc_->Send(1 + worker_for_shard(shards[i]), MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
 
-  string waiting(shards.size(), '0');
+  KernelRequest kernel_done;
+  ProtoWrapper wrapper(kernel_done);
 
-  KernelRequest done;
-  ProtoWrapper wrapper(done);
-
+  int count = 0;
   for (int j = 0; j < shards.size(); ++j) {
     int shard = shards[j];
     int peer = 0;
     rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
-    waiting[done.shard()] = '1';
-    VLOG(1) << "Kernels finished: " << waiting << " : " << shard << " : " << waiting.size() - shards.size();
+
+    done[peer] += 1;
+    ++count;
+
+    string status;
+    for (int k = 0; k < config_.num_workers(); ++k) {
+      status += StringPrintf("%d: %d; ", k, done[k]);
+    }
+
+    VLOG(1) << "Kernels finished: " << status << " left " << shards.size() - count;
   }
 
   LOG(INFO) << "Kernel run finished in " << t.elapsed();

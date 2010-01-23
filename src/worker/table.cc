@@ -1,6 +1,6 @@
 #include "worker/table.h"
 
-namespace upc {
+namespace dsm {
 
 void GlobalTable::clear() {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
@@ -75,7 +75,7 @@ int GlobalTable::pending_write_bytes() {
   return s;
 }
 
-void GlobalTable::ApplyUpdates(const upc::HashUpdate& req) {
+void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
   boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[req.shard()]->ApplyUpdates(req);
 }

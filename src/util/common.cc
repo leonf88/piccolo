@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <execinfo.h>
@@ -12,6 +11,8 @@
 
 #include <asm/msr.h>
 #include <sys/time.h>
+
+#include <lzo/lzo1x.h>
 
 #include <mpi.h>
 #ifdef CPUPROF
@@ -22,13 +23,14 @@ DEFINE_bool(cpu_profile, false, "");
 DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
 
-namespace upc {
+namespace dsm {
 
 boost::thread_group programThreads;
 
 StringPiece::StringPiece() : data(NULL), len(0) {}
 StringPiece::StringPiece(const string& s) : data(s.data()), len(s.size()) {}
 StringPiece::StringPiece(const string& s, int len) : data(s.data()), len(len) {}
+StringPiece::StringPiece(const char* c) : data(c), len(strlen(c)) {}
 StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
 uint32_t StringPiece::hash() const { return Hash32(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
@@ -39,17 +41,17 @@ uint64_t rdtsc(void) {
     return (((uint64_t)hi)<<32) | ((uint64_t)lo);
 }
 
-string StringPrintf(const char* fmt, ...) {
+string StringPrintf(StringPiece fmt, ...) {
   va_list l;
-  va_start(l, fmt);
+  va_start(l, fmt.AsString().c_str());
 
   return VStringPrintf(fmt, l);
   va_end(l);
 }
 
-string VStringPrintf(const char* fmt, va_list l) {
+string VStringPrintf(StringPiece fmt, va_list l) {
   char buffer[32768];
-  vsnprintf(buffer, 32768, fmt, l);
+  vsnprintf(buffer, 32768, fmt.AsString().c_str(), l);
   return string(buffer);
 }
 
@@ -146,7 +148,7 @@ void SpinLock::unlock() volatile {
 }
 
 static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
-  static upc::SpinLock l;
+  static dsm::SpinLock l;
   l.lock();
 
   char buffer[1024];
@@ -188,6 +190,8 @@ static void FatalSignalHandler(int sig) {
 void Init(int argc, char** argv) {
   FLAGS_logtostderr = true;
   FLAGS_logbuflevel = -1;
+
+  CHECK_EQ(lzo_init(), 0);
 
   MPI::Init_thread(argc, argv, MPI::THREAD_SERIALIZED);
 

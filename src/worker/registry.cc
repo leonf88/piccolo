@@ -4,7 +4,7 @@
 #include "worker/worker.h"
 #include "worker/table.h"
 
-namespace upc {
+namespace dsm {
 
 void DSMKernel::Init(Worker* w, int table_id, int shard) {
   w_ = w;

@@ -4,7 +4,7 @@
 #include "master/master.h"
 #include "test/test.pb.h"
 
-using namespace upc;
+using namespace dsm;
 DEFINE_int32(num_nodes, 10000, "");
 DEFINE_int32(shards, 10, "");
 
@@ -53,7 +53,7 @@ struct ShortestPathKernel : public DSMKernel {
 
   void Propagate() {
     if (local_nodes.empty()) {
-      RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", shard(), FLAGS_shards), "r");
+      RecordFile r(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", current_shard(), FLAGS_shards), "r");
       PathNode n;
       while (r.read(&n)) {
         local_nodes.push_back(n);

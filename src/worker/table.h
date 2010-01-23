@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-namespace upc {
+namespace dsm {
 
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
 static int ModSharding(const int& key, int shards) { return key % shards; }
@@ -39,7 +39,6 @@ struct Data {
   static void unmarshal(const StringPiece& s, T *t) {
     *t = *reinterpret_cast<const T*>(s.data);
   }
-
 
   template <class T>
   static string to_string(const T& t) {
@@ -95,16 +94,12 @@ public:
 
   virtual void ApplyUpdates(const HashUpdate& up) = 0;
 
-  const TableInfo& info() {
-    return info_;
-  }
+  const TableInfo& info() const { return info_; }
+  void set_info(const TableInfo& t) { info_ = t; }
 
-  void set_info(const TableInfo& t) {
-    info_ = t;
-  }
-
-  int id() { return info_.table_id; }
-  int shard() { return info_.shard; }
+  int id() const { return info_.table_id; }
+  int shard() const { return info_.shard; }
+  int num_shards() const { return info_.num_shards; }
 
   TableInfo info_;
 };
@@ -146,7 +141,7 @@ public:
   // Append to 'out' the list of accumulators that have pending network data.  Return
   // true if any updates were appended.
   bool GetPendingUpdates(deque<LocalTable*> *out);
-  void ApplyUpdates(const upc::HashUpdate& req);
+  void ApplyUpdates(const dsm::HashUpdate& req);
   int pending_write_bytes();
 
   // Clear any local data for which this table has ownership.  Pending updates

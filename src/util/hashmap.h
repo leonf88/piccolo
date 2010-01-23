@@ -13,7 +13,7 @@
 
 #include <boost/dynamic_bitset.hpp>
 
-namespace upc {
+namespace dsm {
 
 template <class K>
 static int simple_hash(K k) {
@@ -43,7 +43,7 @@ private:
     V value;
   };
 
-  static const double kLoadFactor = 0.3;
+  static const double kLoadFactor = 0.7;
   typedef boost::dynamic_bitset<uint64_t> BitSet;
 
   int bucket_idx(K k) {
@@ -226,7 +226,7 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
 
   if (!buckets_[b].in_use) {
     if (entries_ > size_ * kLoadFactor) {
-      rehash((int)size_ / kLoadFactor);
+      rehash((int)size_ * 3);
     }
 
     buckets_[b].in_use = 1;

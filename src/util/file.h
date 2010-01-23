@@ -8,7 +8,7 @@
 
 namespace google { namespace protobuf { class Message; } }
 
-namespace upc {
+namespace dsm {
 
 extern string Slurp(const string& file);
 extern void Dump(const string& file, StringPiece data);
@@ -64,15 +64,16 @@ private:
 
 class RecordFile {
 public:
-  RecordFile(const string& path, const string& mode);
+  RecordFile(const string& path, const string& mode,
+             int compression=NONE);
   ~RecordFile() {
     fflush(fp.filePointer());
   }
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
-  typedef unordered_map<string, string> ParamMap;
-  ParamMap params;
+  typedef unordered_map<string, string> AttrMap;
+  AttrMap attributes;
 
   void write(const google::protobuf::Message &m);
   bool read(google::protobuf::Message *m);
@@ -86,6 +87,7 @@ private:
   string temp;
   LocalFile fp;
   bool firstWrite;
+  FileParams params_;
 };
 }
 
