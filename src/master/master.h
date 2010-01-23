@@ -7,7 +7,7 @@
 #include "util/common.h"
 #include "util/rpc.h"
 
-namespace upc {
+namespace dsm {
 
 class Master {
 public:

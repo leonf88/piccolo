@@ -5,7 +5,7 @@
 #include "worker/hash-msgs.h"
 #include "util/hashmap.h"
 
-namespace upc {
+namespace dsm {
 
 // A local accumulated hash table.
 template <class K, class V>
@@ -182,6 +182,8 @@ V TypedGlobalTable<K, V>::get(const K &k) {
 
   VLOG(1) << "Fetching non-local key " << k << " from shard " << shard << " : " << info().table_id;
 
+//  LOG(FATAL) << "Disabled.";
+
   HashRequest req;
   HashUpdate resp;
 
@@ -213,6 +215,6 @@ typename TypedTable<K, V>::Iterator* TypedGlobalTable<K, V>::get_typed_iterator(
 }
 
 
-} // end namespace upc
+} // end namespace dsm
 
 #endif /* TABLEINTERNAL_H_ */

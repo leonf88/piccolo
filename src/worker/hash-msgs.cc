@@ -1,6 +1,6 @@
 #include "worker/hash-msgs.h"
 
-namespace upc {
+namespace dsm {
 // Hand defined serialization for hash request/update messages.  Painful, but
 // necessary as the protocol buffer serialization is too slow to be usable.
 

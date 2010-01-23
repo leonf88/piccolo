@@ -5,7 +5,7 @@
 #include "worker/table.h"
 #include "worker/table-internal.h"
 
-namespace upc {
+namespace dsm {
 
 class Worker;
 class Master;
@@ -13,7 +13,7 @@ class Master;
 class DSMKernel {
 public:
   // The table and shard to be processed.
-  int shard() const { return shard_; }
+  int current_shard() const { return shard_; }
   int table_id() const { return table_id_; }
 
   Table* get_table(int id);

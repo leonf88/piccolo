@@ -1,6 +1,6 @@
 #include "util/coder.h"
 
-namespace upc {
+namespace dsm {
 #define WRITE_POD(T)\
 void Encoder::write(const T& v) {\
   out_->append((const char*)&v, (size_t)sizeof(v));\

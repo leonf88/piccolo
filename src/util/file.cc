@@ -1,8 +1,9 @@
 #include "util/file.h"
 #include "util/common.h"
 #include "google/protobuf/message.h"
+#include <lzo/lzo1x.h>
 
-namespace upc {
+namespace dsm {
 
 void Mkdirs(const string& path) {
   system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str());
@@ -73,26 +74,27 @@ LocalFile::LocalFile(const string &name, const string& mode) {
   }
 }
 
-RecordFile::RecordFile(const string& path, const string& mode) : fp(path, mode), firstWrite(true) {
+RecordFile::RecordFile(const string& path,
+                       const string& mode,
+                       int compression) : fp(path, mode), firstWrite(true) {
   if (strstr(mode.c_str(), "r")) {
-    FileParams pp;
-    pp.ParseFromString(readChunk());
+    params_.ParseFromString(readChunk());
 
-    for (int i = 0; i < pp.param_size(); ++i) {
-      params[pp.param(i).key()] = pp.param(i).value();
+    for (int i = 0; i < params_.attr_size(); ++i) {
+      attributes[params_.attr(i).key()] = params_.attr(i).value();
     }
   }
+  params_.set_compression(compression);
 }
 
 void RecordFile::writeHeader() {
-  FileParams pproto;
-  for (ParamMap::iterator i = params.begin(); i != params.end(); ++i) {
-    FileParam *p = pproto.add_param();
+  for (AttrMap::iterator i = attributes.begin(); i != attributes.end(); ++i) {
+    FileAttribute *p = params_.add_attr();
     p->set_key(i->first);
     p->set_value(i->second);
   }
 
-  writeChunk(pproto.SerializeAsString());
+  writeChunk(params_.SerializeAsString());
 }
 
 void RecordFile::write(const google::protobuf::Message & m) {

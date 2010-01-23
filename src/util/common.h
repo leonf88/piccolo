@@ -25,7 +25,7 @@
 
 #include "util/hash.h"
 
-namespace upc {
+namespace dsm {
 
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
@@ -108,6 +108,7 @@ public:
   StringPiece();
   StringPiece(const string& s);
   StringPiece(const string& s, int len);
+  StringPiece(const char* c);
   StringPiece(const char* c, int len);
   uint32_t hash() const;
   string AsString() const;
@@ -120,8 +121,8 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
   return a.data == b.data && a.len == b.len;
 }
 
-extern string StringPrintf(const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
-extern string VStringPrintf(const char* fmt, va_list args);
+extern string StringPrintf(StringPiece fmt, ...);
+extern string VStringPrintf(StringPiece fmt, va_list args);
 
 extern uint64_t rdtsc(void);
 extern double Now();
@@ -179,8 +180,8 @@ private:
 
 namespace std {  namespace tr1 {
 template <>
-struct hash<upc::StringPiece> : public unary_function<upc::StringPiece, size_t> {
-  size_t operator()(const upc::StringPiece& k) const {
+struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {
+  size_t operator()(const dsm::StringPiece& k) const {
     return k.hash();
   }
 };

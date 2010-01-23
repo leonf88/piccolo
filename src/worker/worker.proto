@@ -1,4 +1,6 @@
-package upc;
+package dsm;
+
+option optimize_for = SPEED;
 
 enum MessageTypes {
   MTYPE_RUN_KERNEL = 1;

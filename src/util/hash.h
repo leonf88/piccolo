@@ -58,7 +58,7 @@ int rem;
     return hash;
 }
 
-namespace upc {
+namespace dsm {
   static inline uint32_t Hash32(const char *key, size_t length) {
     return SuperFastHash(key, length);
   }

@@ -3,7 +3,7 @@
 DECLARE_bool(localtest);
 DEFINE_bool(rpc_log, false, "");
 
-namespace upc {
+namespace dsm {
 
 void ProtoWrapper::AppendToCoder(Encoder *e) const {
   string s = p_->SerializeAsString();

@@ -3,7 +3,7 @@
 
 #include "util/common.h"
 
-namespace upc {
+namespace dsm {
 class Encoder {
 public:
   Encoder(string *s) : out_(s) {}
