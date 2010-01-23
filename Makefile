@@ -5,7 +5,7 @@ VPATH := src/
 MPI_INC := -I/usr/lib/openmpi/include/
 MPI_LINK := mpic++.openmpi
 MPI_LIBDIR := -L/usr/local/lib
-MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
+MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal
 
 #MPI_LINK := /home/power/local/mpich2/bin/mpic++ -mpe=mpicheck
 #MPI_INC := -I/home/power/local/mpich2/include
@@ -13,7 +13,7 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal -ldl -lutil -lpthread
 #MPI_LIBS := -lmpichcxx -lmpich
 
 CXX := distcc g++
-CDEBUG := -ggdb3
+CDEBUG := -ggdb2
 COPT :=  -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
@@ -32,7 +32,7 @@ endif
 CFLAGS := $(CFLAGS) $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
-UPCC := /home/power/stuff/bupc/bin/upcc
+UPCC := /home/power/local/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp -O
 UPC_LIBDIR := -L/home/power/local/upc/opt/lib
 UPC_THREADS := -T 20
@@ -41,8 +41,8 @@ UPC_THREADS := -T 20
 LDFLAGS := 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
-DYNAMIC_LIBS := -lprotobuf
-STATIC_LIBS := -lglog -lgflags -lboost_thread-mt $(PROF_LIBS)
+DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread
+STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 $(PROF_LIBS) -Wl,-Bdynamic
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r $(LDFLAGS)
@@ -60,11 +60,11 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 all: bin/test-shortest-path\
-	 bin/test-shortest-path-upc\
 	 bin/mpi-test bin/test-tables\
 	 bin/test-pr\
-	 bin/test-pr-upc\
-	 bin/k-means 
+	 bin/k-means
+#  bin/test-shortest-path-upc\
+#	 bin/test-pr-upc\
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -107,10 +107,10 @@ bin/mpi-test: src/test/mpi-test.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
+	rm -f bin/*
 	find src -name '*.o' -exec rm {} \;
 	find src -name '*.pb.h' -exec rm {} \;
 	find src -name '*.pb.cc' -exec rm {} \;
-	rm -f bin/*
 
 %.pb.cc %.pb.h : %.proto
 	protoc -Isrc/ --cpp_out=$(CURDIR)/src $<
