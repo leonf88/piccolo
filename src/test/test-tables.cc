@@ -5,6 +5,8 @@
 using namespace dsm;
 
 
+DEFINE_int32(table_size, 100000, "");
+
 static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
 static TypedGlobalTable<int, int>* sum_hash = NULL;
@@ -16,7 +18,7 @@ public:
   void TestPut() {
     LOG(INFO) << "Here: " << current_shard() << " : " << min_hash->num_shards();
     Pair p;
-    for (int i = 0; i < 1000000; ++i) {
+    for (int i = 0; i < FLAGS_table_size; ++i) {
       min_hash->put(i, i);
       max_hash->put(i, i);
       sum_hash->put(i, 1);
@@ -29,11 +31,11 @@ public:
 
   void TestGet() {
     int num_shards = min_hash->num_shards();
-    for (int i = 0; i < 1000000; ++i) {
-      CHECK_EQ((int)min_hash->get(i), i) << " i= " << i;
-      CHECK_EQ((int)max_hash->get(i), i) << " i= " << i;
-      CHECK_EQ((int)replace_hash->get(i), i) << " i= " << i;
-      CHECK_EQ((int)sum_hash->get(i), num_shards) << " i= " << i;
+    for (int i = 0; i < FLAGS_table_size; ++i) {
+      CHECK_EQ(min_hash->get(i), i) << " i= " << i;
+      CHECK_EQ(max_hash->get(i), i) << " i= " << i;
+      CHECK_EQ(replace_hash->get(i), i) << " i= " << i;
+      CHECK_EQ(sum_hash->get(i), num_shards) << " i= " << i;
 //      CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
     }
   }
@@ -44,10 +46,10 @@ public:
 
     while (!it->done()) {
       const int& k = it->key();
-      CHECK_EQ((int)min_hash->get(k), k) << " k= " << k;
-      CHECK_EQ((int)max_hash->get(k), k) << " k= " << k;
-      CHECK_EQ((int)replace_hash->get(k), k) << " k= " << k;
-      CHECK_EQ((int)sum_hash->get(k), num_shards) << " k= " << k;
+      CHECK_EQ(min_hash->get(k), k) << " k= " << k;
+      CHECK_EQ(max_hash->get(k), k) << " k= " << k;
+      CHECK_EQ(replace_hash->get(k), k) << " k= " << k;
+      CHECK_EQ(sum_hash->get(k), num_shards) << " k= " << k;
 //      CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
       it->Next();
     }
