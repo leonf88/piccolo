@@ -162,7 +162,9 @@ void HashMap<K, V>::rehash(int size) {
     size = 1 << (log2(size) + 1);
   }
 
-  //LOG(INFO) << "Rehashing... " << size << " : " << entries_;
+//  if (entries_ > 0) {
+//    LOG(INFO) << "Rehashing... " << size << " : " << entries_;
+//  }
   vector<Bucket> old_buckets = buckets_;
 
   buckets_.resize(size);
@@ -170,9 +172,7 @@ void HashMap<K, V>::rehash(int size) {
   clear();
 
   for (int i = 0; i < old_buckets.size(); ++i) {
-    if (old_buckets[i].in_use) {
-      put(old_buckets[i].key, old_buckets[i].value);
-    }
+    if (old_buckets[i].in_use) { put(old_buckets[i].key, old_buckets[i].value); }
   }
 
   end_->pos = size_;
@@ -227,12 +227,13 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   if (!buckets_[b].in_use) {
     if (entries_ > size_ * kLoadFactor) {
       rehash((int)size_ * 3);
+      put(k, v);
+    } else {
+      buckets_[b].in_use = 1;
+      buckets_[b].key = k;
+      buckets_[b].value = v;
+      ++entries_;
     }
-
-    buckets_[b].in_use = 1;
-    buckets_[b].key = k;
-    buckets_[b].value = v;
-    ++entries_;
   } else {
     buckets_[b].value = v;
   }
