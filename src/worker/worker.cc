@@ -41,11 +41,26 @@ struct Worker::Peer {
 
   int32_t id;
   RPCHelper *helper;
-
   int64_t pending_out_;
 
-
   Peer(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
+
+  // Send the given message type and data to this peer.
+  Request* Send(int rpc_type, RPCMessage* ureq) {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
+
+    Request* r = new Request();
+    r->target = id;
+    r->rpc_type = rpc_type;
+    ureq->AppendToString(&r->payload);
+//    ureq->ParseFromString(r->payload);
+
+    r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
+    outgoing_requests_.push_back(r);
+    pending_out_ += r->payload.size();
+
+    return r;
+  }
 
   void CollectPendingSends() {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
@@ -66,6 +81,8 @@ struct Worker::Peer {
     }
   }
 
+  int64_t pending_out_bytes() const { return pending_out_; }
+
   void ReceiveIncomingData() {
     while (helper->HasData(id, MTYPE_PUT_REQUEST)) {
       HashUpdate *req = new HashUpdate;
@@ -81,27 +98,6 @@ struct Worker::Peer {
         incoming_requests_.push_back(req);
       }
     }
-  }
-
-  int64_t pending_out_bytes() const {
-    return pending_out_;
-  }
-
-  // Send the given message type and data to this peer.
-  Request* Send(int rpc_type, RPCMessage* ureq) {
-    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
-    Request* r = new Request();
-    r->target = id;
-    r->rpc_type = rpc_type;
-    ureq->AppendToString(&r->payload);
-//    ureq->ParseFromString(r->payload);
-
-    r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
-    outgoing_requests_.push_back(r);
-    pending_out_ += r->payload.size();
-
-    return r;
   }
 
   HashUpdate *pop_data() {
@@ -147,17 +143,14 @@ Worker::Worker(const ConfigData &c) {
       }
     }
 
-    i->second->set_rpc_helper(rpc_);
+    i->second->info_.worker = this;
   }
 
   LOG(INFO) << "Worker " << config_.worker_id() << " is local for " << local_tables;
 }
 
 void Worker::Run() {
-  kernel_thread_ = new boost::thread(boost::bind(&Worker::KernelLoop, this));
-
-  NetworkLoop();
-  kernel_thread_->join();
+  KernelLoop();
 }
 
 Worker::~Worker() {
@@ -170,46 +163,16 @@ Worker::~Worker() {
   }
 }
 
+void Worker::SendUpdate(LocalTable *t) {
+  Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
 
-void Worker::NetworkLoop() {
-  while (running_) {
-    PERIODIC(10, {
-        VLOG(1) << StringPrintf("Worker %d; K: %ld; N: %ld",
-                                config_.worker_id(), pending_kernel_bytes(), pending_network_bytes());
-    });
-
-    PollMaster();
-    PollPeers();
-
-    if (pending_sends_.empty()) {
-      Registry::TableMap *t = Registry::get_tables();
-      for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
-        ((GlobalTable*)i->second)->GetPendingUpdates(&pending_sends_);
-      }
-    }
-
-    if (pending_sends_.empty() && pending_network_bytes() == 0) {
-      Sleep(0.01);
-      continue;
-    }
-
-    while (!pending_sends_.empty()) {
-      LocalTable* t = pending_sends_.front();
-      pending_sends_.pop_front();
-
-      Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
-
-      Table::Iterator *i = t->get_iterator();
-      while (!i->done()) {
-        ComputeUpdates(p, i);
-      }
-
-      delete i;
-      delete t;
-
-      PollPeers();
-    }
+  Table::Iterator *i = t->get_iterator();
+  while (!i->done()) {
+    SendPartial(p, i);
   }
+  delete i;
+
+  PollPeers();
 }
 
 void Worker::KernelLoop() {
@@ -218,19 +181,13 @@ void Worker::KernelLoop() {
   while (running_) {
     if (kernel_queue_.empty()) {
       Sleep(0.01);
+      PollMaster();
+      PollPeers();
       continue;
     }
 
-    KernelRequest k;
-    {
-      boost::recursive_mutex::scoped_lock l(kernel_lock_);
-      k = kernel_queue_.front();
-      kernel_queue_.pop_front();
-    }
-
-    CHECK_EQ(pending_network_bytes(), 0);
-    CHECK_EQ(pending_kernel_bytes(), 0);
-    CHECK(pending_sends_.empty());
+    KernelRequest k = kernel_queue_.front();
+    kernel_queue_.pop_front();
 
     VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
 
@@ -251,14 +208,12 @@ void Worker::KernelLoop() {
     }
 
     helper->invoke_method(d, k.method());
+    kernel_done_.push_back(k);
 
-    while (!network_idle()) {
-      PERIODIC(5, { LOG(INFO) << "Waiting for network " << pending_network_bytes() << " : " 
-                                                        << pending_kernel_bytes(); } );
-      Sleep(0.1);
+    for (Registry::TableMap::iterator i = Registry::get_tables()->begin();
+         i != Registry::get_tables()->end(); ++i) {
+      i->second->SendUpdates();
     }
-
-      kernel_done_.push_back(k);
 
     VLOG(1) << "Kernel done.";
 #ifdef CPUPROF
@@ -289,10 +244,10 @@ int64_t Worker::pending_kernel_bytes() const {
 }
 
 bool Worker::network_idle() const {
-  return pending_network_bytes() == 0 && pending_sends_.empty() && pending_kernel_bytes() == 0;
+  return pending_network_bytes() == 0;
 }
 
-void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
+void Worker::SendPartial(Peer *p, Table::Iterator *it) {
   HashUpdate *r = &p->write_scratch;
   r->Clear();
 
@@ -375,7 +330,7 @@ void Worker::PollMaster() {
   boost::recursive_mutex::scoped_lock sl(kernel_lock_);
 
   // Check for new kernels to run, and report finished kernels to the master.
-  {
+  if (network_idle()) {
     KernelRequest k;
     ProtoWrapper wrapper(k);
     if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
@@ -383,11 +338,9 @@ void Worker::PollMaster() {
     }
   }
 
-  if (network_idle()) {
-    while (!kernel_done_.empty()) {
-      rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
-      kernel_done_.pop_front();
-    }
+  while (!kernel_done_.empty()) {
+    rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
+    kernel_done_.pop_front();
   }
 }
 

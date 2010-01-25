@@ -22,7 +22,6 @@ public:
   void Run();
 
   void KernelLoop();
-  void NetworkLoop();
 
   struct Peer;
 
@@ -33,6 +32,9 @@ public:
   Stats get_stats() {
     return stats_;
   }
+
+  // Send the given table to the appropriate peer machine.
+  void SendUpdate(LocalTable *t);
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 500 << 10;
@@ -55,9 +57,6 @@ private:
 
   // The status of other workers.
   vector<Peer*> peers_;
-
-  // Push data we have yet to commit to the network
-  deque<LocalTable*> pending_sends_;
 
   struct KernelId {
     string kname_;
@@ -83,7 +82,7 @@ private:
 
   // Network operations.
   void ProcessUpdates(Peer *p);
-  void ComputeUpdates(Peer *p, Table::Iterator *it);
+  void SendPartial(Peer *p, Table::Iterator *it);
   void PollPeers();
   void PollMaster();
 

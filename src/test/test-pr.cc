@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
 		for (int i = 0; i < FLAGS_iterations; i++) {
 			RUN_ALL(m, PRKernel, PageRankIter, 0);
 			RUN_ALL(m, PRKernel, ResetTable, 1);
-			RUN_ONE(m, PRKernel, WriteStatus, 0);
+//			RUN_ONE(m, PRKernel, WriteStatus, 0);
 		}
   } else {
     Worker w(conf);
