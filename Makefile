@@ -62,7 +62,8 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
 all: bin/test-shortest-path\
 	 bin/mpi-test bin/test-tables\
 	 bin/test-pr\
-	 bin/k-means
+	 bin/k-means\
+	 bin/test-hashmap
 #  bin/test-shortest-path-upc\
 #	 bin/test-pr-upc\
 
@@ -101,6 +102,9 @@ bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/k-means.o 
+	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
+
+bin/test-hashmap: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-hashmap.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 bin/mpi-test: src/test/mpi-test.o
