@@ -44,9 +44,10 @@ uint64_t rdtsc(void) {
 string StringPrintf(StringPiece fmt, ...) {
   va_list l;
   va_start(l, fmt.AsString().c_str());
-
-  return VStringPrintf(fmt, l);
+  string result = VStringPrintf(fmt, l);
   va_end(l);
+
+  return result;
 }
 
 string VStringPrintf(StringPiece fmt, va_list l) {

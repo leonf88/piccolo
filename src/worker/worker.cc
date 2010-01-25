@@ -118,13 +118,13 @@ struct Worker::Peer {
 };
 
 Worker::Worker(const ConfigData &c) {
-  config.CopyFrom(c);
-  config.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
+  config_.CopyFrom(c);
+  config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
   world_ = MPI::COMM_WORLD;
   rpc_ = new RPCHelper(&world_);
 
-  num_peers_ = config.num_workers();
+  num_peers_ = config_.num_workers();
   peers_.resize(num_peers_);
   for (int i = 0; i < num_peers_; ++i) {
     peers_[i] = new Peer(i + 1, rpc_);
@@ -139,7 +139,7 @@ Worker::Worker(const ConfigData &c) {
   string local_tables;
   for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
     for (int j = 0; j < i->second->info().num_shards; ++j) {
-      if (peer_for_shard(i->first, j) == config.worker_id()) {
+      if (peer_for_shard(i->first, j) == config_.worker_id()) {
         i->second->set_local(j, true);
         local_tables += StringPrintf("%d,", j);
       } else {
@@ -150,7 +150,7 @@ Worker::Worker(const ConfigData &c) {
     i->second->set_rpc_helper(rpc_);
   }
 
-  LOG(INFO) << "Worker " << config.worker_id() << " is local for " << local_tables;
+  LOG(INFO) << "Worker " << config_.worker_id() << " is local for " << local_tables;
 }
 
 void Worker::Run() {
@@ -165,7 +165,6 @@ Worker::~Worker() {
   delete kernel_thread_;
   delete network_thread_;
 
-  for (int i = 0; i < pending_writes_.size(); ++i) {delete pending_writes_[i];}
   for (int i = 0; i < peers_.size(); ++i) {
     delete peers_[i];
   }
@@ -173,41 +172,42 @@ Worker::~Worker() {
 
 
 void Worker::NetworkLoop() {
-  deque<LocalTable*> work;
   while (running_) {
     PERIODIC(10, {
         VLOG(1) << StringPrintf("Worker %d; K: %ld; N: %ld",
-                                config.worker_id(), pending_kernel_bytes(), pending_network_bytes());
+                                config_.worker_id(), pending_kernel_bytes(), pending_network_bytes());
     });
 
-    Poll();
+    PollMaster();
+    PollPeers();
 
-    if (work.empty()) {
+    if (pending_sends_.empty()) {
       Registry::TableMap *t = Registry::get_tables();
       for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
-        ((GlobalTable*)i->second)->GetPendingUpdates(&work);
+        ((GlobalTable*)i->second)->GetPendingUpdates(&pending_sends_);
       }
     }
 
-    if (work.empty() && pending_network_bytes() == 0) {
+    if (pending_sends_.empty() && pending_network_bytes() == 0) {
       Sleep(0.01);
+      continue;
     }
 
-    while (!work.empty()) {
-      LocalTable* t = work.front();
-      work.pop_front();
+    while (!pending_sends_.empty()) {
+      LocalTable* t = pending_sends_.front();
+      pending_sends_.pop_front();
 
-      Peer * p = peers_[peer_for_shard(t->id(), t->shard())];
+      Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
 
       Table::Iterator *i = t->get_iterator();
       while (!i->done()) {
         ComputeUpdates(p, i);
-        Poll();
       }
+
       delete i;
       delete t;
 
-      Poll();
+      PollPeers();
     }
   }
 }
@@ -215,52 +215,56 @@ void Worker::NetworkLoop() {
 void Worker::KernelLoop() {
   MPI::Intracomm world = MPI::COMM_WORLD;
 
-	while (running_) {
-	  if (kernel_requests_.empty()) {
-	    Sleep(0.01);
-	    continue;
-	  }
+  while (running_) {
+    if (kernel_queue_.empty()) {
+      Sleep(0.01);
+      continue;
+    }
 
-	  KernelRequest k;
-	  {
-	    boost::recursive_mutex::scoped_lock l(kernel_lock_);
-	    k = kernel_requests_.front();
-	    kernel_requests_.pop_front();
-	  }
+    KernelRequest k;
+    {
+      boost::recursive_mutex::scoped_lock l(kernel_lock_);
+      k = kernel_queue_.front();
+      kernel_queue_.pop_front();
+    }
 
-		VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
+    CHECK_EQ(pending_network_bytes(), 0);
+    CHECK_EQ(pending_kernel_bytes(), 0);
+    CHECK(pending_sends_.empty());
 
-		if (peer_for_shard(k.table(), k.shard()) != config.worker_id()) {
-		  LOG(FATAL) << "Received a shard I can't work on!";
-		}
+    VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
 
-		KernelInfo *helper = Registry::get_kernel_info(k.kernel());
+    if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
+      LOG(FATAL) << "Received a shard I can't work on!";
+    }
+
+    KernelInfo *helper = Registry::get_kernel_info(k.kernel());
 
     KernelId id(k.kernel(), k.table(), k.shard());
     DSMKernel* d = kernels_[id];
 
-		if (!d) {
-		  d = helper->create();
-		  kernels_[id] = d;
-		  d->Init(this, k.table(), k.shard());
-		  d->KernelInit();
-		}
+    if (!d) {
+      d = helper->create();
+      kernels_[id] = d;
+      d->Init(this, k.table(), k.shard());
+      d->KernelInit();
+    }
 
-		helper->invoke_method(d, k.method());
+    helper->invoke_method(d, k.method());
 
-		// Wait for the network thread to catch up.
-	  while (pending_kernel_bytes() > 0 || pending_network_bytes()) {
-	    VLOG(2) << "Waiting for network to finish: " << pending_network_bytes() << " : " << pending_kernel_bytes();
-	    Sleep(0.01);
-	  }
+    while (!network_idle()) {
+      PERIODIC(5, { LOG(INFO) << "Waiting for network " << pending_network_bytes() << " : " 
+                                                        << pending_kernel_bytes(); } );
+      Sleep(0.1);
+    }
 
-	  kernel_done_.push_back(k);
+      kernel_done_.push_back(k);
 
-	  VLOG(1) << "Kernel done.";
+    VLOG(1) << "Kernel done.";
 #ifdef CPUPROF
     ProfilerFlush();
 #endif
-	}
+  }
 }
 
 int64_t Worker::pending_network_bytes() const {
@@ -284,12 +288,16 @@ int64_t Worker::pending_kernel_bytes() const {
   return t;
 }
 
+bool Worker::network_idle() const {
+  return pending_network_bytes() == 0 && pending_sends_.empty() && pending_kernel_bytes() == 0;
+}
+
 void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
   HashUpdate *r = &p->write_scratch;
   r->Clear();
 
   r->set_shard(it->owner()->shard());
-  r->set_source(config.worker_id());
+  r->set_source(config_.worker_id());
   r->set_table_id(it->owner()->info().table_id);
 
   int bytesUsed = 0;
@@ -304,7 +312,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
     bytesUsed += k.size() + v.size();
   }
 
-  VLOG(2) << "Prepped " << count << " taking " << r->ByteSize();
+  VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
 
   p->Send(MTYPE_PUT_REQUEST, r);
 
@@ -313,7 +321,7 @@ void Worker::ComputeUpdates(Peer *p, Table::Iterator *it) {
   ++count;
 }
 
-void Worker::Poll() {
+void Worker::PollPeers() {
   HashUpdate scratch;
 
   for (int i = 0; i < peers_.size(); ++i) {
@@ -337,7 +345,7 @@ void Worker::Poll() {
       stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
 
       scratch.Clear();
-      scratch.set_source(config.worker_id());
+      scratch.set_source(config_.worker_id());
       scratch.set_table_id(r->table_id());
 
       VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
@@ -349,14 +357,16 @@ void Worker::Poll() {
       delete r;
     }
   }
+}
 
+void Worker::PollMaster() {
   // Check for shutdown.
   {
     EmptyMessage msg;
     ProtoWrapper wrapper(msg);
 
-    if (rpc_->TryRead(config.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
-      VLOG(1) << "Shutting down worker " << config.worker_id();
+    if (rpc_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
+      VLOG(1) << "Shutting down worker " << config_.worker_id();
       running_ = false;
       return;
     }
@@ -368,14 +378,16 @@ void Worker::Poll() {
   {
     KernelRequest k;
     ProtoWrapper wrapper(k);
-    if (rpc_->TryRead(config.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
-      kernel_requests_.push_back(k);
+    if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
+      kernel_queue_.push_back(k);
     }
   }
 
-  while (!kernel_done_.empty()) {
-    rpc_->Send(config.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
-    kernel_done_.pop_front();
+  if (network_idle()) {
+    while (!kernel_done_.empty()) {
+      rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
+      kernel_done_.pop_front();
+    }
   }
 }
 
