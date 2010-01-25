@@ -17,6 +17,7 @@ void ProtoWrapper::ParseFromCoder(Decoder *d) {
 
 #define rpc_log(msg, src, target, rpc) do { if (FLAGS_rpc_log) { LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg; } } while(0)
 #define rpc_lock boost::recursive_mutex::scoped_lock sl(mpi_lock_)
+
 bool RPCHelper::HasData(int peerId, int rpcId) {
   rpc_lock;
 

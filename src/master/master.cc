@@ -56,7 +56,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     int peer = 0;
     rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
 
-    done[peer] += 1;
+    done[peer - 1] += 1;
     ++count;
 
     string status;

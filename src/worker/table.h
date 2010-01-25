@@ -55,6 +55,8 @@ struct Data {
   }
 };
 
+class Worker;
+
 struct TableInfo {
 public:
   int table_id;
@@ -67,6 +69,9 @@ public:
   // functions; they are cast to the appropriate type at the time of use.
   void *accum_function;
   void *sharding_function;
+
+  // Used for remote sends.
+  Worker *worker;
 };
 
 class Table {
@@ -138,10 +143,10 @@ public:
   // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
   string get_local(const StringPiece &k);
 
-  // Append to 'out' the list of accumulators that have pending network data.  Return
-  // true if any updates were appended.
-  bool GetPendingUpdates(deque<LocalTable*> *out);
+  // Transmit any buffered update data to remote peers.
+  void SendUpdates();
   void ApplyUpdates(const dsm::HashUpdate& req);
+
   int pending_write_bytes();
 
   // Clear any local data for which this table has ownership.  Pending updates
@@ -150,8 +155,6 @@ public:
   bool empty();
   int64_t size() { return 1; }
 
-  void set_rpc_helper(RPCHelper* r) { rpc_ = r; }
-
 protected:
   friend class Worker;
   virtual LocalTable* create_local(int shard) = 0;
@@ -159,10 +162,7 @@ protected:
   vector<uint8_t> local_shards_;
   vector<LocalTable*> partitions_;
   volatile int pending_writes_;
-  mutable boost::recursive_mutex pending_lock_;
-
-  // Used when fetching remote keys.
-  RPCHelper *rpc_;
+//  mutable boost::recursive_mutex pending_lock_;
 };
 
 template <class K, class V>

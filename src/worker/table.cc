@@ -1,9 +1,10 @@
 #include "worker/table.h"
+#include "worker/worker.h"
 
 namespace dsm {
 
 void GlobalTable::clear() {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   for (int i = 0; i < local_shards_.size(); ++i) {
     if (local_shards_[i]) {
       partitions_[i]->clear();
@@ -12,7 +13,7 @@ void GlobalTable::clear() {
 }
 
 bool GlobalTable::empty() {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   for (int i = 0; i < local_shards_.size(); ++i) {
     if (local_shards_[i] && !partitions_[i]->empty()) {
       return false;
@@ -45,24 +46,23 @@ void GlobalTable::set_local(int s, bool local) {
   local_shards_[s] = local;
 }
 
-bool GlobalTable::GetPendingUpdates(deque<LocalTable*> *out) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+void GlobalTable::SendUpdates() {
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
     if (!is_local_shard(i) && !t->empty()) {
-      out->push_back(t);
-      partitions_[i] = create_local(i);
+      info().worker->SendUpdate(t);
+      t->clear();
     }
   }
 
   pending_writes_ = 0;
-  return out->size() > 0;
 }
 
 int GlobalTable::pending_write_bytes() {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
@@ -76,12 +76,12 @@ int GlobalTable::pending_write_bytes() {
 }
 
 void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[req.shard()]->ApplyUpdates(req);
 }
 
 string GlobalTable::get_local(const StringPiece &k) {
-  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
