@@ -27,7 +27,7 @@ public:
   struct Peer;
 
   int peer_for_shard(int table_id, int shard) {
-    return shard % config.num_workers();
+    return shard % config_.num_workers();
   }
 
   Stats get_stats() {
@@ -38,8 +38,7 @@ private:
   static const int64_t kNetworkChunkSize = 500 << 10;
   static const int32_t kNetworkTimeout = 20;
 
-  deque<Table*> pending_writes_;
-  deque<KernelRequest> kernel_requests_;
+  deque<KernelRequest> kernel_queue_;
   deque<KernelRequest> kernel_done_;
 
   boost::recursive_mutex kernel_lock_;
@@ -52,10 +51,13 @@ private:
   int num_peers_;
   bool running_;
 
-  ConfigData config;
+  ConfigData config_;
 
   // The status of other workers.
   vector<Peer*> peers_;
+
+  // Push data we have yet to commit to the network
+  deque<LocalTable*> pending_sends_;
 
   struct KernelId {
     string kname_;
@@ -82,10 +84,12 @@ private:
   // Network operations.
   void ProcessUpdates(Peer *p);
   void ComputeUpdates(Peer *p, Table::Iterator *it);
-  void Poll();
+  void PollPeers();
+  void PollMaster();
 
   int64_t pending_network_bytes() const;
   int64_t pending_kernel_bytes() const;
+  bool network_idle() const;
 
   Stats stats_;
 };

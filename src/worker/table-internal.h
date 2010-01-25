@@ -177,6 +177,7 @@ template <class K, class V>
 V TypedGlobalTable<K, V>::get(const K &k) {
   int shard = this->get_shard(k);
   if (is_local_shard(shard)) {
+    boost::recursive_mutex::scoped_lock sl(pending_lock_);
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
