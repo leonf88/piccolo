@@ -52,7 +52,6 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   int count = 0;
   for (int j = 0; j < shards.size(); ++j) {
-    int shard = shards[j];
     int peer = 0;
     rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
 
