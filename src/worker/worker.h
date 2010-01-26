@@ -35,6 +35,8 @@ public:
 
   // Send the given table to the appropriate peer machine.
   void SendUpdate(LocalTable *t);
+  void PollPeers();
+
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 500 << 10;
@@ -83,7 +85,6 @@ private:
   // Network operations.
   void ProcessUpdates(Peer *p);
   void SendPartial(Peer *p, Table::Iterator *it);
-  void PollPeers();
   void PollMaster();
 
   int64_t pending_network_bytes() const;

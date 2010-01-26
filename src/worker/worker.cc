@@ -180,7 +180,6 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
-      Sleep(0.01);
       PollMaster();
       PollPeers();
       continue;
