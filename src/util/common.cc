@@ -104,20 +104,32 @@ uint64_t Timer::cycles_elapsed() const {
   return rdtsc() - start_cycle_;
 }
 
-static double processorFrequency() {
-  static double freq = 0;
-  if (freq == 0) {
-    int a, b;
-    FILE* procinfo = fopen("/proc/cpuinfo", "r");
-    while (fscanf(procinfo, "cpu MHz : %d.%d", &a, &b) != 2) {
-      fgetc(procinfo);
-    }
-
-    freq = a * 1e6 + b * 1e-4;
-    fclose(procinfo);
+static double get_processor_frequency() {
+  double freq;
+  int a, b;
+  FILE* procinfo = fopen("/proc/cpuinfo", "r");
+  while (fscanf(procinfo, "cpu MHz : %d.%d", &a, &b) != 2) {
+    fgetc(procinfo);
   }
+
+  freq = a * 1e6 + b * 1e-4;
+  fclose(procinfo);
   return freq;
 }
+
+static uint64_t init_tsc = 0;
+
+static double setup_time() {
+  init_tsc = rdtsc();
+
+  timeval tv;
+  gettimeofday(&tv, NULL);
+
+  return tv.tv_sec + tv.tv_usec * 1e-6;
+}
+
+static double processor_freq = get_processor_frequency();
+static double init_time = setup_time();
 
 void Sleep(double t) {
   timespec req;
@@ -127,17 +139,8 @@ void Sleep(double t) {
 }
 
 double Now() {
-  static uint64_t init_tsc = 0;
-  static double init_time = 0;
-  if (init_tsc == 0) {
-    init_tsc = rdtsc();
-    timeval tv;
-    gettimeofday(&tv, NULL);
-    init_time = tv.tv_sec + tv.tv_usec * 1e-6;
-  }
-
   uint64_t now = rdtsc();
-  return init_time + (now - init_tsc) / processorFrequency();
+  return init_time + (now - init_tsc) / processor_freq;
 }
 
 void SpinLock::lock() volatile {
