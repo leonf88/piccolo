@@ -253,14 +253,13 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
 }
 
 void Worker::PollPeers() {
-  HashUpdate put_req;
   for (int i = 0; i < peers_.size(); ++i) {
     Peer *p = peers_[i];
     p->CollectPendingSends();
   }
 
-  while (rpc_->HasData(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST)) {
-    rpc_->Read(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put_req);
+  HashUpdate put_req;
+  while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put_req)) {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put_req.ByteSize());
 
@@ -281,7 +280,7 @@ void Worker::PollPeers() {
     get_resp.set_source(config_.worker_id());
     get_resp.set_table_id(get_req.table_id());
 
-    VLOG(1) << "Returning result for " << get_req.key() << " :: table " << get_req.table_id();
+    VLOG(3) << "Returning result for " << get_req.key() << " :: table " << get_req.table_id();
     string v;
     Registry::get_table(get_req.table_id())->get_local(get_req.key(), &v);
 

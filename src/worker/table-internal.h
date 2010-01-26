@@ -182,8 +182,6 @@ V TypedGlobalTable<K, V>::get(const K &k) {
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
-  VLOG(1) << "Fetching non-local key " << k << " from shard " << shard << " : " << info().table_id;
-
   string v_str;
   get_remote(shard, Data::to_string<K>(k), &v_str);
   return Data::from_string<V>(v_str);
