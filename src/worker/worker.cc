@@ -9,7 +9,7 @@
 #include "worker/registry.h"
 
 namespace dsm {
-static const int kMaxNetworkChunk = 1 << 10;
+static const int kMaxNetworkChunk = 1 << 20;
 static const int kNetworkTimeout = 2.0;
 
 struct Worker::Peer {
@@ -32,11 +32,6 @@ struct Worker::Peer {
   HashUpdate write_scratch;
   list<Request*> outgoing_requests_;
 
-  // Incoming data from this peer that we have read from the network, but has yet to be
-  // processed by the kernel.
-  deque<HashUpdate*> incoming_data_;
-  deque<HashRequest*> incoming_requests_;
-
   mutable boost::recursive_mutex pending_lock_;
 
   int32_t id;
@@ -46,14 +41,13 @@ struct Worker::Peer {
   Peer(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
 
   // Send the given message type and data to this peer.
-  Request* Send(int rpc_type, RPCMessage* ureq) {
+  Request* Send(int rpc_type, const RPCMessage& ureq) {
     boost::recursive_mutex::scoped_lock sl(pending_lock_);
 
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
-    ureq->AppendToString(&r->payload);
-//    ureq->ParseFromString(r->payload);
+    ureq.AppendToString(&r->payload);
 
     r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
     outgoing_requests_.push_back(r);
@@ -82,35 +76,6 @@ struct Worker::Peer {
   }
 
   int64_t pending_out_bytes() const { return pending_out_; }
-
-  void ReceiveIncomingData() {
-    while (helper->HasData(id, MTYPE_PUT_REQUEST)) {
-      HashUpdate *req = new HashUpdate;
-      if (helper->Read(id, MTYPE_PUT_REQUEST, req) != -1) {
-        incoming_data_.push_back(req);
-      }
-    }
-
-    while (helper->HasData(id, MTYPE_GET_REQUEST)) {
-      HashRequest *req = new HashRequest;
-      if (helper->Read(id, MTYPE_GET_REQUEST, req) != -1) {
-        VLOG(1) << "Read get request....";
-        incoming_requests_.push_back(req);
-      }
-    }
-  }
-
-  HashUpdate *pop_data() {
-    HashUpdate *r = incoming_data_.front();
-    incoming_data_.pop_front();
-    return r;
-  }
-
-  HashRequest *pop_request() {
-    HashRequest *r = incoming_requests_.front();
-    incoming_requests_.pop_front();
-    return r;
-  }
 };
 
 Worker::Worker(const ConfigData &c) {
@@ -163,6 +128,18 @@ Worker::~Worker() {
   }
 }
 
+void Worker::Send(int peer, int type, const RPCMessage& msg) {
+  peers_[peer - 1]->Send(type, msg);
+}
+
+void Worker::Read(int peer, int type, RPCMessage* msg) {
+  while (!rpc_->HasData(peer, type)) {
+    PollPeers();
+  }
+
+  rpc_->Read(peer, type, msg);
+}
+
 void Worker::SendUpdate(LocalTable *t) {
   Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
 
@@ -180,7 +157,7 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
-      PollMaster();
+      PERIODIC(0.1,  { PollMaster(); } );
       PollPeers();
       continue;
     }
@@ -247,12 +224,12 @@ bool Worker::network_idle() const {
 }
 
 void Worker::SendPartial(Peer *p, Table::Iterator *it) {
-  HashUpdate *r = &p->write_scratch;
-  r->Clear();
+  HashUpdate &r = p->write_scratch;
+  r.Clear();
 
-  r->set_shard(it->owner()->shard());
-  r->set_source(config_.worker_id());
-  r->set_table_id(it->owner()->info().table_id);
+  r.set_shard(it->owner()->shard());
+  r.set_source(config_.worker_id());
+  r.set_table_id(it->owner()->info().table_id);
 
   int bytesUsed = 0;
   int count = 0;
@@ -261,7 +238,7 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
     it->key_str(&k);
     it->value_str(&v);
 
-    r->add_put(k, v);
+    r.add_put(k, v);
     ++count;
     bytesUsed += k.size() + v.size();
   }
@@ -271,45 +248,46 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
   p->Send(MTYPE_PUT_REQUEST, r);
 
   stats_.set_put_out(stats_.put_out() + 1);
-  stats_.set_bytes_out(stats_.bytes_out() + r->ByteSize());
+  stats_.set_bytes_out(stats_.bytes_out() + r.ByteSize());
   ++count;
 }
 
 void Worker::PollPeers() {
-  HashUpdate scratch;
-
+  HashUpdate put_req;
   for (int i = 0; i < peers_.size(); ++i) {
     Peer *p = peers_[i];
     p->CollectPendingSends();
-    p->ReceiveIncomingData();
+  }
 
-    while (!p->incoming_data_.empty()) {
-      HashUpdate *r = p->pop_data();
-      stats_.set_put_in(stats_.put_in() + 1);
-      stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
+  while (rpc_->HasData(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST)) {
+    rpc_->Read(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put_req);
+    stats_.set_put_in(stats_.put_in() + 1);
+    stats_.set_bytes_in(stats_.bytes_in() + put_req.ByteSize());
 
-      Table *t = Registry::get_table(r->table_id());
-      t->ApplyUpdates(*r);
-      delete r;
-    }
+    Table *t = Registry::get_table(put_req.table_id());
+    t->ApplyUpdates(put_req);
+  }
 
-    while (!p->incoming_requests_.empty()) {
-      HashRequest *r = p->pop_request();
-      stats_.set_get_in(stats_.get_in() + 1);
-      stats_.set_bytes_in(stats_.bytes_in() + r->ByteSize());
+  MPI::Status status;
+  HashRequest get_req;
+  HashUpdate get_resp;
+  while (rpc_->HasData(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, status)) {
+    rpc_->Read(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req);
 
-      scratch.Clear();
-      scratch.set_source(config_.worker_id());
-      scratch.set_table_id(r->table_id());
+    stats_.set_get_in(stats_.get_in() + 1);
+    stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
 
-      VLOG(1) << "Returning result for " << r->key() << " :: table " << r->table_id();
-      string v = Registry::get_table(r->table_id())->get_local(r->key());
+    get_resp.Clear();
+    get_resp.set_source(config_.worker_id());
+    get_resp.set_table_id(get_req.table_id());
 
-      scratch.add_put(r->key(), v);
+    VLOG(1) << "Returning result for " << get_req.key() << " :: table " << get_req.table_id();
+    string v;
+    Registry::get_table(get_req.table_id())->get_local(get_req.key(), &v);
 
-      p->Send(MTYPE_GET_RESPONSE, &scratch);
-      delete r;
-    }
+    get_resp.add_put(get_req.key(), v);
+
+    peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
   }
 }
 

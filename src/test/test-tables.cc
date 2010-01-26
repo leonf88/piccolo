@@ -32,6 +32,7 @@ public:
   void TestGet() {
     int num_shards = min_hash->num_shards();
     for (int i = 0; i < FLAGS_table_size; ++i) {
+      PERIODIC(1, LOG(INFO) << "Fetching... " << i; );
       CHECK_EQ(min_hash->get(i), i) << " i= " << i;
       CHECK_EQ(max_hash->get(i), i) << " i= " << i;
       CHECK_EQ(replace_hash->get(i), i) << " i= " << i;

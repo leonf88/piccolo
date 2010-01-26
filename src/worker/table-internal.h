@@ -159,11 +159,7 @@ TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
 template <class K, class V>
 void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   int shard = this->get_shard(k);
-
-  {
-//    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-    static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
-  }
+  static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
 
   if (!is_local_shard(shard)) {
     ++pending_writes_;
@@ -172,35 +168,25 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   if (pending_writes_ > 1000000) {
     SendUpdates();
   }
+
+  PERIODIC(0.1, { CheckForUpdates(); });
 }
 
 
 template <class K, class V>
 V TypedGlobalTable<K, V>::get(const K &k) {
   int shard = this->get_shard(k);
+
   if (is_local_shard(shard)) {
-//    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-    SendUpdates();
+    PERIODIC(0.1, { CheckForUpdates(); });
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
   VLOG(1) << "Fetching non-local key " << k << " from shard " << shard << " : " << info().table_id;
 
-  LOG(FATAL) << "Disabled.";
-
-  HashRequest req;
-  HashUpdate resp;
-
-  req.set_key(Data::to_string<K>(k));
-  req.set_table_id(info().table_id);
-
-//  rpc_->Send(shard + 1, MTYPE_GET_REQUEST, req);
-//  rpc_->Read(shard + 1, MTYPE_GET_RESPONSE, &resp);
-
-  V v = Data::from_string<V>(resp.value(0));
-//  VLOG(1) << "Got result " << Data::to_string<K>(k) << " : " << v;
-
-  return v;
+  string v_str;
+  get_remote(shard, Data::to_string<K>(k), &v_str);
+  return Data::from_string<V>(v_str);
 }
 
 template <class K, class V>

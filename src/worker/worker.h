@@ -33,9 +33,14 @@ public:
     return stats_;
   }
 
+  void Send(int peer, int type, const RPCMessage& msg);
+  void Read(int peer, int type, RPCMessage* msg);
+
   // Send the given table to the appropriate peer machine.
   void SendUpdate(LocalTable *t);
   void PollPeers();
+
+  RPCHelper* rpc() { return rpc_; }
 
 private:
   // The largest amount of data we'll send over the network as a single piece.

@@ -140,12 +140,13 @@ public:
   vector<int> local_shards();
   void set_local(int s, bool local);
 
-  // Check only the local table for 'k'.  Abort if lookup would case a remote fetch.
-  string get_local(const StringPiece &k);
+  void get_local(const StringPiece &k, string *v);
+  void get_remote(int shard, const StringPiece &k, string* v);
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
   void ApplyUpdates(const dsm::HashUpdate& req);
+  void CheckForUpdates();
 
   int pending_write_bytes();
 
