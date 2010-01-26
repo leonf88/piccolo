@@ -169,7 +169,7 @@ private:
   static int COUNT = 0; \
   ++COUNT; \
   if (Now() - last > interval) {\
-    last = Now();\
+    last = dsm::Now();\
     operation;\
   }\
 }
