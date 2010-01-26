@@ -4,75 +4,70 @@
 #include <string>
 #include <stdio.h>
 
+#include "util/common.h"
+#include <gflags/gflags.h>
+
+DEFINE_int32(requests, 1000, "");
+DEFINE_int32(request_size, 10000, "");
+
 using namespace std;
 struct SendReq {
   MPI::Request req;
   string data;
-
-  SendReq() {
-    data.assign(100000, 'a');
-  }
-
-  ~SendReq() {
-  }
-
-  void Send() {
-    req = MPI::COMM_WORLD.Isend(&data[0], data.size(), MPI::BYTE, 1, 1);
-  }
 };
 
-void* thread_1(void* data) {
+list<SendReq*> reqs;
+
+void send() {
   MPI::Intracomm world = MPI::COMM_WORLD;
-  vector<SendReq*> reqs;
-  for (int i = 0; i < 1000; ++i) {
-    reqs.push_back(new SendReq);
-    reqs.back()->Send();
+  for (int i = 0; i < FLAGS_requests; ++i) {
+    SendReq *r = new SendReq;
+    r->data.assign(FLAGS_request_size, 'a');
+    r->req = world.Isend(&r->data[0], r->data.size(), MPI::BYTE, i % world.Get_size(), 1);
+    reqs.push_back(r);
   }
-
-  while (!reqs.empty()) {
-    for (int i = 0; i < reqs.size(); ++i) {
-      if (reqs[i]->req.Test()) {
-        reqs.erase(reqs.begin() + i);
-      }
-
-      world.Iprobe(MPI::ANY_SOURCE, 1);
-    }
-  }
-
-  return NULL;
 }
 
-void* thread_2(void *data) {
-  MPI::Intracomm world = MPI::COMM_WORLD;
-  for (int i = 0; i < 1000; ++i) {
-    do {
-      MPI::Status s;
-      if (world.Iprobe(MPI::ANY_SOURCE, 1, s)) {
-        int count = s.Get_count(MPI::BYTE);
-        string buf;
-        buf.resize(count);
-        world.Recv(&buf[0], count, MPI::BYTE, MPI::ANY_SOURCE, 1);
-        string comp;
-        comp.assign(100000, 'a');
-        if (buf != comp) {
-          fprintf(stderr, "WTF!\n");
-        }
-
-        fprintf(stderr, ".");
-        break;
-      }
-    } while(1);
-
+void test_send_done() {
+  for (list<SendReq*>::iterator i = reqs.begin(); i != reqs.end(); ++i) {
+    if ((*i)->req.Test()) {
+      delete (*i);
+      i = reqs.erase(i);
+    }
   }
-  return NULL;
+}
+
+int receive() {
+  MPI::Intracomm world = MPI::COMM_WORLD;
+  MPI::Status status;
+
+  int c = 0;
+  while (world.Iprobe(MPI::ANY_SOURCE, 1, status)) {
+    string s;
+    s.resize(status.Get_count(MPI::BYTE));
+    world.Recv(&s[0], status.Get_count(MPI::BYTE), MPI::BYTE,
+               status.Get_source(), 1);
+    ++c;
+  }
+
+  return c;
 }
 
 int main(int argc, char **argv) {
-  MPI::Init_thread(argc, argv, MPI::THREAD_MULTIPLE);
+  dsm::Init(argc, argv);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
-    thread_1(NULL);
-  } else {
-    thread_2(NULL);
+  for (int i = 0; i < 100; ++i) {
+    send();
+    int got = 0;
+    while (got < FLAGS_requests && !reqs.empty()) {
+      test_send_done();
+      got += receive();
+
+      PERIODIC(1, LOG(INFO) << "received... " << got);
+    }
+
+    fprintf(stderr, "Working... %d\n", i);
   }
+
+  return 0;
 }
