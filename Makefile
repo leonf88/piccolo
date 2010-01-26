@@ -14,7 +14,7 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal
 
 CXX := distcc g++
 CDEBUG := -ggdb2
-COPT :=  -O3
+COPT :=
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
 USE_GOOGLE_PROFILER := 1
@@ -107,7 +107,7 @@ bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test
 bin/test-hashmap: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-hashmap.o
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
-bin/mpi-test: src/test/mpi-test.o
+bin/mpi-test: src/test/mpi-test.o bin/libcommon.a
 	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
