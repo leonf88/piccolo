@@ -58,6 +58,7 @@ void GlobalTable::SendUpdates() {
     }
   }
 
+  info().worker->PollPeers();
   pending_writes_ = 0;
 }
 
