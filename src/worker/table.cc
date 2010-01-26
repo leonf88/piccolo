@@ -4,8 +4,7 @@
 namespace dsm {
 
 void GlobalTable::clear() {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  for (int i = 0; i < local_shards_.size(); ++i) {
+ for (int i = 0; i < local_shards_.size(); ++i) {
     if (local_shards_[i]) {
       partitions_[i]->clear();
     }
@@ -13,7 +12,6 @@ void GlobalTable::clear() {
 }
 
 bool GlobalTable::empty() {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   for (int i = 0; i < local_shards_.size(); ++i) {
     if (local_shards_[i] && !partitions_[i]->empty()) {
       return false;
@@ -46,9 +44,25 @@ void GlobalTable::set_local(int s, bool local) {
   local_shards_[s] = local;
 }
 
-void GlobalTable::SendUpdates() {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
+  HashRequest req;
+  HashUpdate resp;
 
+  req.set_key(k.AsString());
+  req.set_table_id(info().table_id);
+
+  Worker *w = info().worker;
+  int peer = w->peer_for_shard(info().table_id, shard) + 1;
+
+//  LOG(INFO) << " peer " << peer << " : " << shard;
+  w->Send(peer, MTYPE_GET_REQUEST, req);
+  w->Read(peer, MTYPE_GET_RESPONSE, &resp);
+
+  StringPiece vpiece = resp.value(0);
+  v->assign(vpiece.data, vpiece.len);
+}
+
+void GlobalTable::SendUpdates() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
@@ -62,9 +76,12 @@ void GlobalTable::SendUpdates() {
   pending_writes_ = 0;
 }
 
-int GlobalTable::pending_write_bytes() {
+void GlobalTable::CheckForUpdates() {
 //  boost::recursive_mutex::scoped_lock sl(pending_lock_);
+  info().worker->PollPeers();
+}
 
+int GlobalTable::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
     Table *t = partitions_[i];
@@ -77,13 +94,10 @@ int GlobalTable::pending_write_bytes() {
 }
 
 void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   partitions_[req.shard()]->ApplyUpdates(req);
 }
 
-string GlobalTable::get_local(const StringPiece &k) {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
+void GlobalTable::get_local(const StringPiece &k, string* v) {
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
 
@@ -92,7 +106,7 @@ string GlobalTable::get_local(const StringPiece &k) {
 //  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
 //          << " : " << Data::from_string<V>(h->get_str(k));
 
-  return h->get_str(k);
+  v->assign(h->get_str(k));
 }
 
 }

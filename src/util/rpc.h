@@ -55,6 +55,7 @@ public:
   // message is immediately available.
   bool TryRead(int peerId, int rpcId, RPCMessage *msg);
   bool HasData(int peerId, int rpcId);
+  bool HasData(int peerId, int rpcId, MPI::Status &status);
 
   int Read(int peerId, int rpcId, RPCMessage *msg);
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);

@@ -14,7 +14,7 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal
 
 CXX := distcc g++
 CDEBUG := -ggdb2
-COPT :=
+COPT := -O3
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
 USE_GOOGLE_PROFILER := 1
