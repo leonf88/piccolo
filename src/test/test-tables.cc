@@ -31,6 +31,7 @@ public:
 
   void TestGet() {
     int num_shards = min_hash->num_shards();
+
     for (int i = 0; i < FLAGS_table_size; ++i) {
       PERIODIC(1, LOG(INFO) << "Fetching... " << i; );
       CHECK_EQ(min_hash->get(i), i) << " i= " << i;
@@ -84,10 +85,10 @@ int main(int argc, char **argv) {
 
   TestMarshalling();
 
-  min_hash = Registry::create_table<int, int>(0, 10, &ModSharding, &Accumulator<int>::min);
-  max_hash = Registry::create_table<int, int>(1, 10, &ModSharding, &Accumulator<int>::max);
-  sum_hash = Registry::create_table<int, int>(2, 10, &ModSharding, &Accumulator<int>::sum);
-  replace_hash = Registry::create_table<int, int>(3, 10, &ModSharding, &Accumulator<int>::replace);
+  min_hash = Registry::create_table<int, int>(0, conf.num_workers(), &ModSharding, &Accumulator<int>::min);
+  max_hash = Registry::create_table<int, int>(1, conf.num_workers(), &ModSharding, &Accumulator<int>::max);
+  sum_hash = Registry::create_table<int, int>(2, conf.num_workers(), &ModSharding, &Accumulator<int>::sum);
+  replace_hash = Registry::create_table<int, int>(3, conf.num_workers(), &ModSharding, &Accumulator<int>::replace);
 //  pair_hash = Registry::create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
 
 
