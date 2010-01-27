@@ -10,6 +10,7 @@
 
 DEFINE_int32(num_dists, 2, "");
 DEFINE_int32(num_points, 100, "");
+DEFINE_int32(iterations, 50, "");
 DEFINE_bool(dump_results, false, "");
 
 using namespace dsm;
@@ -41,15 +42,11 @@ public:
       double dx = 0.5 - rand_double();
       double dy = 0.5 - rand_double();
 
-      LOG(INFO) << "Distribution " << i << " center " << dx << " : " << dy;
-
       Distribution d = { dx, dy };
       actual->put(i, d);
 
       for (int j = 0; j < FLAGS_num_points / FLAGS_num_dists; ++j) {
-        Point p = { dx + 0.1 * (rand_double() - 0.5),
-                    dy + 0.1 * (rand_double() - 0.5),
-                    -1, 0 };
+        Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
         points->put(c++, p);
       }
     }
@@ -121,14 +118,26 @@ public:
   void print_results() {
     for (int i = 0; i < FLAGS_num_dists; ++i) {
       Distribution d = dists->get(i);
-      Distribution a = actual->get(i);
+      double best_diff = 1000;
+      Distribution best = d;
+      for (int j = 0; j < FLAGS_num_dists; ++j) {
+        Distribution a = actual->get(j);
+        double diff = fabs(d.x - a.x) + fabs(d.y - a.y);
+        if (diff < best_diff) {
+          best_diff = diff;
+          best = a;
+        }
+      }
+
       printf("%d guess: (%.2f %.2f) actual: (%.2f %.2f) error(%.2f, %.2f)\n",
-             i, d.x, d.y, a.x, a.y, fabs(d.x - a.x), fabs(d.y - a.y));
+             i, d.x, d.y, best.x, best.y, fabs(d.x - best.x), fabs(d.y - best.y));
     }
 
-    for (int i = 0; i < FLAGS_num_points; ++i) {
-      Point p = points->get(i);
-      printf("%.2f %.2f %d\n", p.x, p.y, p.source);
+    if (FLAGS_dump_results) {
+      for (int i = 0; i < FLAGS_num_points; ++i) {
+        Point p = points->get(i);
+        printf("%.2f %.2f %d\n", p.x, p.y, p.source);
+      }
     }
   }
 };
@@ -162,15 +171,13 @@ int main(int argc, char **argv) {
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
     RUN_ONE(m, KMeansKernel, initialize_world, 0);
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < FLAGS_iterations; i++) {
       RUN_ALL(m, KMeansKernel, initialize_expectation, 1);
       RUN_ALL(m, KMeansKernel, compute_expectation, 1);
       RUN_ALL(m, KMeansKernel, initialize_maximization, 0);
       RUN_ALL(m, KMeansKernel, compute_maximization, 0);
     }
-    if (FLAGS_dump_results) {
-      RUN_ONE(m, KMeansKernel, print_results, 0);
-    }
+    RUN_ONE(m, KMeansKernel, print_results, 0);
   } else {
     Worker w(conf);
     w.Run();
