@@ -5,7 +5,7 @@ namespace dsm {
 
 GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
-  worker_for_shard_.resize(info.num_shards);
+  worker_for_shard_.resize(info.num_shards, -1);
 }
 
 void GlobalTable::clear() {
@@ -88,6 +88,11 @@ int GlobalTable::pending_write_bytes() {
 }
 
 void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
+  if (!is_local_shard(req.shard())) {
+    LOG(FATAL) << "Received unexpected push request for shard: " << req.shard()
+               << "; should go to " << get_owner(req.shard());
+  }
+
   partitions_[req.shard()]->ApplyUpdates(req);
 }
 

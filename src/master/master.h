@@ -46,15 +46,17 @@ private:
   };
 
   struct WorkerState {
-    vector<int> assigned;
-    vector<int> pending;
-    vector<int> finished;
+    WorkerState();
+
+    vector<vector<int> > assigned;
+    vector<vector<int> > pending;
+    vector<vector<int> > finished;
 
     double last_ping_time;
     int status;
 
-    bool is_assigned(int shard) {
-      return find(assigned.begin(), assigned.end(), shard) != assigned.end();
+    bool is_assigned(int table, int shard) {
+      return find(assigned[table].begin(), assigned[table].end(), shard) != assigned[table].end();
     }
   };
 
