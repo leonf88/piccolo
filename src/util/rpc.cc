@@ -112,6 +112,18 @@ void RPCHelper::Send(int peerId, int rpcId, const RPCMessage &msg) {
   rpc_log("SendDone", my_rank_, peerId, rpcId);
 }
 
+void RPCHelper::SyncSend(int peerId, int rpcId, const RPCMessage &msg) {
+  rpc_lock;
+  rpc_log("SyncSendStart", my_rank_, peerId, rpcId);
+  string scratch;
+
+  scratch.clear();
+  msg.AppendToString(&scratch);
+  mpi_world_->Ssend(&scratch[0], scratch.size(), MPI::BYTE, peerId, rpcId);
+  rpc_log("SyncSendDone", my_rank_, peerId, rpcId);
+}
+
+
 MPI::Request RPCHelper::SendData(int peerId, int rpcId, const string& msg) {
   rpc_lock;
   rpc_log("SendData", my_rank_, peerId, rpcId);
@@ -123,8 +135,15 @@ MPI::Request RPCHelper::SendData(int peerId, int rpcId, const string& msg) {
 // here.
 void RPCHelper::Broadcast(int rpcId, const RPCMessage &msg) {
   rpc_lock;
-  for (int i = 0; i < mpi_world_->Get_size(); ++i) {
+  for (int i = 1; i < mpi_world_->Get_size(); ++i) {
     Send(i, rpcId, msg);
+  }
+}
+
+void RPCHelper::SyncBroadcast(int rpcId, const RPCMessage &msg) {
+  rpc_lock;
+  for (int i = 1; i < mpi_world_->Get_size(); ++i) {
+    SyncSend(i, rpcId, msg);
   }
 }
 

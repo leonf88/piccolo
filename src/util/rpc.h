@@ -47,12 +47,14 @@ public:
   int Read(int peerId, int rpcId, RPCMessage *msg);
   int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
   void Send(int peerId, int rpcId, const RPCMessage &msg);
+  void SyncSend(int peerId, int rpcId, const RPCMessage &msg);
 
   MPI::Request SendData(int peer_id, int rpc_id, const string& data);
 
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
   void Broadcast(int rpcId, const RPCMessage &msg);
+  void SyncBroadcast(int rpcId, const RPCMessage &msg);
 
 
   // Simple wrapper to allow protocol buffers to be sent through the RPC system.
@@ -81,6 +83,22 @@ public:
     ProtoWrapper w((Message*)&msg);
     Send(peerId, rpcId, w);
   }
+
+  void SyncSend(int peerId, int rpcId, const Message& msg) {
+    ProtoWrapper w((Message*)&msg);
+    SyncSend(peerId, rpcId, w);
+  }
+
+  void Broadcast(int rpcId, const Message& msg) {
+    ProtoWrapper w((Message*)&msg);
+    Broadcast(rpcId, w);
+  }
+
+  void SyncBroadcast(int rpcId, const Message& msg) {
+      ProtoWrapper w((Message*)&msg);
+      SyncBroadcast(rpcId, w);
+    }
+
 
 private:
   boost::recursive_mutex mpi_lock_;
