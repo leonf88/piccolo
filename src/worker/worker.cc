@@ -97,21 +97,24 @@ Worker::Worker(const ConfigData &c) {
 
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap *t = Registry::get_tables();
-  string local_tables;
   for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
     for (int j = 0; j < i->second->info().num_shards; ++j) {
       if (peer_for_shard(i->first, j) == config_.worker_id()) {
-        i->second->set_local(j, true);
-        local_tables += StringPrintf("%d,", j);
-      } else {
-        i->second->set_local(j, false);
+        acquire_shard(i->second, j);
       }
     }
-
     i->second->info_.worker = this;
   }
 
-  LOG(INFO) << "Worker " << config_.worker_id() << " is local for " << local_tables;
+  LOG(INFO) << "Worker " << config_.worker_id();
+}
+
+void Worker::release_shard(GlobalTable *t, int shard) {
+  t->set_local(shard, false);
+}
+
+void Worker::acquire_shard(GlobalTable *t, int shard) {
+  t->set_local(shard, true);
 }
 
 void Worker::Run() {
@@ -146,6 +149,7 @@ void Worker::SendUpdate(LocalTable *t) {
   Table::Iterator *i = t->get_iterator();
   while (!i->done()) {
     SendPartial(p, i);
+    PollPeers();
   }
   delete i;
 

@@ -6,6 +6,7 @@ Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
   rpc_ = new RPCHelper(&world_);
+  workers_.resize(config_.num_workers());
 }
 
 Master::~Master() {
@@ -31,7 +32,25 @@ void Master::run_one(const RunDescriptor& r) {
 }
 
 int Master::worker_for_shard(int shard) {
-  return shard % config_.num_workers();
+  for (int i = 0; i < workers_.size(); ++i) {
+    if (workers_[i].is_assigned(shard)) { return i; }
+  }
+
+  return assign_worker(shard);
+}
+
+int Master::assign_worker(int shard) {
+  int best = 0;
+  int best_v = 0;
+  for (int i = 0; i < workers_.size(); ++i) {
+    if (workers_[i].assigned.size() < best_v) {
+      best_v = workers_[i].assigned.size();
+      best = i;
+    }
+  }
+
+  workers_[best].assigned.push_back(shard);
+  return best;
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
@@ -44,7 +63,10 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   for (int i = 0; i < shards.size(); ++i) {
     msg.set_shard(shards[i]);
     VLOG(1) << "Sending shard: " << shards[i] << " to " << worker_for_shard(shards[i]);
-    rpc_->Send(1 + worker_for_shard(shards[i]), MTYPE_RUN_KERNEL, ProtoWrapper(msg));
+    int widx = worker_for_shard(shards[i]);
+    WorkerState& w = workers_[widx];
+    w.pending.push_back(i);
+    rpc_->Send(1 + widx, MTYPE_RUN_KERNEL, ProtoWrapper(msg));
   }
 
   KernelRequest kernel_done;

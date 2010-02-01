@@ -42,6 +42,9 @@ public:
 
   RPCHelper* rpc() { return rpc_; }
 
+  void release_shard(GlobalTable *t, int shard);
+  void acquire_shard(GlobalTable *t, int shard);
+
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 500 << 10;

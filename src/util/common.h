@@ -17,6 +17,7 @@
 #include <deque>
 #include <string>
 #include <list>
+#include <algorithm>
 #include <tr1/unordered_map>
 
 #ifdef SWIG

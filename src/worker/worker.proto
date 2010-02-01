@@ -8,9 +8,10 @@ enum MessageTypes {
   
   MTYPE_PUT_REQUEST = 4;  
   MTYPE_GET_REQUEST = 5;
-  MTYPE_GET_RESPONSE = 6;
-   
+  MTYPE_GET_RESPONSE = 6;   
+  
   MTYPE_MIGRATE_SHARD = 7;
+  
   MTYPE_WORKER_SHUTDOWN = 8;
 };
 
@@ -28,6 +29,8 @@ message Stats {
 message MigrateShardRequest {
   required int32 table = 1;
   required int32 shard = 2;
+  required int32 old_worker = 3;
+  required int32 new_worker = 4;
 }
 
 message Pair {
