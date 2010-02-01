@@ -58,17 +58,29 @@ int Master::assign_worker(int table, int shard) {
     }
   }
 
+  VLOG(1) << "Assigning " << shard << " to " << best;
   workers_[best].assigned[table].push_back(shard);
+  return best;
+}
 
-  LOG(INFO) << "Assigning " << shard << " to " << best;
+void Master::send_assignments() {
   ShardAssignmentRequest req;
-  req.set_new_worker(best);
-  req.set_old_worker(-1);
-  req.set_shard(shard);
-  req.set_table(table);
+
+  for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = workers_[i];
+    for (int j = 0; j < w.assigned.size(); ++j) {
+      vector<int>& t = w.assigned[j];
+      for (int k = 0; k < t.size(); ++k) {
+        ShardAssignment* s  = req.add_assign();
+        s->set_new_worker(i);
+        s->set_shard(t[k]);
+        s->set_table(j);
+        s->set_old_worker(-1);
+      }
+    }
+  }
 
   rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
-  return best;
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
@@ -79,8 +91,12 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   Timer t;
   vector<int> done(config_.num_workers());
   for (int i = 0; i < shards.size(); ++i) {
-    assign_worker(0, shards[i]);
+    for (int j = 0; j < Registry::get_tables().size(); ++j) {
+      assign_worker(j, shards[i]);
+    }
   }
+
+  send_assignments();
 
   for (int i = 0; i < shards.size(); ++i) {
     int widx = worker_for_shard(0, shards[i]);

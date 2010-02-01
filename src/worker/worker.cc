@@ -9,8 +9,8 @@
 #include "worker/registry.h"
 
 namespace dsm {
-static const int kMaxNetworkChunk = 1 << 12;
-static const int kNetworkTimeout = 2.0;
+static const int kMaxNetworkChunk = 1 << 10;
+static const int kNetworkTimeout = 5.0;
 
 struct Worker::Peer {
 
@@ -294,14 +294,13 @@ void Worker::PollMaster() {
     return;
   }
 
-  // HACK - TODO.  Right now assigning a shard across all tables; rather then per-table.
   ShardAssignmentRequest shard_req;
   if (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
-    Registry::TableMap &t = Registry::get_tables();
-    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-      LOG(INFO) << "Setting owner of " << i->second->id() << "," << shard_req.shard()
-                << " to " << shard_req.new_worker();
-      i->second->set_owner(shard_req.shard(), shard_req.new_worker());
+    for (int i = 0; i < shard_req.assign_size(); ++i) {
+      const ShardAssignment &a = shard_req.assign(i);
+      VLOG(1)  << "Setting owner of " << a.table() << "," << a.shard() << " to " << a.new_worker();
+
+      Registry::get_table(a.table())->set_owner(a.shard(), a.new_worker());
     }
   }
 
