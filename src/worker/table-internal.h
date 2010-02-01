@@ -144,9 +144,6 @@ public:
 
 template <class K, class V>
 TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
-  partitions_.resize(info().num_shards);
-  local_shards_.resize(info().num_shards);
-
   for (int i = 0; i < partitions_.size(); ++i) {
     TableInfo linfo = info();
     linfo.shard = i;

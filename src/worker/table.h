@@ -119,7 +119,7 @@ public:
 
 class GlobalTable : public Table {
 public:
-  GlobalTable(const TableInfo& info) : Table(info) {}
+  GlobalTable(const TableInfo& info);
 
   virtual ~GlobalTable() {
     for (int i = 0; i < partitions_.size(); ++i) {
@@ -137,7 +137,6 @@ public:
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
 
-  vector<int> local_shards();
   void set_local(int s, bool local);
 
   void get_local(const StringPiece &k, string *v);

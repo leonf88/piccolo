@@ -3,6 +3,11 @@
 
 namespace dsm {
 
+GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
+  partitions_.resize(info.num_shards);
+  local_shards_.resize(info.num_shards);
+}
+
 void GlobalTable::clear() {
  for (int i = 0; i < local_shards_.size(); ++i) {
     if (local_shards_[i]) {
@@ -27,17 +32,6 @@ bool GlobalTable::is_local_shard(int shard) {
 
 bool GlobalTable::is_local_key(const StringPiece &k) {
   return is_local_shard(get_shard_str(k));
-}
-
-vector<int> GlobalTable::local_shards() {
-  vector<int> v;
-  for (int i = 0; i < local_shards_.size(); ++i) {
-    if (local_shards_[i]) {
-      v.push_back(i);
-    }
-  }
-
-  return v;
 }
 
 void GlobalTable::set_local(int s, bool local) {

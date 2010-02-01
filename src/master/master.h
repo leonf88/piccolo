@@ -39,7 +39,29 @@ private:
   RPCHelper *rpc_;
   MPI::Intracomm world_;
 
+  enum WorkerStatus {
+    IDLE =       0,
+    WORKING =    1,
+    MIGRATING =  2
+  };
+
+  struct WorkerState {
+    vector<int> assigned;
+    vector<int> pending;
+    vector<int> finished;
+
+    double last_ping_time;
+    int status;
+
+    bool is_assigned(int shard) {
+      return find(assigned.begin(), assigned.end(), shard) != assigned.end();
+    }
+  };
+
+  vector<WorkerState> workers_;
+
   int worker_for_shard(int shard);
+  int assign_worker(int shard);
 };
 
 #define RUN_ONE(m, klass, method, table)\
