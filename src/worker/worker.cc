@@ -9,7 +9,7 @@
 #include "worker/registry.h"
 
 namespace dsm {
-static const int kMaxNetworkChunk = 1 << 20;
+static const int kMaxNetworkChunk = 1 << 12;
 static const int kNetworkTimeout = 2.0;
 
 struct Worker::Peer {
@@ -299,19 +299,23 @@ void Worker::PollMaster() {
   if (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     Registry::TableMap &t = Registry::get_tables();
     for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+      LOG(INFO) << "Setting owner of " << i->second->id() << "," << shard_req.shard()
+                << " to " << shard_req.new_worker();
       i->second->set_owner(shard_req.shard(), shard_req.new_worker());
     }
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  KernelRequest k;
-  if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
-    kernel_queue_.push_back(k);
-  }
+  if (network_idle()) {
+    KernelRequest k;
+    if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
+      kernel_queue_.push_back(k);
+    }
 
-  while (!kernel_done_.empty()) {
-    rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
-    kernel_done_.pop_front();
+    while (!kernel_done_.empty()) {
+      rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
+      kernel_done_.pop_front();
+    }
   }
 }
 

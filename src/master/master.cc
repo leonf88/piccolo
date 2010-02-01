@@ -8,13 +8,18 @@ Master::Master(const ConfigData &conf) {
   rpc_ = new RPCHelper(&world_);
   workers_.resize(config_.num_workers());
 }
-
 Master::~Master() {
   EmptyMessage msg;
   LOG(INFO) << "Shutting down workers.";
   for (int i = 1; i < world_.Get_size(); ++i) {
     rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
+}
+
+Master::WorkerState::WorkerState() {
+  assigned.resize(Registry::get_tables().size());
+  pending.resize(Registry::get_tables().size());
+  finished.resize(Registry::get_tables().size());
 }
 
 void Master::run_all(const RunDescriptor& r) {
@@ -33,23 +38,27 @@ void Master::run_one(const RunDescriptor& r) {
 
 int Master::worker_for_shard(int table, int shard) {
   for (int i = 0; i < workers_.size(); ++i) {
-    if (workers_[i].is_assigned(shard)) { return i; }
+    if (workers_[i].is_assigned(table, shard)) { return i; }
   }
 
-  return assign_worker(table,shard);
+  return -1;
 }
 
 int Master::assign_worker(int table, int shard) {
+  if (worker_for_shard(table, shard) >= 0) {
+    return worker_for_shard(table, shard);
+  }
+
   int best = 0;
   int best_v = 1e6;
   for (int i = 0; i < workers_.size(); ++i) {
-    if (workers_[i].assigned.size() < best_v) {
-      best_v = workers_[i].assigned.size();
+    if (workers_[i].assigned[table].size() < best_v) {
+      best_v = workers_[i].assigned[table].size();
       best = i;
     }
   }
 
-  workers_[best].assigned.push_back(shard);
+  workers_[best].assigned[table].push_back(shard);
 
   LOG(INFO) << "Assigning " << shard << " to " << best;
   ShardAssignmentRequest req;
@@ -58,7 +67,7 @@ int Master::assign_worker(int table, int shard) {
   req.set_shard(shard);
   req.set_table(table);
 
-  rpc_->Send(best + 1, MTYPE_SHARD_ASSIGNMENT, req);
+  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
   return best;
 }
 
@@ -71,14 +80,14 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   vector<int> done(config_.num_workers());
   for (int i = 0; i < shards.size(); ++i) {
     assign_worker(0, shards[i]);
-    VLOG(1) << "Sending shard: " << shards[i] << " to " << worker_for_shard(0, shards[i]);
   }
 
   for (int i = 0; i < shards.size(); ++i) {
     int widx = worker_for_shard(0, shards[i]);
     msg.set_shard(shards[i]);
     WorkerState& w = workers_[widx];
-    w.pending.push_back(i);
+    w.pending[r.table].push_back(i);
+    VLOG(1) << "Running shard: " << shards[i] << " on " << worker_for_shard(0, shards[i]);
     rpc_->Send(1 + widx, MTYPE_RUN_KERNEL, msg);
   }
 
