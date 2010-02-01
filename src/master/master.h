@@ -64,6 +64,7 @@ private:
 
   int worker_for_shard(int table, int shard);
   int assign_worker(int table, int shard);
+  void send_assignments();
 };
 
 #define RUN_ONE(m, klass, method, table)\
