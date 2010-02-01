@@ -40,7 +40,9 @@ public:
   void release_shard(GlobalTable *t, int shard);
   void acquire_shard(GlobalTable *t, int shard);
 
-  int peer_for_shard(int table_id, int shard);
+  int peer_for_shard(int table_id, int shard) const;
+  int id() const { return config_.worker_id(); };
+
 private:
   // The largest amount of data we'll send over the network as a single piece.
   static const int64_t kNetworkChunkSize = 500 << 10;

@@ -5,20 +5,20 @@ namespace dsm {
 
 GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
-  local_shards_.resize(info.num_shards);
+  worker_for_shard_.resize(info.num_shards);
 }
 
 void GlobalTable::clear() {
- for (int i = 0; i < local_shards_.size(); ++i) {
-    if (local_shards_[i]) {
+ for (int i = 0; i < partitions_.size(); ++i) {
+    if (is_local_shard(i)) {
       partitions_[i]->clear();
     }
   }
 }
 
 bool GlobalTable::empty() {
-  for (int i = 0; i < local_shards_.size(); ++i) {
-    if (local_shards_[i] && !partitions_[i]->empty()) {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    if (is_local_shard(i) && !partitions_[i]->empty()) {
       return false;
     }
   }
@@ -27,15 +27,15 @@ bool GlobalTable::empty() {
 
 
 bool GlobalTable::is_local_shard(int shard) {
-  return local_shards_[shard];
+  return worker_for_shard_[shard] == info_.worker->id();
 }
 
 bool GlobalTable::is_local_key(const StringPiece &k) {
   return is_local_shard(get_shard_str(k));
 }
 
-void GlobalTable::set_local(int s, bool local) {
-  local_shards_[s] = local;
+void GlobalTable::set_owner(int shard, int w) {
+  worker_for_shard_[shard] = w;
 }
 
 void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
