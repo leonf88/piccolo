@@ -5,12 +5,12 @@ DEFINE_bool(rpc_log, false, "");
 
 namespace dsm {
 
-void ProtoWrapper::AppendToCoder(Encoder *e) const {
+void RPCHelper::ProtoWrapper::AppendToCoder(Encoder *e) const {
   string s = p_->SerializeAsString();
   e->write_bytes(s.data(), s.size());
 }
 
-void ProtoWrapper::ParseFromCoder(Decoder *d) {
+void RPCHelper::ProtoWrapper::ParseFromCoder(Decoder *d) {
   Clear();
   p_->ParseFromArray(&d->data()[0], d->data().size());
 }

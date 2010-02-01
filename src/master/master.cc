@@ -13,7 +13,7 @@ Master::~Master() {
   EmptyMessage msg;
   LOG(INFO) << "Shutting down workers.";
   for (int i = 1; i < world_.Get_size(); ++i) {
-    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, ProtoWrapper(msg));
+    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
 }
 
@@ -66,16 +66,15 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     int widx = worker_for_shard(shards[i]);
     WorkerState& w = workers_[widx];
     w.pending.push_back(i);
-    rpc_->Send(1 + widx, MTYPE_RUN_KERNEL, ProtoWrapper(msg));
+    rpc_->Send(1 + widx, MTYPE_RUN_KERNEL, msg);
   }
 
   KernelRequest kernel_done;
-  ProtoWrapper wrapper(kernel_done);
 
   int count = 0;
   for (int j = 0; j < shards.size(); ++j) {
     int peer = 0;
-    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &wrapper);
+    rpc_->ReadAny(&peer, MTYPE_KERNEL_DONE, &kernel_done);
 
     done[peer - 1] += 1;
     ++count;

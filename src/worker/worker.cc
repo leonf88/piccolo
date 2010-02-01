@@ -96,8 +96,8 @@ Worker::Worker(const ConfigData &c) {
   kernel_thread_ = network_thread_ = NULL;
 
   // HACKHACKHACK - register ourselves with any existing tables
-  Registry::TableMap *t = Registry::get_tables();
-  for (Registry::TableMap::iterator i = t->begin(); i != t->end(); ++i) {
+  Registry::TableMap &t = Registry::get_tables();
+  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     for (int j = 0; j < i->second->info().num_shards; ++j) {
       if (peer_for_shard(i->first, j) == config_.worker_id()) {
         acquire_shard(i->second, j);
@@ -107,6 +107,10 @@ Worker::Worker(const ConfigData &c) {
   }
 
   LOG(INFO) << "Worker " << config_.worker_id();
+}
+
+int Worker::peer_for_shard(int table, int shard) {
+  return Registry::get_tables()[table]->get_peer(shard);
 }
 
 void Worker::release_shard(GlobalTable *t, int shard) {
@@ -190,8 +194,8 @@ void Worker::KernelLoop() {
     helper->invoke_method(d, k.method());
     kernel_done_.push_back(k);
 
-    for (Registry::TableMap::iterator i = Registry::get_tables()->begin();
-         i != Registry::get_tables()->end(); ++i) {
+    for (Registry::TableMap::iterator i = Registry::get_tables().begin();
+         i != Registry::get_tables().end(); ++i) {
       i->second->SendUpdates();
     }
 
@@ -215,8 +219,8 @@ int64_t Worker::pending_network_bytes() const {
 int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
-  Registry::TableMap *tmap = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tmap->begin(); i != tmap->end(); ++i) {
+  Registry::TableMap &tmap = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     t += ((GlobalTable*)i->second)->pending_write_bytes();
   }
 
@@ -296,30 +300,26 @@ void Worker::PollPeers() {
 
 void Worker::PollMaster() {
   // Check for shutdown.
-  {
-    EmptyMessage msg;
-    ProtoWrapper wrapper(msg);
-
-    if (rpc_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &wrapper)) {
-      VLOG(1) << "Shutting down worker " << config_.worker_id();
-      running_ = false;
-      return;
-    }
+  EmptyMessage msg;
+  if (rpc_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
+    VLOG(1) << "Shutting down worker " << config_.worker_id();
+    running_ = false;
+    return;
   }
 
-  boost::recursive_mutex::scoped_lock sl(kernel_lock_);
+  ShardAssignmentRequest shard_req;
+  if (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
+
+  }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  if (network_idle()) {
-    KernelRequest k;
-    ProtoWrapper wrapper(k);
-    if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &wrapper)) {
-      kernel_queue_.push_back(k);
-    }
+  KernelRequest k;
+  if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
+    kernel_queue_.push_back(k);
   }
 
   while (!kernel_done_.empty()) {
-    rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, ProtoWrapper(kernel_done_.front()));
+    rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
     kernel_done_.pop_front();
   }
 }

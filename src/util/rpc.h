@@ -30,19 +30,6 @@ public:
 	virtual void Clear() = 0;
 };
 
-
-// Simple wrapper to allow protocol buffers to be sent through the RPC system.
-class ProtoWrapper : public RPCMessage {
-private:
-  google::protobuf::Message *p_;
-public:
-  ProtoWrapper(const google::protobuf::Message& p) : p_((google::protobuf::Message*)&p) {}
-
-  void Clear() { p_->Clear(); }
-  void AppendToCoder(Encoder *e) const;
-  void ParseFromCoder(Decoder *d);
-};
-
 class RPCHelper {
 public:
   typedef google::protobuf::Message Message;
@@ -66,6 +53,35 @@ public:
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
   void Broadcast(int rpcId, const RPCMessage &msg);
+
+
+  // Simple wrapper to allow protocol buffers to be sent through the RPC system.
+  class ProtoWrapper : public RPCMessage {
+  typedef google::protobuf::Message Message;
+  private:
+    Message *p_;
+  public:
+    ProtoWrapper(Message* p) : p_(p) {}
+
+    void Clear() { p_->Clear(); }
+    void AppendToCoder(Encoder *e) const;
+    void ParseFromCoder(Decoder *d);
+  };
+
+#define WRAP(f, p, r, msg)\
+    ProtoWrapper w(msg);\
+    return f(p, r, &w);\
+
+  bool TryRead(int peerId, int rpcId, Message* msg) { WRAP(TryRead, peerId, rpcId, msg); }
+  bool Read(int peerId, int rpcId, Message* msg) { WRAP(Read, peerId, rpcId, msg); }
+  bool ReadAny(int *peerId, int rpcId, Message* msg) { WRAP(ReadAny, peerId, rpcId, msg); }
+#undef WRAP
+
+  void Send(int peerId, int rpcId, const Message& msg) {
+    ProtoWrapper w((Message*)&msg);
+    Send(peerId, rpcId, w);
+  }
+
 private:
   boost::recursive_mutex mpi_lock_;
 

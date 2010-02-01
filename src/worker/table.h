@@ -142,6 +142,9 @@ public:
   void get_local(const StringPiece &k, string *v);
   void get_remote(int shard, const StringPiece &k, string* v);
 
+  // Return the worker id responsible for the given shard of the table.
+  int get_peer(int shard);
+
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
   void ApplyUpdates(const dsm::HashUpdate& req);
