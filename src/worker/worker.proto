@@ -10,7 +10,7 @@ enum MessageTypes {
   MTYPE_GET_REQUEST = 5;
   MTYPE_GET_RESPONSE = 6;   
   
-  MTYPE_MIGRATE_SHARD = 7;
+  MTYPE_SHARD_ASSIGNMENT = 7;
   
   MTYPE_WORKER_SHUTDOWN = 8;
 };
@@ -26,7 +26,7 @@ message Stats {
   optional int64 get_in = 6;
 }
 
-message MigrateShardRequest {
+message ShardAssignmentRequest {
   required int32 table = 1;
   required int32 shard = 2;
   required int32 old_worker = 3;

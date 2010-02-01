@@ -21,26 +21,26 @@ namespace Registry {
 static map<string, KernelInfo*> *kernels = NULL;
 static map<int, GlobalTable*> *tables = NULL;
 
-map<string, KernelInfo*>* get_kernels() {
+map<string, KernelInfo*>& get_kernels() {
   if (kernels == NULL) {
     kernels = new map<string, KernelInfo*>;
   }
-  return kernels;
+  return *kernels;
 }
 
-map<int, GlobalTable*>* get_tables() {
+map<int, GlobalTable*>& get_tables() {
   if (tables == NULL) {
     tables = new map<int, GlobalTable*>;
   }
-  return tables;
+  return *tables;
 }
 
 KernelInfo* get_kernel_info(const string& name) {
-  return (*get_kernels())[name];
+  return get_kernels()[name];
 }
 
 GlobalTable* get_table(int id) {
-  return (*get_tables())[id];
+  return get_tables()[id];
 }
 
 

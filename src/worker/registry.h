@@ -73,8 +73,8 @@ namespace Registry {
   typedef map<int, GlobalTable*> TableMap;
   typedef map<string, KernelInfo*> KernelMap;
 
-  KernelMap* get_kernels();
-  TableMap *get_tables();
+  KernelMap& get_kernels();
+  TableMap& get_tables();
 
   template <class K, class V>
   TypedGlobalTable<K, V>* create_table(int id, int shards,
@@ -87,7 +87,7 @@ namespace Registry {
     info.table_id = id;
 
     TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
-    get_tables()->insert(make_pair(id, t));
+    get_tables().insert(make_pair(id, t));
     return t;
   }
 
@@ -97,7 +97,7 @@ namespace Registry {
   template <class C>
   struct KernelRegistrationHelper {
     KernelRegistrationHelper(const char* name) {
-      get_kernels()->insert(make_pair(name, new KernelInfoT<C>(name)));
+      get_kernels().insert(make_pair(name, new KernelInfoT<C>(name)));
     }
   };
 
