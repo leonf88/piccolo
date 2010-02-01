@@ -60,8 +60,8 @@ private:
 
   vector<WorkerState> workers_;
 
-  int worker_for_shard(int shard);
-  int assign_worker(int shard);
+  int worker_for_shard(int table, int shard);
+  int assign_worker(int table, int shard);
 };
 
 #define RUN_ONE(m, klass, method, table)\

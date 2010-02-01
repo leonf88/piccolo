@@ -137,13 +137,15 @@ public:
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
 
-  void set_local(int s, bool local);
+  // Return the worker id responsible for the given shard of the table.
+  int get_owner(int shard) {
+    return worker_for_shard_[shard];
+  }
+
+  void set_owner(int shard, int worker);
 
   void get_local(const StringPiece &k, string *v);
   void get_remote(int shard, const StringPiece &k, string* v);
-
-  // Return the worker id responsible for the given shard of the table.
-  int get_peer(int shard);
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
@@ -162,7 +164,8 @@ protected:
   friend class Worker;
   virtual LocalTable* create_local(int shard) = 0;
 
-  vector<uint8_t> local_shards_;
+  vector<uint16_t> worker_for_shard_;
+
   vector<LocalTable*> partitions_;
   volatile int pending_writes_;
 //  mutable boost::recursive_mutex pending_lock_;

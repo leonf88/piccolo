@@ -98,27 +98,14 @@ Worker::Worker(const ConfigData &c) {
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-    for (int j = 0; j < i->second->info().num_shards; ++j) {
-      if (peer_for_shard(i->first, j) == config_.worker_id()) {
-        acquire_shard(i->second, j);
-      }
-    }
     i->second->info_.worker = this;
   }
 
-  LOG(INFO) << "Worker " << config_.worker_id();
+  LOG(INFO) << "Worker " << config_.worker_id() << " started.";
 }
 
-int Worker::peer_for_shard(int table, int shard) {
-  return Registry::get_tables()[table]->get_peer(shard);
-}
-
-void Worker::release_shard(GlobalTable *t, int shard) {
-  t->set_local(shard, false);
-}
-
-void Worker::acquire_shard(GlobalTable *t, int shard) {
-  t->set_local(shard, true);
+int Worker::peer_for_shard(int table, int shard) const {
+  return Registry::get_tables()[table]->get_owner(shard);
 }
 
 void Worker::Run() {
@@ -176,7 +163,7 @@ void Worker::KernelLoop() {
     VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
 
     if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
-      LOG(FATAL) << "Received a shard I can't work on!";
+      LOG(FATAL) << "Received a shard I can't work on! : " << k.shard() << " : " << peer_for_shard(k.table(), k.shard());
     }
 
     KernelInfo *helper = Registry::get_kernel_info(k.kernel());
@@ -307,9 +294,13 @@ void Worker::PollMaster() {
     return;
   }
 
+  // HACK - TODO.  Right now assigning a shard across all tables; rather then per-table.
   ShardAssignmentRequest shard_req;
   if (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
-
+    Registry::TableMap &t = Registry::get_tables();
+    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+      i->second->set_owner(shard_req.shard(), shard_req.new_worker());
+    }
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
