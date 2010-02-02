@@ -247,7 +247,8 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
 }
 
 void Worker::PollPeers() {
-  PERIODIC(10, LOG(INFO) << "Pending network: " << pending_network_bytes());
+  PERIODIC(10,
+           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << resident_set_size());
 
   for (int i = 0; i < peers_.size(); ++i) {
     Peer *p = peers_[i];
