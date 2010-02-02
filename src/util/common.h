@@ -134,8 +134,6 @@ extern void Sleep(double t);
 
 extern void DumpHeapProfile(const string& file);
 
-extern boost::thread_group programThreads;
-
 class SpinLock {
 public:
   SpinLock() : d(0) {}
@@ -179,6 +177,7 @@ private:
 }
 
 #define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
+#define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
 }
 

@@ -32,7 +32,6 @@ bool RPCHelper::HasData(int peerId, int rpcId, MPI::Status &status) {
   return mpi_world_->Iprobe(peerId, rpcId, status);
 }
 
-
 bool RPCHelper::TryRead(int peerId, int rpcId, RPCMessage *msg) {
   rpc_lock;
   bool success = false;

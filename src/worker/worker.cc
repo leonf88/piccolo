@@ -306,16 +306,30 @@ void Worker::PollMaster() {
     }
   }
 
+  KernelRequest k;
+
   // Check for new kernels to run, and report finished kernels to the master.
   if (network_idle()) {
-    KernelRequest k;
-    if (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
+    while (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
       kernel_queue_.push_back(k);
     }
 
     while (!kernel_done_.empty()) {
       rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
       kernel_done_.pop_front();
+    }
+  }
+
+  // Check for kernels to avoid running.
+  while (rpc_->TryRead(config_.master_id(), MTYPE_STOP_KERNEL, &k)) {
+    LOG(INFO) << "Got stop request for: " << k;
+    for (int i = 0; i < kernel_queue_.size(); ++i) {
+      const KernelRequest &c = kernel_queue_[i];
+      if (c.table() == k.table() && c.shard() == k.shard()) {
+        LOG(INFO) << "dropping: " << k << " from queue.";
+        kernel_queue_.erase(kernel_queue_.begin() + i);
+        break;
+      }
     }
   }
 }

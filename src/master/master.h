@@ -48,16 +48,15 @@ private:
   struct WorkerState {
     WorkerState();
 
-    vector<vector<int> > assigned;
-    vector<vector<int> > pending;
-    vector<vector<int> > finished;
+    vector<unordered_set<int> > assigned;
+    vector<unordered_set<int> > pending;
+    vector<unordered_set<int> > finished;
 
     double last_ping_time;
     int status;
 
-    bool is_assigned(int table, int shard) {
-      return find(assigned[table].begin(), assigned[table].end(), shard) != assigned[table].end();
-    }
+    bool is_assigned(int table, int shard) { return IN(assigned[table], shard);  }
+    bool idle(int table) { return pending[table].empty(); }
   };
 
   vector<WorkerState> workers_;
@@ -65,6 +64,8 @@ private:
   int worker_for_shard(int table, int shard);
   int assign_worker(int table, int shard);
   void send_assignments();
+
+  void steal_work(int idle_worker, const RunDescriptor& r);
 };
 
 #define RUN_ONE(m, klass, method, table)\
