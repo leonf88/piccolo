@@ -247,6 +247,8 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
 }
 
 void Worker::PollPeers() {
+  PERIODIC(10, LOG(INFO) << "Pending network: " << pending_network_bytes());
+
   for (int i = 0; i < peers_.size(); ++i) {
     Peer *p = peers_[i];
     p->CollectPendingSends();
@@ -294,7 +296,7 @@ void Worker::PollMaster() {
   }
 
   ShardAssignmentRequest shard_req;
-  if (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
+  while (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
       VLOG(1)  << "Setting owner of " << a.table() << "," << a.shard() << " to " << a.new_worker();

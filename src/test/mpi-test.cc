@@ -29,10 +29,13 @@ void send() {
 }
 
 void test_send_done() {
-  for (list<SendReq*>::iterator i = reqs.begin(); i != reqs.end(); ++i) {
+  list<SendReq*>::iterator i = reqs.begin();
+  while (i != reqs.end()) {
     if ((*i)->req.Test()) {
       delete (*i);
       i = reqs.erase(i);
+    } else {
+      ++i;
     }
   }
 }
