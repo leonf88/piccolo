@@ -104,6 +104,17 @@ uint64_t Timer::cycles_elapsed() const {
   return rdtsc() - start_cycle_;
 }
 
+uint64_t resident_set_size() {
+  uint64_t m = -1;
+  FILE* procinfo = fopen(StringPrintf("/proc/%d/status", getpid()).c_str(), "r");
+  while (fscanf(procinfo, "VmRSS: %ld kB", &m) != 1) {
+    if (fgetc(procinfo) == EOF) { break; }
+  }
+  fclose(procinfo);
+
+  return m;
+}
+
 static double get_processor_frequency() {
   double freq;
   int a, b;
