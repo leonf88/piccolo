@@ -19,6 +19,7 @@
 #include <list>
 #include <algorithm>
 #include <tr1/unordered_map>
+#include <tr1/unordered_set>
 
 #ifdef SWIG
 #define __attribute__(X)
@@ -30,6 +31,7 @@ namespace dsm {
 
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
+using std::tr1::unordered_set;
 
 using std::map;
 using std::vector;
