@@ -122,7 +122,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       status += StringPrintf("%d: %d; ", k, done[k]);
     }
 
-    VLOG(1) << "Kernels finished: " << status << " left " << shards.size() - count;
+    LOG(INFO) << "Kernels finished: " << status << " left " << shards.size() - count;
   }
 
   LOG(INFO) << "Kernel run finished in " << t.elapsed();

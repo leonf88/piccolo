@@ -103,7 +103,9 @@ public:
       }
     }
 
-    LOG(INFO) << "Finished shard " << current_shard() << " in " << t.elapsed();
+    char host[1024];
+    gethostname(host, 1024);
+    LOG(INFO) << "Finished shard " << current_shard() << " on " << host << " in " << t.elapsed();
   }
 
   void ResetTable() {
