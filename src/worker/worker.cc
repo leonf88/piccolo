@@ -9,7 +9,7 @@
 #include "worker/registry.h"
 
 namespace dsm {
-static const int kMaxNetworkChunk = 1 << 10;
+static const int kMaxNetworkChunk = 1 << 22;
 static const int kNetworkTimeout = 5.0;
 
 struct Worker::Peer {
@@ -22,17 +22,15 @@ struct Worker::Peer {
     MPI::Request mpi_req;
     double start_time;
 
-    Request() {
-      start_time = Now();
-    }
-
+    Request() : start_time(Now()) {}
     ~Request() {}
+
+    double elapsed() { return Now() - start_time; }
+    double timed_out() { return elapsed() > kNetworkTimeout; }
   };
 
   HashUpdate write_scratch;
-  list<Request*> outgoing_requests_;
-
-  mutable boost::recursive_mutex pending_lock_;
+  unordered_set<Request*> outgoing_requests_;
 
   int32_t id;
   RPCHelper *helper;
@@ -42,37 +40,38 @@ struct Worker::Peer {
 
   // Send the given message type and data to this peer.
   Request* Send(int rpc_type, const RPCMessage& ureq) {
-    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
     ureq.AppendToString(&r->payload);
 
     r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
-    outgoing_requests_.push_back(r);
+    outgoing_requests_.insert(r);
     pending_out_ += r->payload.size();
 
     return r;
   }
 
   void CollectPendingSends() {
-    boost::recursive_mutex::scoped_lock sl(pending_lock_);
-    for (list<Request*>::iterator i = outgoing_requests_.begin(); i != outgoing_requests_.end(); ++i) {
+    unordered_set<Request*>::iterator i = outgoing_requests_.begin();
+    while (i != outgoing_requests_.end()) {
       Request *r = (*i);
-      if (r->mpi_req.Test()) {
+      if (r->mpi_req.Test() || r->timed_out()) {
         VLOG(2) << "Request of size " << r->payload.size() << " finished.";
+
+        if (r->timed_out()) {
+          LOG_EVERY_N(INFO, 100) << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
+          r->mpi_req.Cancel();
+        }
+
         pending_out_ -= r->payload.size();
         delete r;
         i = outgoing_requests_.erase(i);
-      } else if (Now() - r->start_time > kNetworkTimeout) {
-         LOG_EVERY_N(INFO, 100) << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
-         pending_out_ -= r->payload.size();
-         r->mpi_req.Cancel();
-         delete r;
-         i = outgoing_requests_.erase(i);
+      } else {
+        ++i;
       }
     }
+#undef REMOVE
   }
 
   int64_t pending_out_bytes() const { return pending_out_; }
