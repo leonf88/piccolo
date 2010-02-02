@@ -95,7 +95,7 @@ public:
     Page n;
     Timer t;
     while (r.read(&n)) {
-      double v = curr_pr_hash->get(n.id());
+      double v = curr_pr_hash->get_local(n.id());
 
       for (int i = 0; i < n.target_size(); ++i) {
 //        LOG_EVERY_N(INFO, 1000) << "Adding: " << kPropagationFactor * v / n.target_size() << " to " << n.target(i);

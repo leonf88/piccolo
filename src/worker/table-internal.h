@@ -140,6 +140,14 @@ public:
   void remove_str(const StringPiece &k) {
     remove(Data::from_string<K>(k));
   }
+
+  V get_local(const K& k) {
+    int shard = this->get_shard(k);
+
+    CHECK(is_local_shard(shard));
+
+    return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
+  }
 };
 
 template <class K, class V>

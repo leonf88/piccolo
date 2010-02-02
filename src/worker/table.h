@@ -165,10 +165,9 @@ protected:
   virtual LocalTable* create_local(int shard) = 0;
 
   vector<uint16_t> worker_for_shard_;
-
   vector<LocalTable*> partitions_;
+
   volatile int pending_writes_;
-//  mutable boost::recursive_mutex pending_lock_;
 };
 
 template <class K, class V>
