@@ -1,4 +1,4 @@
-#include "worker/table.h"
+#include "kernel/table.h"
 #include "worker/worker.h"
 
 namespace dsm {

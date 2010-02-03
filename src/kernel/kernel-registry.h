@@ -1,14 +1,15 @@
-#ifndef KERNEL_H_
-#define KERNEL_H_
+#ifndef KERNELREGISTRY_H_
+#define KERNELREGISTRY_H_
 
 #include "util/common.h"
-#include "worker/table.h"
-#include "worker/table-internal.h"
 
 namespace dsm {
 
+template <class K, class V>
+class TypedGlobalTable;
+
+class Table;
 class Worker;
-class Master;
 
 class DSMKernel {
 public:
@@ -50,49 +51,24 @@ struct KernelInfo {
 template <class C>
 struct KernelInfoT : public KernelInfo {
   typedef void (C::*Method)();
+  map<string, Method> methods_;
 
   KernelInfoT(const char* name) : KernelInfo(name) {}
 
-  DSMKernel* create() {
-    return new C;
-  }
+  DSMKernel* create() { return new C; }
 
   void invoke_method(DSMKernel* obj, const string& method_id) {
     boost::function<void (C*)> m(methods_[method_id]);
     m((C*)obj);
   }
 
-  void register_method(const char* mname, Method m) {
-    methods_[mname] = m;
-  }
-
-  map<string, Method> methods_;
+  void register_method(const char* mname, Method m) { methods_[mname] = m; }
 };
 
 namespace Registry {
-  typedef map<int, GlobalTable*> TableMap;
   typedef map<string, KernelInfo*> KernelMap;
-
   KernelMap& get_kernels();
-  TableMap& get_tables();
-
-  template <class K, class V>
-  TypedGlobalTable<K, V>* create_table(int id, int shards,
-                              typename TypedTable<K, V>::ShardingFunction sharding,
-                              typename TypedTable<K, V>::AccumFunction accum) {
-    TableInfo info;
-    info.num_shards = shards;
-    info.accum_function = (void*)accum;
-    info.sharding_function = (void*)sharding;
-    info.table_id = id;
-
-    TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
-    get_tables().insert(make_pair(id, t));
-    return t;
-  }
-
-  KernelInfo* get_kernel_info(const string& name);
-  GlobalTable* get_table(int id);
+  KernelInfo* get_kernel(const string& name);
 
   template <class C>
   struct KernelRegistrationHelper {
@@ -104,7 +80,7 @@ namespace Registry {
   template <class C>
   struct MethodRegistrationHelper {
     MethodRegistrationHelper(const char* klass, const char* mname, void (C::*m)()) {
-      ((KernelInfoT<C>*)get_kernel_info(klass))->register_method(mname, m);
+      ((KernelInfoT<C>*)get_kernel(klass))->register_method(mname, m);
     }
   };
 }
@@ -115,5 +91,5 @@ namespace Registry {
 #define REGISTER_METHOD(klass, method)\
   static Registry::MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
 
-} // end namespace
-#endif /* KERNEL_H_ */
+}
+#endif /* KERNELREGISTRY_H_ */

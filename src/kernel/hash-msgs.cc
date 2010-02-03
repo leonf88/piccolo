@@ -1,4 +1,4 @@
-#include "worker/hash-msgs.h"
+#include "kernel/hash-msgs.h"
 
 namespace dsm {
 // Hand defined serialization for hash request/update messages.  Painful, but

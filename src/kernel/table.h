@@ -2,11 +2,7 @@
 #define ACCUMULATOR_H
 
 #include "util/common.h"
-
-#include "worker/hash-msgs.h"
-#include "worker/worker.pb.h"
-
-#include <algorithm>
+#include "kernel/hash-msgs.h"
 
 namespace dsm {
 
@@ -70,7 +66,7 @@ public:
   void *accum_function;
   void *sharding_function;
 
-  // Used for remote sends.
+  // Used for remote sends, and to trigger polling when needed.
   Worker *worker;
 };
 

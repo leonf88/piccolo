@@ -1,8 +1,8 @@
 #ifndef TABLEINTERNAL_H_
 #define TABLEINTERNAL_H_
 
-#include "worker/table.h"
-#include "worker/hash-msgs.h"
+#include "kernel/table.h"
+#include "kernel/hash-msgs.h"
 #include "util/hashmap.h"
 
 namespace dsm {
@@ -144,7 +144,7 @@ public:
   V get_local(const K& k) {
     int shard = this->get_shard(k);
 
-    CHECK(is_local_shard(shard));
+    CHECK(is_local_shard(shard)) << " non-local get? " << shard;
 
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }

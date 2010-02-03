@@ -1,6 +1,6 @@
 #include "util/hashmap.h"
 #include "util/common.h"
-#include "worker/table.h"
+#include "kernel/table.h"
 
 DEFINE_int32(count, 10000, "");
 DEFINE_int32(size, 10000, "");

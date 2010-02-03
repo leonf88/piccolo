@@ -1,11 +1,11 @@
 #include <stdio.h>
 
-#include "worker/registry.h"
-#include "worker/worker.h"
-#include "worker/table.h"
+#include "kernel/kernel-registry.h"
+#include "kernel/table-registry.h"
 
 namespace dsm {
 
+class Worker;
 void DSMKernel::Init(Worker* w, int table_id, int shard) {
   w_ = w;
   table_id_ = table_id;
@@ -17,9 +17,7 @@ Table* DSMKernel::get_table(int id) {
 }
 
 namespace Registry {
-
 static map<string, KernelInfo*> *kernels = NULL;
-static map<int, GlobalTable*> *tables = NULL;
 
 map<string, KernelInfo*>& get_kernels() {
   if (kernels == NULL) {
@@ -28,22 +26,9 @@ map<string, KernelInfo*>& get_kernels() {
   return *kernels;
 }
 
-map<int, GlobalTable*>& get_tables() {
-  if (tables == NULL) {
-    tables = new map<int, GlobalTable*>;
-  }
-  return *tables;
-}
-
-KernelInfo* get_kernel_info(const string& name) {
+KernelInfo* get_kernel(const string& name) {
   return get_kernels()[name];
 }
-
-GlobalTable* get_table(int id) {
-  return get_tables()[id];
-}
-
-
 }
 
 }

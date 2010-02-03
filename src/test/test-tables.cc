@@ -1,7 +1,5 @@
-#include "util/common.h"
-#include "util/file.h"
-#include "worker/worker.h"
-#include "master/master.h"
+#include "client.h"
+
 using namespace dsm;
 
 

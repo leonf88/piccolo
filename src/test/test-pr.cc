@@ -1,8 +1,4 @@
-#include "util/common.h"
-#include "util/file.h"
-#include "worker/worker.h"
-#include "master/master.h"
-
+#include "client.h"
 #include "test/test.pb.h"
 
 #include <sys/time.h>
@@ -88,6 +84,9 @@ public:
   }
 
   void PageRankIter() {
+    if (MPI::COMM_WORLD.Get_rank() == 1) {
+      Sleep(5);
+    }
     ++iter;
 
     RecordFile r(StringPrintf(FLAGS_graph_prefix + "-%05d-of-%05d-N%05d",
