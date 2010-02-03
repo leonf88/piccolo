@@ -3,9 +3,9 @@
 
 #include "util/common.h"
 #include "util/rpc.h"
-#include "worker/registry.h"
+#include "kernel/kernel-registry.h"
+#include "kernel/table.h"
 #include "worker/worker.pb.h"
-#include "worker/table-internal.h"
 
 #include <boost/thread.hpp>
 #include <mpi.h>

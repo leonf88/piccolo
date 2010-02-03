@@ -6,7 +6,8 @@
 
 #include "util/common.h"
 #include "worker/worker.h"
-#include "worker/registry.h"
+#include "kernel/kernel-registry.h"
+#include "kernel/table-registry.h"
 
 namespace dsm {
 static const int kMaxNetworkChunk = 1 << 22;
@@ -159,13 +160,13 @@ void Worker::KernelLoop() {
     KernelRequest k = kernel_queue_.front();
     kernel_queue_.pop_front();
 
-    VLOG(1) << "Received run request for kernel id: " << k.kernel() << ":" << k.method() << ":" << k.shard();
+    VLOG(1) << "Received run request for " << k;
 
     if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
       LOG(FATAL) << "Received a shard I can't work on! : " << k.shard() << " : " << peer_for_shard(k.table(), k.shard());
     }
 
-    KernelInfo *helper = Registry::get_kernel_info(k.kernel());
+    KernelInfo *helper = Registry::get_kernel(k.kernel());
 
     KernelId id(k.kernel(), k.table(), k.shard());
     DSMKernel* d = kernels_[id];
@@ -185,7 +186,7 @@ void Worker::KernelLoop() {
       i->second->SendUpdates();
     }
 
-    VLOG(1) << "Kernel done.";
+    VLOG(1) << "Kernel finished: " << k;
 #ifdef CPUPROF
     ProfilerFlush();
 #endif
@@ -290,6 +291,8 @@ void Worker::PollPeers() {
 void Worker::PollMaster() {
   // Check for shutdown.
   EmptyMessage msg;
+  KernelRequest k;
+
   if (rpc_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
     VLOG(1) << "Shutting down worker " << config_.worker_id();
     running_ = false;
@@ -306,20 +309,6 @@ void Worker::PollMaster() {
     }
   }
 
-  KernelRequest k;
-
-  // Check for new kernels to run, and report finished kernels to the master.
-  if (network_idle()) {
-    while (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
-      kernel_queue_.push_back(k);
-    }
-
-    while (!kernel_done_.empty()) {
-      rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
-      kernel_done_.pop_front();
-    }
-  }
-
   // Check for kernels to avoid running.
   while (rpc_->TryRead(config_.master_id(), MTYPE_STOP_KERNEL, &k)) {
     LOG(INFO) << "Got stop request for: " << k;
@@ -330,6 +319,18 @@ void Worker::PollMaster() {
         kernel_queue_.erase(kernel_queue_.begin() + i);
         break;
       }
+    }
+  }
+
+  // Check for new kernels to run, and report finished kernels to the master.
+  if (network_idle()) {
+    while (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
+      kernel_queue_.push_back(k);
+    }
+
+    while (!kernel_done_.empty()) {
+      rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
+      kernel_done_.pop_front();
     }
   }
 }

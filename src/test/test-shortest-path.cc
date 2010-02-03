@@ -1,7 +1,4 @@
-#include "util/common.h"
-#include "util/file.h"
-#include "worker/worker.h"
-#include "master/master.h"
+#include "client.h"
 #include "test/test.pb.h"
 
 using namespace dsm;

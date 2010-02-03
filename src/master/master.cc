@@ -1,4 +1,5 @@
 #include "master/master.h"
+#include "kernel/table-registry.h"
 
 namespace dsm {
 

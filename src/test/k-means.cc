@@ -3,10 +3,7 @@
  * distributions.
  */
 
-#include "util/common.h"
-#include "util/file.h"
-#include "worker/worker.h"
-#include "master/master.h"
+#include "client.h"
 
 DEFINE_int32(num_dists, 2, "");
 DEFINE_int32(num_points, 100, "");

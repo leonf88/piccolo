@@ -40,21 +40,21 @@ public:
 
   // Try to read a message from the given peer and rpc channel; return false if no
   // message is immediately available.
-  bool TryRead(int peerId, int rpcId, RPCMessage *msg);
-  bool HasData(int peerId, int rpcId);
-  bool HasData(int peerId, int rpcId, MPI::Status &status);
+  bool TryRead(int target, int rpc, RPCMessage *msg);
+  bool HasData(int target, int rpc);
+  bool HasData(int target, int rpc, MPI::Status &status);
 
-  int Read(int peerId, int rpcId, RPCMessage *msg);
-  int ReadAny(int *peerId, int rpcId, RPCMessage *msg);
-  void Send(int peerId, int rpcId, const RPCMessage &msg);
-  void SyncSend(int peerId, int rpcId, const RPCMessage &msg);
+  int Read(int target, int rpc, RPCMessage *msg);
+  int ReadAny(int *target, int rpc, RPCMessage *msg);
+  void Send(int target, int rpc, const RPCMessage &msg);
+  void SyncSend(int target, int rpc, const RPCMessage &msg);
 
   MPI::Request SendData(int peer_id, int rpc_id, const string& data);
 
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
-  void Broadcast(int rpcId, const RPCMessage &msg);
-  void SyncBroadcast(int rpcId, const RPCMessage &msg);
+  void Broadcast(int rpc, const RPCMessage &msg);
+  void SyncBroadcast(int rpc, const RPCMessage &msg);
 
 
   // Simple wrapper to allow protocol buffers to be sent through the RPC system.
@@ -70,33 +70,33 @@ public:
     void ParseFromCoder(Decoder *d);
   };
 
-#define WRAP(f, p, r, msg)\
+#define PROTOBUF_WRAP(f, p, r, msg)\
     ProtoWrapper w(msg);\
     return f(p, r, &w);\
 
-  bool TryRead(int peerId, int rpcId, Message* msg) { WRAP(TryRead, peerId, rpcId, msg); }
-  bool Read(int peerId, int rpcId, Message* msg) { WRAP(Read, peerId, rpcId, msg); }
-  bool ReadAny(int *peerId, int rpcId, Message* msg) { WRAP(ReadAny, peerId, rpcId, msg); }
-#undef WRAP
+  bool TryRead(int target, int rpc, Message* msg) { PROTOBUF_WRAP(TryRead, target, rpc, msg); }
+  bool Read(int target, int rpc, Message* msg) { PROTOBUF_WRAP(Read, target, rpc, msg); }
+  bool ReadAny(int *target, int rpc, Message* msg) { PROTOBUF_WRAP(ReadAny, target, rpc, msg); }
+#undef PROTOBUF_WRAP
 
-  void Send(int peerId, int rpcId, const Message& msg) {
+  void Send(int target, int rpc, const Message& msg) {
     ProtoWrapper w((Message*)&msg);
-    Send(peerId, rpcId, w);
+    Send(target, rpc, w);
   }
 
-  void SyncSend(int peerId, int rpcId, const Message& msg) {
+  void SyncSend(int target, int rpc, const Message& msg) {
     ProtoWrapper w((Message*)&msg);
-    SyncSend(peerId, rpcId, w);
+    SyncSend(target, rpc, w);
   }
 
-  void Broadcast(int rpcId, const Message& msg) {
+  void Broadcast(int rpc, const Message& msg) {
     ProtoWrapper w((Message*)&msg);
-    Broadcast(rpcId, w);
+    Broadcast(rpc, w);
   }
 
-  void SyncBroadcast(int rpcId, const Message& msg) {
+  void SyncBroadcast(int rpc, const Message& msg) {
       ProtoWrapper w((Message*)&msg);
-      SyncBroadcast(rpcId, w);
+      SyncBroadcast(rpc, w);
     }
 
 
