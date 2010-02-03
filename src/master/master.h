@@ -45,18 +45,26 @@ private:
     MIGRATING =  2
   };
 
-  struct WorkerState {
-    WorkerState();
+  typedef deque<int> TaskList;
 
-    vector<unordered_set<int> > assigned;
-    vector<unordered_set<int> > pending;
-    vector<unordered_set<int> > finished;
+  struct WorkerState {
+    WorkerState(int id);
+
+    vector<TaskList> assigned;
+    vector<TaskList> pending;
+    vector<TaskList> finished;
 
     double last_ping_time;
     int status;
+    int id;
 
     bool is_assigned(int table, int shard) { return IN(assigned[table], shard);  }
     bool idle(int table) { return pending[table].empty(); }
+
+    void assign(int task);
+    void deassign(int task);
+
+    bool get_next(const RunDescriptor& r, KernelRequest* msg);
   };
 
   vector<WorkerState> workers_;
@@ -65,7 +73,7 @@ private:
   int assign_worker(int table, int shard);
   void send_assignments();
 
-  void steal_work(int idle_worker, const RunDescriptor& r);
+  void steal_work(const RunDescriptor& r, int idle_worker);
 };
 
 #define RUN_ONE(m, klass, method, table)\
