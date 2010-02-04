@@ -38,38 +38,62 @@ private:
   RPCHelper *rpc_;
   MPI::Intracomm world_;
 
-  enum WorkerStatus {
-    IDLE =       0,
-    WORKING =    1,
-    MIGRATING =  2
+  enum TaskStatus {
+    ASSIGNED  = 0,
+    WORKING   = 1,
+    FINISHED  = 2
   };
 
-  typedef deque<int> TaskList;
+  struct Task {
+    Task() { table = shard = 0; }
+    Task(int t, int sh) : table(t), shard(sh), status(ASSIGNED) {}
+    int table;
+    int shard;
+    int status;
+  };
+
+  struct ShardInfo {};
+
+  typedef pair<int, int> Taskid;
+  typedef map<Taskid, Task> TaskMap;
+  typedef map<Taskid, ShardInfo> ShardMap;
 
   struct WorkerState {
     WorkerState(int id);
 
-    vector<TaskList> assigned;
-    vector<TaskList> pending;
-    vector<TaskList> finished;
+    // Pending tasks to work on.
+    TaskMap assigned;
+    TaskMap pending;
+
+    // Table shards this worker is responsible for serving.
+    ShardMap shards;
 
     double last_ping_time;
     int status;
     int id;
+    int finished;
 
-    bool is_assigned(int table, int shard) { return IN(assigned[table], shard);  }
-    bool idle(int table) { return pending[table].empty(); }
+    bool is_assigned(int table, int shard) {
+      return assigned.find(MP(table, shard)) != assigned.end();
+    }
 
-    void assign(int task);
-    void deassign(int task);
+    bool idle() { return pending.empty(); }
+
+    void set_serves(int shard, bool should_service);
+    bool serves(int table, int shard);
 
     bool get_next(const RunDescriptor& r, KernelRequest* msg);
   };
 
   vector<WorkerState> workers_;
 
-  int worker_for_shard(int table, int shard);
-  int assign_worker(int table, int shard);
+  WorkerState* worker_for_shard(int table, int shard);
+
+  // Find a worker to run a kernel on the given table and shard.  If a worker
+  // already serves the given shard, return it.  Otherwise, find an eligible
+  // worker and assign it to them.
+  WorkerState* assign_worker(int table, int shard);
+
   void send_assignments();
 
   void steal_work(const RunDescriptor& r, int idle_worker);
