@@ -33,7 +33,7 @@ public:
 
   // Send the given table to the appropriate peer machine.
   void SendUpdate(LocalTable *t);
-  void PollPeers();
+  void PollWorkers();
 
   RPCHelper* rpc() { return rpc_; }
 
