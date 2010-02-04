@@ -164,23 +164,27 @@ void Worker::Send(int peer, int type, const Message& msg) {
 
 void Worker::Read(int peer, int type, Message* msg) {
   while (!rpc_->HasData(peer, type)) {
-    PollPeers();
+    PollWorkers();
   }
 
   rpc_->Read(peer, type, msg);
 }
 
 void Worker::SendUpdate(LocalTable *t) {
+  VLOG(2) << "Sending update for " << MP(t->id(), t->shard());
   Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
 
   Table::Iterator *i = t->get_iterator();
-  while (!i->done()) {
+  // Always send at least one chunk, to ensure that we clear taint on
+  // tables we own.
+  do {
     SendPartial(p, i);
-    PollPeers();
-  }
+    PollWorkers();
+  } while(!i->done());
   delete i;
 
-  PollPeers();
+  VLOG(2) << "Done with update for " << MP(t->id(), t->shard());
+  PollWorkers();
 }
 
 void Worker::KernelLoop() {
@@ -189,7 +193,7 @@ void Worker::KernelLoop() {
   while (running_) {
     if (kernel_queue_.empty()) {
       PERIODIC(0.1,  { PollMaster(); } );
-      PollPeers();
+      PollWorkers();
       continue;
     }
 
@@ -200,6 +204,14 @@ void Worker::KernelLoop() {
 
     if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
       LOG(FATAL) << "Received a shard I can't work on! : " << k.shard() << " : " << peer_for_shard(k.table(), k.shard());
+    }
+
+    GlobalTable *t = Registry::get_table(k.table());
+    // We received a run request for a shard we own, but we haven't yet received
+    // all the data for it.  Continue reading from other workers until we do.
+    while (t->tainted(k.shard())) {
+      PollWorkers();
+      PollMaster();
     }
 
     KernelInfo *helper = Registry::get_kernel(k.kernel());
@@ -286,7 +298,7 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
   ++count;
 }
 
-void Worker::PollPeers() {
+void Worker::PollWorkers() {
   PERIODIC(10,
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << resident_set_size());
 
