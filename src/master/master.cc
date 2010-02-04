@@ -20,43 +20,38 @@ Master::~Master() {
   }
 }
 
-Master::WorkerState::WorkerState(int w_id) : id(w_id) {
-  assigned.resize(Registry::get_tables().size());
-  pending.resize(Registry::get_tables().size());
-  finished.resize(Registry::get_tables().size());
-}
-
-void Master::WorkerState::assign(int task) {
-  for (int i = 0; i < Registry::get_tables().size(); ++i) {
-    assigned[i].push_back(task);
-    pending[i].push_back(task);
-  }
-}
+Master::WorkerState::WorkerState(int w_id) : id(w_id) {}
 
 bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
-  if (pending[r.table].empty()) {
+  if (pending.empty()) {
     return false;
   }
 
-  int shard = pending[r.table].back();
-  pending[r.table].pop_back();
+  Task t = pending.begin()->second;
 
   msg->set_kernel(r.kernel);
   msg->set_method(r.method);
   msg->set_table(r.table);
-  msg->set_shard(shard);
+  msg->set_shard(t.shard);
+
+  pending.erase(pending.begin());
 
   return true;
 }
 
-void Master::WorkerState::deassign(int task) {
+void Master::WorkerState::set_serves(int shard, bool should_service) {
   for (int i = 0; i < Registry::get_tables().size(); ++i) {
-    TaskList::iterator it = find(assigned[i].begin(), assigned[i].end(), task);
-    if (it != assigned[i].end()) { assigned[i].erase(it); }
-    it = find(pending[i].begin(), pending[i].end(), task);
-
-    if (it != pending[i].end()) { pending[i].erase(it); }
+    Taskid t = MP(i, shard);
+    if (should_service) {
+      shards[MP(i, shard)] = ShardInfo();
+    } else {
+      shards.erase(shards.find(t));
+    }
   }
+}
+
+bool Master::WorkerState::serves(int table, int shard) {
+  return shards.find(MP(table, shard)) != shards.end();
 }
 
 void Master::run_all(const RunDescriptor& r) {
@@ -73,30 +68,31 @@ void Master::run_one(const RunDescriptor& r) {
   run_range(r, shards);
 }
 
-int Master::worker_for_shard(int table, int shard) {
+Master::WorkerState* Master::worker_for_shard(int table, int shard) {
   for (int i = 0; i < workers_.size(); ++i) {
-    if (workers_[i].is_assigned(table, shard)) { return i; }
+    if (workers_[i].serves(table, shard)) { return &workers_[i]; }
   }
 
-  return -1;
+  return NULL;
 }
 
-int Master::assign_worker(int table, int shard) {
-  if (worker_for_shard(table, shard) >= 0) {
-    return worker_for_shard(table, shard);
+Master::WorkerState* Master::assign_worker(int table, int shard) {
+  WorkerState* w = worker_for_shard(table, shard);
+  if (w) {
+    w->assigned[MP(table, shard)] = Task(table, shard);
+    return w;
   }
 
-  int best = 0;
-  int best_v = 1e6;
+  WorkerState* best = &workers_[0];
   for (int i = 0; i < workers_.size(); ++i) {
-    if (workers_[i].assigned[table].size() < best_v) {
-      best_v = workers_[i].assigned[table].size();
-      best = i;
+    if (workers_[i].shards.size() < best->shards.size()) {
+      best = &workers_[i];
     }
   }
 
-  VLOG(1) << "Assigning " << shard << " to " << best;
-  workers_[best].assigned[table].push_back(shard);
+  VLOG(1) << "Assigning " << MP(table, shard) << " to " << best->id;
+  best->set_serves(shard, true);
+  best->assigned[MP(table, shard)] = Task(table, shard);
   return best;
 }
 
@@ -105,19 +101,17 @@ void Master::send_assignments() {
 
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = workers_[i];
-    for (int j = 0; j < w.assigned.size(); ++j) {
-      TaskList& t = w.assigned[j];
-      for (TaskList::iterator k = t.begin(); k != t.end(); ++k) {
-        ShardAssignment* s  = req.add_assign();
-        s->set_new_worker(i);
-        s->set_shard(*k);
-        s->set_table(j);
-        s->set_old_worker(-1);
-      }
+    for (ShardMap::iterator j = w.shards.begin(); j != w.shards.end(); ++j) {
+      ShardAssignment* s  = req.add_assign();
+      s->set_new_worker(i);
+      s->set_table(j->first.first);
+      s->set_shard(j->first.second);
+//      s->set_old_worker(-1);
     }
   }
 
-  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  rpc_->Broadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  world_.Barrier();
 }
 
 void Master::steal_work(const RunDescriptor& r, int idle_worker) {
@@ -137,31 +131,33 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
   if (busy_worker == -1) { return; }
 
   WorkerState& src = workers_[busy_worker];
-  int task = src.pending[r.table].back();
+  Taskid tid = src.pending.begin()->first;
+  Task task = src.pending.begin()->second;
 
-  LOG(INFO) << "Worker " << idle_worker << " is stealing task " << task << " from " << busy_worker;
-  dst.assign(task);
-  src.deassign(task);
+  LOG(INFO) << "Worker " << idle_worker << " is stealing task " << task.shard << " from " << busy_worker;
+  dst.set_serves(task.shard, true);
+  src.set_serves(task.shard, false);
+
+  src.pending.erase(tid);
+  dst.assigned[tid] = task;
+  dst.pending[tid] = task;
 
   // Update the table assignments.
   send_assignments();
-
-  // Send the new kernel assignments.
-//  KernelRequest msg;
-//  msg.set_kernel(r.kernel);
-//  msg.set_method(r.method);
-//  msg.set_table(r.table);
-//  msg.set_shard(task);
-//  rpc_->Send(1 + busy_worker, MTYPE_STOP_KERNEL, msg);
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   Timer t;
 
+  for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = workers_[i];
+
+    w.assigned.clear();
+    w.pending.clear();
+  }
+
   for (int i = 0; i < shards.size(); ++i) {
-    for (int j = 0; j < Registry::get_tables().size(); ++j) {
-      assign_worker(j, shards[i]);
-    }
+    assign_worker(r.table, i);
   }
 
   send_assignments();
@@ -169,10 +165,10 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   KernelRequest w_req;
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = workers_[i];
-    w.finished[r.table].clear();
-    w.pending[r.table] = w.assigned[r.table];
+    w.finished = 0;
+    w.pending = w.assigned;
 
-    if (!w.pending[r.table].empty()) {
+    if (!w.pending.empty()) {
       w.get_next(r, &w_req);
       rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }
@@ -187,19 +183,19 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     w_id -= 1;
 
     WorkerState& w = workers_[w_id];
-    w.finished[k_done.table()].push_back(k_done.shard());
+    w.finished += 1;
     ++count;
 
     string status;
     for (int k = 0; k < config_.num_workers(); ++k) {
-      status += StringPrintf("%d: %d; ", k, workers_[k].finished[r.table].size());
+      status += StringPrintf("%d: %d; ", k, workers_[k].finished);
     }
 
-    if (w.idle(r.table) && shards.size() - count > 3) {
+    if (w.idle()) {
       steal_work(r, w_id);
     }
 
-    if (!w.pending[r.table].empty()) {
+    if (!w.pending.empty()) {
       w.get_next(r, &w_req);
       rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }

@@ -276,8 +276,13 @@ void Worker::PollWorkers() {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put_req.ByteSize());
 
-    Table *t = Registry::get_table(put_req.table());
+    GlobalTable *t = Registry::get_table(put_req.table());
     t->ApplyUpdates(put_req);
+
+    if (put_req.done() && t->tainted(put_req.shard())) {
+      VLOG(1) << "Clearing taint on: " << MP(put_req.table(), put_req.shard());
+      t->clear_tainted(put_req.shard());
+    }
   }
 
   MPI::Status status;
@@ -315,12 +320,36 @@ void Worker::PollMaster() {
   }
 
   ShardAssignmentRequest shard_req;
+  set<GlobalTable*> dirty_tables;
   while (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
+
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
-      VLOG(1)  << "Setting owner of " << a.table() << "," << a.shard() << " to " << a.new_worker();
+      GlobalTable *t = Registry::get_table(a.table());
+      int old_owner = t->get_owner(a.shard());
+      t->set_owner(a.shard(), a.new_worker());
 
-      Registry::get_table(a.table())->set_owner(a.shard(), a.new_worker());
+      if (a.new_worker() == id() && old_owner != id()) {
+        VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
+
+        // Don't consider ourselves canonical for this shard until we receive updates
+        // from the old owner.
+        if (old_owner != -1) {
+          VLOG(1) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
+          t->set_tainted(a.shard());
+        }
+      } else if (old_owner == id() && a.new_worker() != id()) {
+        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " flushing.";
+        // A new worker has taken ownership of this shard.  Flush our data out.
+        t->set_dirty(a.shard());
+        dirty_tables.insert(t);
+      }
+    }
+
+    world_.Barrier();
+
+    for (set<GlobalTable*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
+      (*i)->SendUpdates();
     }
   }
 
