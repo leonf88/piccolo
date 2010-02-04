@@ -5,7 +5,6 @@ namespace dsm {
 
 GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
-  worker_for_shard_.resize(info.num_shards, -1);
 }
 
 void GlobalTable::clear() {
@@ -26,7 +25,7 @@ bool GlobalTable::empty() {
 }
 
 bool GlobalTable::is_local_shard(int shard) {
-  return worker_for_shard_[shard] == info_.worker->id();
+  return partitions_[shard]->owner == info_.worker->id();
 }
 
 bool GlobalTable::is_local_key(const StringPiece &k) {
@@ -34,7 +33,11 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
 }
 
 void GlobalTable::set_owner(int shard, int w) {
-  worker_for_shard_[shard] = w;
+  partitions_[shard]->owner = w;
+}
+
+int GlobalTable::get_owner(int shard) {
+  return partitions_[shard]->owner;
 }
 
 void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
@@ -59,7 +62,11 @@ void GlobalTable::SendUpdates() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
-    if (!is_local_shard(i) && !t->empty()) {
+//    if (t->dirty) {
+//      LOG(INFO) << "Dirty bit set on " << MP(id(), i) << "!";
+//    }
+
+    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
       info().worker->SendUpdate(t);
       t->clear();
     }
