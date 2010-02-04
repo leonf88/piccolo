@@ -75,7 +75,7 @@ int RPCHelper::ReadAny(int *target, int rpc, Message *msg) {
   string scratch;
 
   while (!HasData(MPI_ANY_SOURCE, rpc)) {
-    Sleep(0.001);
+    sched_yield();
   }
 
   MPI::Status probe_result;
