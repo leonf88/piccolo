@@ -18,6 +18,7 @@
 #include <string>
 #include <list>
 #include <algorithm>
+#include <set>
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 
@@ -33,6 +34,7 @@ using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 using std::tr1::unordered_set;
 
+using std::set;
 using std::map;
 using std::vector;
 using std::deque;
@@ -194,6 +196,9 @@ private:
 #define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
+template<class A, class B>
+inline pair<A, B> MP(A x, B y) { return pair<A, B>(x, y); }
+
 }
 
 namespace std {  namespace tr1 {
@@ -201,6 +206,16 @@ template <>
 struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {
   size_t operator()(const dsm::StringPiece& k) const {
     return k.hash();
+  }
+};
+
+template <class A, class B>
+struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
+  hash<A> ha;
+  hash<B> hb;
+
+  size_t operator()(const pair<A, B> & k) const {
+    return ha ^ hb;
   }
 };
 
@@ -214,6 +229,13 @@ static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
   out << s;
   return out;
 }
+
+template <class A, class B>
+static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
+  out << "(" << p.first << "," << p.second << ")";
+  return out;
+}
+
 
 }
 
