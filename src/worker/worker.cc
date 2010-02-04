@@ -76,44 +76,6 @@ struct Worker::Peer {
   int64_t pending_out_bytes() const { return pending_out_; }
 };
 
-
-//struct HashUpdateBuilder {
-//  HashUpdate *out_;
-//  Encoder ke_;
-//  Encoder ve_;
-//
-//  HashUpdateBuilder(HashUpdate* out) :
-//    out_(out),
-//    ke_(out->mutable_encoded_key()),
-//    ve_(out->mutable_encoded_value()) {}
-//
-//  void add_pair(const StringPiece& k, const StringPiece& v) {
-//    out_->add_key_offset(ke_.pos());
-//    ke_.write_bytes(k);
-//    out_->add_value_offset(ve_.pos());
-//    ve_.write_bytes(v);
-//  }
-//};
-//
-//void DecodeHashUpdate(HashUpdate* h) {
-//  CHECK_EQ(h->key_offset_size(), h->value_offset_size());
-//  for (int i = 0; i < h->key_offset_size(); ++i) {
-//    int sk = h->key_offset(i);
-//    int sv = h->value_offset(i);
-//    int ek, ev;
-//    if (i == h->key_offset_size() - 1) {
-//      ek = h->encoded_key().size();
-//      ev = h->encoded_value().size();
-//    } else {
-//      ek = h->key_offset(i + 1);
-//      ev = h->value_offset(i + 1);
-//    }
-//
-//    h->add_key()->assign(h->encoded_key(), sk, ek - sk);
-//    h->add_value()->assign(h->encoded_value(), sv, ev - sv);
-//  }
-//}
-
 Worker::Worker(const ConfigData &c) {
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -128,8 +90,6 @@ Worker::Worker(const ConfigData &c) {
   }
 
   running_ = true;
-
-  kernel_thread_ = network_thread_ = NULL;
 
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap &t = Registry::get_tables();
@@ -150,8 +110,6 @@ void Worker::Run() {
 
 Worker::~Worker() {
   running_ = false;
-  delete kernel_thread_;
-  delete network_thread_;
 
   for (int i = 0; i < peers_.size(); ++i) {
     delete peers_[i];

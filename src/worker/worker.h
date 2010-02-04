@@ -53,8 +53,6 @@ private:
 
   boost::recursive_mutex kernel_lock_;
 
-  boost::thread *kernel_thread_, *network_thread_;
-
   MPI::Intracomm world_;
   RPCHelper *rpc_;
 
