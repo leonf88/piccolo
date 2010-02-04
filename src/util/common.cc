@@ -35,12 +35,6 @@ StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
 uint32_t StringPiece::hash() const { return Hash32(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
 
-uint64_t rdtsc(void) {
-    uint32_t hi, lo;
-    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-    return (((uint64_t)hi)<<32) | ((uint64_t)lo);
-}
-
 string StringPrintf(StringPiece fmt, ...) {
   va_list l;
   va_start(l, fmt.AsString().c_str());
@@ -128,7 +122,7 @@ static double get_processor_frequency() {
   return freq;
 }
 
-static uint64_t init_tsc = 0;
+uint64_t init_tsc = 0;
 
 static double setup_time() {
   init_tsc = rdtsc();
@@ -139,19 +133,14 @@ static double setup_time() {
   return tv.tv_sec + tv.tv_usec * 1e-6;
 }
 
-static double processor_freq = get_processor_frequency();
-static double init_time = setup_time();
+double processor_freq = get_processor_frequency();
+double init_time = setup_time();
 
 void Sleep(double t) {
   timespec req;
   req.tv_sec = (int)t;
   req.tv_nsec = (int64_t)(1e9 * (t - (int64_t)t));
   nanosleep(&req, NULL);
-}
-
-double Now() {
-  uint64_t now = rdtsc();
-  return init_time + (now - init_tsc) / processor_freq;
 }
 
 void SpinLock::lock() volatile {

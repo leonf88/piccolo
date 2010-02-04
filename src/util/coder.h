@@ -17,6 +17,8 @@ public:
 
   string *data() { return out_; }
 
+  size_t pos() { return out_->size(); }
+
 private:
   string *out_;
 };

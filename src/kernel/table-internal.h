@@ -2,7 +2,7 @@
 #define TABLEINTERNAL_H_
 
 #include "kernel/table.h"
-#include "kernel/hash-msgs.h"
+#include "worker/worker.pb.h"
 #include "util/hashmap.h"
 
 namespace dsm {
@@ -60,14 +60,6 @@ public:
   }
 
   void clear() { data_.clear(); }
-
-  void ApplyUpdates(const HashUpdate& req) {
-    for (int i = 0; i < req.put_size(); ++i) {
-      StringPiece k = req.key(i);
-      StringPiece v = req.value(i);
-      this->put_str(k, v);
-    }
-  }
 
   string get_str(const StringPiece &k) {
     return Data::to_string<V>(get(Data::from_string<K>(k)));

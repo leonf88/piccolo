@@ -28,8 +28,8 @@ public:
     return stats_;
   }
 
-  void Send(int peer, int type, const RPCMessage& msg);
-  void Read(int peer, int type, RPCMessage* msg);
+  void Send(int peer, int type, const Message& msg);
+  void Read(int peer, int type, Message* msg);
 
   // Send the given table to the appropriate peer machine.
   void SendUpdate(LocalTable *t);
