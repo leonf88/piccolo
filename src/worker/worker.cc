@@ -9,6 +9,8 @@
 #include "kernel/kernel-registry.h"
 #include "kernel/table-registry.h"
 
+DEFINE_double(sleep_hack, 0.0, "");
+
 namespace dsm {
 static const int kMaxNetworkChunk = 1 << 22;
 static const int kNetworkTimeout = 5.0;
@@ -182,6 +184,10 @@ void Worker::KernelLoop() {
       kernels_[id] = d;
       d->Init(this, k.table(), k.shard());
       d->KernelInit();
+    }
+
+    if (MPI::COMM_WORLD.Get_rank() == 1 && FLAGS_sleep_hack > 0) {
+      Sleep(FLAGS_sleep_hack);
     }
 
     helper->Run(d, k.method());
