@@ -214,7 +214,7 @@ void Worker::KernelLoop() {
       d->KernelInit();
     }
 
-    helper->invoke_method(d, k.method());
+    helper->Run(d, k.method());
     kernel_done_.push_back(k);
 
     for (Registry::TableMap::iterator i = Registry::get_tables().begin();

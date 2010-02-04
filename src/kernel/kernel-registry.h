@@ -43,7 +43,7 @@ struct KernelInfo {
   KernelInfo(const char* name) : name_(name) {}
 
   virtual DSMKernel* create() = 0;
-  virtual void invoke_method(DSMKernel* obj, const string& method_name) = 0;
+  virtual void Run(DSMKernel* obj, const string& method_name) = 0;
 
   string name_;
 };
@@ -57,7 +57,7 @@ struct KernelInfoT : public KernelInfo {
 
   DSMKernel* create() { return new C; }
 
-  void invoke_method(DSMKernel* obj, const string& method_id) {
+  void Run(DSMKernel* obj, const string& method_id) {
     boost::function<void (C*)> m(methods_[method_id]);
     m((C*)obj);
   }
