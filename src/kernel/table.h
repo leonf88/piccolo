@@ -106,12 +106,20 @@ public:
   TableInfo info_;
 };
 
+// A local partition of a global table.
 class LocalTable : public Table {
 public:
-  LocalTable(const TableInfo& info) : Table(info) {}
+  LocalTable(const TableInfo& info) : Table(info), dirty(false), tainted(false), owner(-1) {}
+
   // Returns a view on the global table containing values only from 'shard'.
   // 'shard' must be local.
   virtual Table::Iterator* get_iterator() = 0;
+
+protected:
+  friend class GlobalTable;
+  bool dirty;
+  bool tainted;
+  int16_t owner;
 };
 
 class GlobalTable : public Table {
@@ -134,12 +142,8 @@ public:
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
 
-  // Return the worker id responsible for the given shard of the table.
-  int get_owner(int shard) {
-    return worker_for_shard_[shard];
-  }
-
   void set_owner(int shard, int worker);
+  int get_owner(int shard);
 
   void get_local(const StringPiece &k, string *v);
   void get_remote(int shard, const StringPiece &k, string* v);
@@ -157,11 +161,17 @@ public:
   bool empty();
   int64_t size() { return 1; }
 
+  void set_dirty(int shard) { partitions_[shard]->dirty = true; }
+  bool dirty(int shard) { return partitions_[shard]->dirty || !partitions_[shard]->empty(); }
+
+  void set_tainted(int shard) { partitions_[shard]->tainted = true; }
+  void clear_tainted(int shard) { partitions_[shard]->tainted = false; }
+  bool tainted(int shard) { return partitions_[shard]->tainted; }
+
 protected:
   friend class Worker;
   virtual LocalTable* create_local(int shard) = 0;
 
-  vector<uint16_t> worker_for_shard_;
   vector<LocalTable*> partitions_;
 
   volatile int pending_writes_;
