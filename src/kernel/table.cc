@@ -72,13 +72,13 @@ void GlobalTable::SendUpdates() {
     }
   }
 
-  info().worker->PollPeers();
+  info().worker->PollWorkers();
   pending_writes_ = 0;
 }
 
 void GlobalTable::CheckForUpdates() {
 //  boost::recursive_mutex::scoped_lock sl(pending_lock_);
-  info().worker->PollPeers();
+  info().worker->PollWorkers();
 }
 
 int GlobalTable::pending_write_bytes() {
