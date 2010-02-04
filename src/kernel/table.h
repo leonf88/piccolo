@@ -2,9 +2,10 @@
 #define ACCUMULATOR_H
 
 #include "util/common.h"
-#include "kernel/hash-msgs.h"
 
 namespace dsm {
+
+class HashUpdate;
 
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
 static int ModSharding(const int& key, int shards) { return key % shards; }
@@ -93,7 +94,7 @@ public:
   virtual bool empty() = 0;
   virtual int64_t size() = 0;
 
-  virtual void ApplyUpdates(const HashUpdate& up) = 0;
+  void ApplyUpdates(const HashUpdate& up);
 
   const TableInfo& info() const { return info_; }
   void set_info(const TableInfo& t) { info_ = t; }
@@ -145,7 +146,7 @@ public:
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
-  void ApplyUpdates(const dsm::HashUpdate& req);
+  void ApplyUpdates(const HashUpdate& req);
   void CheckForUpdates();
 
   int pending_write_bytes();

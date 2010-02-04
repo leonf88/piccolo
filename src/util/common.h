@@ -128,11 +128,24 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
 extern string StringPrintf(StringPiece fmt, ...);
 extern string VStringPrintf(StringPiece fmt, va_list args);
 
-extern uint64_t rdtsc(void);
-extern double Now();
 extern void Sleep(double t);
 
 extern void DumpHeapProfile(const string& file);
+
+extern double processor_freq;
+extern double init_time;
+extern uint64_t init_tsc;
+
+static uint64_t rdtsc() {
+  uint32_t hi, lo;
+  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+  return (((uint64_t)hi)<<32) | ((uint64_t)lo);
+}
+
+inline double Now() {
+  uint64_t now = rdtsc();
+  return init_time + (now - init_tsc) / processor_freq;
+}
 
 class SpinLock {
 public:
@@ -167,11 +180,13 @@ private:
 }
 
 #define PERIODIC(interval, operation)\
-{ static double last = 0;\
+{ static uint64_t last = 0;\
+  static uint64_t cycles = interval * dsm::processor_freq;\
   static int COUNT = 0; \
   ++COUNT; \
-  if (dsm::Now() - last > interval) {\
-    last = dsm::Now();\
+  uint64_t now = dsm::rdtsc();\
+  if (now - last > cycles) {\
+    last = now;\
     operation;\
   }\
 }

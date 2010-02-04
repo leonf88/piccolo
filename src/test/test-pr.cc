@@ -25,6 +25,8 @@ DEFINE_bool(use_block_sharding, true, "");
 
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 
+DEFINE_bool(sleep_hack, false, "");
+
 static int (*sharding)(const int& key, int shards);
 static int BlkModSharding(const int& key, int shards) { return (key/kBlocksize) % shards; }
 
@@ -84,9 +86,10 @@ public:
   }
 
   void PageRankIter() {
-    if (MPI::COMM_WORLD.Get_rank() == 1) {
+    if (MPI::COMM_WORLD.Get_rank() == 1 && FLAGS_sleep_hack) {
       Sleep(5);
     }
+
     ++iter;
 
     RecordFile r(StringPrintf(FLAGS_graph_prefix + "-%05d-of-%05d-N%05d",

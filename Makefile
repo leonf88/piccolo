@@ -52,7 +52,7 @@ LINK_BIN := $(MPI_LINK)  $(LDFLAGS)
 LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/coder.o
 LIBRPC_OBJS := src/util/rpc.o
 LIBTEST_OBJS := src/test/file-helper.o src/test/test.pb.o
-LIBKERNEL_OBJS := src/kernel/hash-msgs.o src/kernel/table.o\
+LIBKERNEL_OBJS := src/kernel/table.o\
 									src/kernel/table-registry.o src/kernel/kernel-registry.o
 
 LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\

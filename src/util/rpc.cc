@@ -5,16 +5,6 @@ DEFINE_bool(rpc_log, false, "");
 
 namespace dsm {
 
-void RPCHelper::ProtoWrapper::AppendToCoder(Encoder *e) const {
-  string s = p_->SerializeAsString();
-  e->write_bytes(s.data(), s.size());
-}
-
-void RPCHelper::ProtoWrapper::ParseFromCoder(Decoder *d) {
-  Clear();
-  p_->ParseFromArray(&d->data()[0], d->data().size());
-}
-
 #define rpc_log(msg, src, target, rpc) do { if (FLAGS_rpc_log) { LOG(INFO) << StringPrintf("%d - > %d (%d)", src, target, rpc) << " :: " << msg; } } while(0)
 #define rpc_lock
 
@@ -32,7 +22,7 @@ bool RPCHelper::HasData(int target, int rpc, MPI::Status &status) {
   return mpi_world_->Iprobe(target, rpc, status);
 }
 
-bool RPCHelper::TryRead(int target, int rpc, RPCMessage *msg) {
+bool RPCHelper::TryRead(int target, int rpc, Message *msg) {
   rpc_lock;
   bool success = false;
   string scratch;
@@ -57,7 +47,7 @@ bool RPCHelper::TryRead(int target, int rpc, RPCMessage *msg) {
   return success;
 }
 
-int RPCHelper::Read(int target, int rpc, RPCMessage *msg) {
+int RPCHelper::Read(int target, int rpc, Message *msg) {
   rpc_lock;
 
   int r_size = 0;
@@ -79,7 +69,7 @@ int RPCHelper::Read(int target, int rpc, RPCMessage *msg) {
   return r_size;
 }
 
-int RPCHelper::ReadAny(int *target, int rpc, RPCMessage *msg) {
+int RPCHelper::ReadAny(int *target, int rpc, Message *msg) {
   rpc_lock;
   int r_size = 0;
   string scratch;
@@ -100,7 +90,7 @@ int RPCHelper::ReadAny(int *target, int rpc, RPCMessage *msg) {
   return r_size;
 }
 
-void RPCHelper::Send(int target, int rpc, const RPCMessage &msg) {
+void RPCHelper::Send(int target, int rpc, const Message &msg) {
   rpc_lock;
   rpc_log("SendStart", my_rank_, target, rpc);
   string scratch;
@@ -111,7 +101,7 @@ void RPCHelper::Send(int target, int rpc, const RPCMessage &msg) {
   rpc_log("SendDone", my_rank_, target, rpc);
 }
 
-void RPCHelper::SyncSend(int target, int rpc, const RPCMessage &msg) {
+void RPCHelper::SyncSend(int target, int rpc, const Message &msg) {
   rpc_lock;
   rpc_log("SyncSendStart", my_rank_, target, rpc);
   string scratch;
@@ -132,14 +122,14 @@ MPI::Request RPCHelper::SendData(int target, int rpc, const string& msg) {
 
 // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
 // here.
-void RPCHelper::Broadcast(int rpc, const RPCMessage &msg) {
+void RPCHelper::Broadcast(int rpc, const Message &msg) {
   rpc_lock;
   for (int i = 1; i < mpi_world_->Get_size(); ++i) {
     Send(i, rpc, msg);
   }
 }
 
-void RPCHelper::SyncBroadcast(int rpc, const RPCMessage &msg) {
+void RPCHelper::SyncBroadcast(int rpc, const Message &msg) {
   rpc_lock;
   for (int i = 1; i < mpi_world_->Get_size(); ++i) {
     SyncSend(i, rpc, msg);

@@ -14,7 +14,6 @@ static const int kMaxNetworkChunk = 1 << 22;
 static const int kNetworkTimeout = 5.0;
 
 struct Worker::Peer {
-
   // An update request containing changes to apply to a remote table.
   struct Request {
     int target;
@@ -40,7 +39,7 @@ struct Worker::Peer {
   Peer(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
 
   // Send the given message type and data to this peer.
-  Request* Send(int rpc_type, const RPCMessage& ureq) {
+  Request* Send(int rpc_type, const Message& ureq) {
     Request* r = new Request();
     r->target = id;
     r->rpc_type = rpc_type;
@@ -72,11 +71,48 @@ struct Worker::Peer {
         ++i;
       }
     }
-#undef REMOVE
   }
 
   int64_t pending_out_bytes() const { return pending_out_; }
 };
+
+
+//struct HashUpdateBuilder {
+//  HashUpdate *out_;
+//  Encoder ke_;
+//  Encoder ve_;
+//
+//  HashUpdateBuilder(HashUpdate* out) :
+//    out_(out),
+//    ke_(out->mutable_encoded_key()),
+//    ve_(out->mutable_encoded_value()) {}
+//
+//  void add_pair(const StringPiece& k, const StringPiece& v) {
+//    out_->add_key_offset(ke_.pos());
+//    ke_.write_bytes(k);
+//    out_->add_value_offset(ve_.pos());
+//    ve_.write_bytes(v);
+//  }
+//};
+//
+//void DecodeHashUpdate(HashUpdate* h) {
+//  CHECK_EQ(h->key_offset_size(), h->value_offset_size());
+//  for (int i = 0; i < h->key_offset_size(); ++i) {
+//    int sk = h->key_offset(i);
+//    int sv = h->value_offset(i);
+//    int ek, ev;
+//    if (i == h->key_offset_size() - 1) {
+//      ek = h->encoded_key().size();
+//      ev = h->encoded_value().size();
+//    } else {
+//      ek = h->key_offset(i + 1);
+//      ev = h->value_offset(i + 1);
+//    }
+//
+//    h->add_key()->assign(h->encoded_key(), sk, ek - sk);
+//    h->add_value()->assign(h->encoded_value(), sv, ev - sv);
+//  }
+//}
 
 Worker::Worker(const ConfigData &c) {
   config_.CopyFrom(c);
@@ -122,11 +158,11 @@ Worker::~Worker() {
   }
 }
 
-void Worker::Send(int peer, int type, const RPCMessage& msg) {
+void Worker::Send(int peer, int type, const Message& msg) {
   peers_[peer - 1]->Send(type, msg);
 }
 
-void Worker::Read(int peer, int type, RPCMessage* msg) {
+void Worker::Read(int peer, int type, Message* msg) {
   while (!rpc_->HasData(peer, type)) {
     PollPeers();
   }
@@ -224,19 +260,22 @@ void Worker::SendPartial(Peer *p, Table::Iterator *it) {
 
   r.set_shard(it->owner()->shard());
   r.set_source(config_.worker_id());
-  r.set_table_id(it->owner()->info().table_id);
+  r.set_table(it->owner()->info().table_id);
 
+//  HashUpdateBuilder b(&r);
   int bytesUsed = 0;
   int count = 0;
   string k, v;
   for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
-    it->key_str(&k);
-    it->value_str(&v);
+    it->key_str(r.add_key());
+    it->value_str(r.add_value());
 
-    r.add_put(k, v);
+//    b.add_pair(k, v);
     ++count;
     bytesUsed += k.size() + v.size();
   }
+
+  r.set_done(it->done());
 
   VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
 
@@ -261,7 +300,7 @@ void Worker::PollPeers() {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put_req.ByteSize());
 
-    Table *t = Registry::get_table(put_req.table_id());
+    Table *t = Registry::get_table(put_req.table());
     t->ApplyUpdates(put_req);
   }
 
@@ -273,16 +312,16 @@ void Worker::PollPeers() {
 
     stats_.set_get_in(stats_.get_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
+    VLOG(3) << "Returning result for " << get_req.key() << " :: table " << get_req.table();
+
 
     get_resp.Clear();
     get_resp.set_source(config_.worker_id());
-    get_resp.set_table_id(get_req.table_id());
-
-    VLOG(3) << "Returning result for " << get_req.key() << " :: table " << get_req.table_id();
-    string v;
-    Registry::get_table(get_req.table_id())->get_local(get_req.key(), &v);
-
-    get_resp.add_put(get_req.key(), v);
+    get_resp.set_table(get_req.table());
+    get_resp.set_shard(-1);
+    get_resp.set_done(true);
+    get_resp.add_key(get_req.key());
+    Registry::get_table(get_req.table())->get_local(get_req.key(), get_resp.add_value());
 
     peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
   }

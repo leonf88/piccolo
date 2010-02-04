@@ -25,7 +25,6 @@ bool GlobalTable::empty() {
   return true;
 }
 
-
 bool GlobalTable::is_local_shard(int shard) {
   return worker_for_shard_[shard] == info_.worker->id();
 }
@@ -43,7 +42,8 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   HashUpdate resp;
 
   req.set_key(k.AsString());
-  req.set_table_id(info().table_id);
+  req.set_table(info().table_id);
+  req.set_shard(shard);
 
   Worker *w = info().worker;
   int peer = w->peer_for_shard(info().table_id, shard) + 1;
@@ -52,8 +52,7 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   w->Send(peer, MTYPE_GET_REQUEST, req);
   w->Read(peer, MTYPE_GET_RESPONSE, &resp);
 
-  StringPiece vpiece = resp.value(0);
-  v->assign(vpiece.data, vpiece.len);
+  v->assign(resp.value(0));
 }
 
 void GlobalTable::SendUpdates() {
@@ -106,6 +105,12 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
 //          << " : " << Data::from_string<V>(h->get_str(k));
 
   v->assign(h->get_str(k));
+}
+
+void Table::ApplyUpdates(const HashUpdate& req) {
+  for (int i = 0; i < req.key_size(); ++i) {
+    put_str(req.key(i), req.value(i));
+  }
 }
 
 }
