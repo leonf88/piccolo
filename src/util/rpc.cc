@@ -97,7 +97,7 @@ void RPCHelper::Send(int target, int method, const Message &msg) {
   msg.AppendToString(&scratch);
 
   if (scratch.size() > (1 << 20)) {
-    LOG(FATAL) << "Not going to send to big a message. " << scratch.size();
+    LOG(FATAL) << "Not going to send a large message. " << scratch.size();
   }
 
   mpi_world_->Send(&scratch[0], scratch.size(), MPI::BYTE, target, method);
@@ -120,7 +120,7 @@ MPI::Request RPCHelper::SendData(int target, int method, const string& msg) {
   rpc_lock;
   rpc_log("SendData", my_rank_, target, method);
   if (msg.size() > (1 << 20)) {
-    LOG(FATAL) << "Not going to send to big a message. " << msg.size();
+    LOG(FATAL) << "Not going to send a large message. " << msg.size();
   }
 
   return mpi_world_->Isend(&msg[0], msg.size(), MPI::BYTE, target, method);

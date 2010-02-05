@@ -1,7 +1,6 @@
 #ifndef MASTER_H_
 #define MASTER_H_
 
-#include "kernel/kernel-registry.h"
 #include "worker/worker.pb.h"
 #include "util/common.h"
 #include "util/rpc.h"
@@ -55,7 +54,7 @@ private:
   struct ShardInfo {};
 
   typedef pair<int, int> Taskid;
-  typedef map<Taskid, Task> TaskMap;
+  typedef map<Taskid, Task*> TaskMap;
   typedef map<Taskid, ShardInfo> ShardMap;
 
   struct WorkerState {
@@ -64,17 +63,24 @@ private:
     // Pending tasks to work on.
     TaskMap assigned;
     TaskMap pending;
+    TaskMap active;
 
     // Table shards this worker is responsible for serving.
     ShardMap shards;
 
     double last_ping_time;
+
     int status;
     int id;
-    int finished;
+
+    int slots;
 
     bool is_assigned(int table, int shard) {
       return assigned.find(MP(table, shard)) != assigned.end();
+    }
+
+    bool finished() {
+      return assigned.size() - pending.size() - active.size();
     }
 
     bool idle() { return pending.empty(); }

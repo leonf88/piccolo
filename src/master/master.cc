@@ -1,5 +1,6 @@
 #include "master/master.h"
 #include "kernel/table-registry.h"
+#include "kernel/kernel-registry.h"
 
 namespace dsm {
 
@@ -20,20 +21,21 @@ Master::~Master() {
   }
 }
 
-Master::WorkerState::WorkerState(int w_id) : id(w_id) {}
+Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {}
 
 bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
   if (pending.empty()) {
     return false;
   }
 
-  Task t = pending.begin()->second;
+  Task *t = pending.begin()->second;
 
   msg->set_kernel(r.kernel);
   msg->set_method(r.method);
   msg->set_table(r.table);
-  msg->set_shard(t.shard);
+  msg->set_shard(t->shard);
 
+  active[pending.begin()->first] = t;
   pending.erase(pending.begin());
 
   return true;
@@ -79,7 +81,7 @@ Master::WorkerState* Master::worker_for_shard(int table, int shard) {
 Master::WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* w = worker_for_shard(table, shard);
   if (w) {
-    w->assigned[MP(table, shard)] = Task(table, shard);
+    w->assigned[MP(table, shard)] = new Task(table, shard);
     return w;
   }
 
@@ -92,7 +94,7 @@ Master::WorkerState* Master::assign_worker(int table, int shard) {
 
   VLOG(1) << "Assigning " << MP(table, shard) << " to " << best->id;
   best->set_serves(shard, true);
-  best->assigned[MP(table, shard)] = Task(table, shard);
+  best->assigned[MP(table, shard)] = new Task(table, shard);
   return best;
 }
 
@@ -132,11 +134,11 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
 
   WorkerState& src = workers_[busy_worker];
   Taskid tid = src.pending.begin()->first;
-  Task task = src.pending.begin()->second;
+  Task *task = src.pending.begin()->second;
 
-  LOG(INFO) << "Worker " << idle_worker << " is stealing task " << task.shard << " from " << busy_worker;
-  dst.set_serves(task.shard, true);
-  src.set_serves(task.shard, false);
+  LOG(INFO) << "Worker " << idle_worker << " is stealing task " << task->shard << " from " << busy_worker;
+  dst.set_serves(task->shard, true);
+  src.set_serves(task->shard, false);
 
   src.pending.erase(tid);
   dst.assigned[tid] = task;
@@ -165,7 +167,6 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   KernelRequest w_req;
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = workers_[i];
-    w.finished = 0;
     w.pending = w.assigned;
 
     if (!w.pending.empty()) {
@@ -183,12 +184,13 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     w_id -= 1;
 
     WorkerState& w = workers_[w_id];
-    w.finished += 1;
     ++count;
+
+    w.active.erase(MP(k_done.table(), k_done.shard()));
 
     string status;
     for (int k = 0; k < config_.num_workers(); ++k) {
-      status += StringPrintf("%2d/%2d; ", workers_[k].finished, workers_[k].assigned.size());
+      status += StringPrintf("%2d/%2d; ", workers_[k].finished(), workers_[k].assigned.size());
     }
 
     if (w.idle()) {
