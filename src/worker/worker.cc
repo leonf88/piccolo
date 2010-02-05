@@ -12,8 +12,7 @@
 DEFINE_double(sleep_hack, 0.0, "");
 
 namespace dsm {
-static const int kMaxNetworkChunk = 1 << 22;
-static const int kNetworkTimeout = 5.0;
+static const int kNetworkTimeout = 100.0;
 
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
@@ -31,7 +30,6 @@ struct Worker::Peer {
     double timed_out() { return elapsed() > kNetworkTimeout; }
   };
 
-  HashUpdate write_scratch;
   unordered_set<Request*> outgoing_requests_;
 
   int32_t id;
@@ -40,11 +38,15 @@ struct Worker::Peer {
 
   Peer(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
 
+  bool TryRead(int method, Message* msg) {
+    return helper->TryRead(id, method, msg);
+  }
+
   // Send the given message type and data to this peer.
-  Request* Send(int rpc_type, const Message& ureq) {
+  Request* Send(int method, const Message& ureq) {
     Request* r = new Request();
     r->target = id;
-    r->rpc_type = rpc_type;
+    r->rpc_type = method;
     ureq.AppendToString(&r->payload);
 
     r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
@@ -59,10 +61,11 @@ struct Worker::Peer {
     while (i != outgoing_requests_.end()) {
       Request *r = (*i);
       if (r->mpi_req.Test() || r->timed_out()) {
-        VLOG(2) << "Request of size " << r->payload.size() << " finished.";
+        VLOG(2) << "Finished request to " << id << " of size " << r->payload.size();
 
         if (r->timed_out()) {
-          LOG_EVERY_N(INFO, 100) << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
+          LOG_EVERY_N(INFO, 100) << "Send of " << r->payload.size()
+                                 << " to " << r->target << " timed out.";
           r->mpi_req.Cancel();
         }
 
@@ -119,63 +122,13 @@ Worker::~Worker() {
 }
 
 void Worker::Send(int peer, int type, const Message& msg) {
-  peers_[peer - 1]->Send(type, msg);
+  peers_[peer]->Send(type, msg);
 }
 
 void Worker::Read(int peer, int type, Message* msg) {
-  while (!rpc_->HasData(peer, type)) {
+  while (!peers_[peer]->TryRead(type, msg)) {
     PollWorkers();
   }
-
-  rpc_->Read(peer, type, msg);
-}
-
-void Worker::SendPartial(Peer *p, Table::Iterator *it) {
-  HashUpdate &r = p->write_scratch;
-  r.Clear();
-
-  r.set_shard(it->owner()->shard());
-  r.set_source(config_.worker_id());
-  r.set_table(it->owner()->info().table_id);
-
-//  HashUpdateBuilder b(&r);
-  int bytesUsed = 0;
-  int count = 0;
-  string k, v;
-  for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
-    it->key_str(r.add_key());
-    it->value_str(r.add_value());
-
-//    b.add_pair(k, v);
-    ++count;
-    bytesUsed += k.size() + v.size();
-  }
-
-  r.set_done(it->done());
-
-  VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
-
-  p->Send(MTYPE_PUT_REQUEST, r);
-
-  stats_.set_put_out(stats_.put_out() + 1);
-  stats_.set_bytes_out(stats_.bytes_out() + r.ByteSize());
-  ++count;
-}
-
-void Worker::SendUpdate(LocalTable *t) {
-  VLOG(2) << "Sending update for " << MP(t->id(), t->shard());
-  Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
-
-  Table::Iterator *i = t->get_iterator();
-  // Always send at least one chunk, to ensure that we clear taint on
-  // tables we own.
-  do {
-    SendPartial(p, i);
-    p->CollectPendingSends();
-  } while(!i->done());
-  delete i;
-
-  VLOG(2) << "Done with update for " << MP(t->id(), t->shard());
 }
 
 void Worker::KernelLoop() {
@@ -271,17 +224,17 @@ void Worker::PollWorkers() {
     p->CollectPendingSends();
   }
 
-  HashUpdate put_req;
-  while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put_req)) {
+  HashUpdate put;
+  while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     stats_.set_put_in(stats_.put_in() + 1);
-    stats_.set_bytes_in(stats_.bytes_in() + put_req.ByteSize());
+    stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
-    GlobalTable *t = Registry::get_table(put_req.table());
-    t->ApplyUpdates(put_req);
+    GlobalTable *t = Registry::get_table(put.table());
+    t->ApplyUpdates(put);
 
-    if (put_req.done() && t->tainted(put_req.shard())) {
-      VLOG(1) << "Clearing taint on: " << MP(put_req.table(), put_req.shard());
-      t->clear_tainted(put_req.shard());
+    if (put.done() && t->tainted(put.shard())) {
+      VLOG(1) << "Clearing taint on: " << MP(put.table(), put.shard());
+      t->clear_tainted(put.shard());
     }
   }
 
@@ -293,7 +246,7 @@ void Worker::PollWorkers() {
 
     stats_.set_get_in(stats_.get_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
-    VLOG(3) << "Returning result for " << get_req.key() << " :: table " << get_req.table();
+    VLOG(2) << "Returning result for " << get_req.key() << " :: table " << get_req.table();
 
 
     get_resp.Clear();
@@ -302,7 +255,8 @@ void Worker::PollWorkers() {
     get_resp.set_shard(-1);
     get_resp.set_done(true);
     get_resp.add_key(get_req.key());
-    Registry::get_table(get_req.table())->get_local(get_req.key(), get_resp.add_value());
+    string *v = get_resp.add_value();
+    Registry::get_table(get_req.table())->get_local(get_req.key(), v);
 
     peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
   }
@@ -339,7 +293,7 @@ void Worker::PollMaster() {
           t->set_tainted(a.shard());
         }
       } else if (old_owner == id() && a.new_worker() != id()) {
-        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " flushing.";
+        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
         // A new worker has taken ownership of this shard.  Flush our data out.
         t->set_dirty(a.shard());
         dirty_tables.insert(t);

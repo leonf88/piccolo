@@ -28,11 +28,10 @@ public:
     return stats_;
   }
 
+  // Non-blocking send and blocking read.
   void Send(int peer, int type, const Message& msg);
   void Read(int peer, int type, Message* msg);
 
-  // Send the given table to the appropriate peer machine.
-  void SendUpdate(LocalTable *t);
   void PollWorkers();
 
   RPCHelper* rpc() { return rpc_; }
@@ -42,6 +41,10 @@ public:
 
   int peer_for_shard(int table_id, int shard) const;
   int id() const { return config_.worker_id(); };
+
+  int64_t pending_network_bytes() const;
+  int64_t pending_kernel_bytes() const;
+  bool network_idle() const;
 
 private:
   // The largest amount of data we'll send over the network as a single piece.
@@ -86,15 +89,7 @@ private:
 
   map<KernelId, DSMKernel*> kernels_;
 
-  // Network operations.
-  void ProcessUpdates(Peer *p);
-  void SendPartial(Peer *p, Table::Iterator *it);
   void PollMaster();
-
-  int64_t pending_network_bytes() const;
-  int64_t pending_kernel_bytes() const;
-  bool network_idle() const;
-
   Stats stats_;
 };
 
