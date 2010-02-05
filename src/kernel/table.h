@@ -94,8 +94,6 @@ public:
   virtual bool empty() = 0;
   virtual int64_t size() = 0;
 
-  void ApplyUpdates(const HashUpdate& up);
-
   const TableInfo& info() const { return info_; }
   void set_info(const TableInfo& t) { info_ = t; }
 
@@ -114,6 +112,9 @@ public:
   // Returns a view on the global table containing values only from 'shard'.
   // 'shard' must be local.
   virtual Table::Iterator* get_iterator() = 0;
+  void ApplyUpdates(const HashUpdate& up);
+
+  static void SerializePartial(HashUpdate& r, Table::Iterator *it);
 
 protected:
   friend class GlobalTable;
