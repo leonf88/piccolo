@@ -130,6 +130,38 @@ void Worker::Read(int peer, int type, Message* msg) {
   rpc_->Read(peer, type, msg);
 }
 
+void Worker::SendPartial(Peer *p, Table::Iterator *it) {
+  HashUpdate &r = p->write_scratch;
+  r.Clear();
+
+  r.set_shard(it->owner()->shard());
+  r.set_source(config_.worker_id());
+  r.set_table(it->owner()->info().table_id);
+
+//  HashUpdateBuilder b(&r);
+  int bytesUsed = 0;
+  int count = 0;
+  string k, v;
+  for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
+    it->key_str(r.add_key());
+    it->value_str(r.add_value());
+
+//    b.add_pair(k, v);
+    ++count;
+    bytesUsed += k.size() + v.size();
+  }
+
+  r.set_done(it->done());
+
+  VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
+
+  p->Send(MTYPE_PUT_REQUEST, r);
+
+  stats_.set_put_out(stats_.put_out() + 1);
+  stats_.set_bytes_out(stats_.bytes_out() + r.ByteSize());
+  ++count;
+}
+
 void Worker::SendUpdate(LocalTable *t) {
   VLOG(2) << "Sending update for " << MP(t->id(), t->shard());
   Peer *p = peers_[peer_for_shard(t->id(), t->shard())];
@@ -139,12 +171,11 @@ void Worker::SendUpdate(LocalTable *t) {
   // tables we own.
   do {
     SendPartial(p, i);
-    PollWorkers();
+    p->CollectPendingSends();
   } while(!i->done());
   delete i;
 
   VLOG(2) << "Done with update for " << MP(t->id(), t->shard());
-  PollWorkers();
 }
 
 void Worker::KernelLoop() {
@@ -193,6 +224,7 @@ void Worker::KernelLoop() {
     helper->Run(d, k.method());
     kernel_done_.push_back(k);
 
+    // Flush any table updates leftover.
     for (Registry::TableMap::iterator i = Registry::get_tables().begin();
          i != Registry::get_tables().end(); ++i) {
       i->second->SendUpdates();
@@ -228,38 +260,6 @@ int64_t Worker::pending_kernel_bytes() const {
 
 bool Worker::network_idle() const {
   return pending_network_bytes() == 0;
-}
-
-void Worker::SendPartial(Peer *p, Table::Iterator *it) {
-  HashUpdate &r = p->write_scratch;
-  r.Clear();
-
-  r.set_shard(it->owner()->shard());
-  r.set_source(config_.worker_id());
-  r.set_table(it->owner()->info().table_id);
-
-//  HashUpdateBuilder b(&r);
-  int bytesUsed = 0;
-  int count = 0;
-  string k, v;
-  for (; !it->done() && bytesUsed < kMaxNetworkChunk; it->Next()) {
-    it->key_str(r.add_key());
-    it->value_str(r.add_value());
-
-//    b.add_pair(k, v);
-    ++count;
-    bytesUsed += k.size() + v.size();
-  }
-
-  r.set_done(it->done());
-
-  VLOG(2) << "Prepped " << count << " taking " << bytesUsed;
-
-  p->Send(MTYPE_PUT_REQUEST, r);
-
-  stats_.set_put_out(stats_.put_out() + 1);
-  stats_.set_bytes_out(stats_.bytes_out() + r.ByteSize());
-  ++count;
 }
 
 void Worker::PollWorkers() {
@@ -348,6 +348,7 @@ void Worker::PollMaster() {
 
     world_.Barrier();
 
+    // Flush any tables we no longer own.
     for (set<GlobalTable*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
       (*i)->SendUpdates();
     }

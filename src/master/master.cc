@@ -188,7 +188,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
     string status;
     for (int k = 0; k < config_.num_workers(); ++k) {
-      status += StringPrintf("%d: %d; ", k, workers_[k].finished);
+      status += StringPrintf("%2d/%2d; ", workers_[k].finished, workers_[k].assigned.size());
     }
 
     if (w.idle()) {
