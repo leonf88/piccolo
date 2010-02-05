@@ -72,7 +72,6 @@ void GlobalTable::SendUpdates() {
     }
   }
 
-  info().worker->PollWorkers();
   pending_writes_ = 0;
 }
 
@@ -95,8 +94,8 @@ int GlobalTable::pending_write_bytes() {
 
 void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
   if (!is_local_shard(req.shard())) {
-    LOG(FATAL) << "Received unexpected push request for shard: " << req.shard()
-               << "; should go to " << get_owner(req.shard());
+    LOG(INFO) << "Received unexpected push request for: " << MP(id(), req.shard())
+               << "; should have gone to " << get_owner(req.shard());
   }
 
   partitions_[req.shard()]->ApplyUpdates(req);
