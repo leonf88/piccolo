@@ -66,6 +66,7 @@ public:
   void KernelInit() {
     curr_pr_hash = this->get_table<int, double>(0);
     next_pr_hash = this->get_table<int, double>(1);
+    iter = 0;
   }
 
   void Initialize() {
@@ -125,8 +126,17 @@ REGISTER_METHOD(PRKernel, ResetTable);
 
 int main(int argc, char **argv) {
 	Init(argc, argv);
-  
-  ConfigData conf;                                                            
+
+//	while (1) {
+//	  Timer t;
+//	  Sleep(0.1);
+//	  LOG(INFO) << t.elapsed();
+//	  t.Reset();
+//	  for (int i = 0; i < 100000000; ++i);
+//	  LOG(INFO) << t.elapsed();
+//	}
+
+  ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_slots(14);
 

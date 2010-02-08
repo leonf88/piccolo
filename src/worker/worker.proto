@@ -74,14 +74,11 @@ message HashUpdate {
   required uint32 shard = 3;
   required bool done = 4;
 
-//  required bytes encoded_key = 5;
-//  required bytes encoded_value = 6;
-  
-//  repeated uint32 key_offset = 7;
-//  repeated uint32 value_offset = 8;
-  
-  repeated bytes key = 9;
-  repeated bytes value = 10;
+  repeated fixed32 key_offset = 5;
+  repeated fixed32 value_offset = 6;
+
+  optional bytes key_data = 9;
+  optional bytes value_data = 10;
 }
 
 message EmptyMessage {}

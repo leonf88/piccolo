@@ -58,7 +58,8 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   w->Send(peer, MTYPE_GET_REQUEST, req);
   w->Read(peer, MTYPE_GET_RESPONSE, &resp);
 
-  v->assign(resp.value(0));
+  HashUpdateCoder h(&resp);
+  v->assign(h.value(0).data, h.value(0).len);
 }
 
 void GlobalTable::SendUpdates() {
@@ -133,19 +134,64 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   v->assign(h->get_str(k));
 }
 
+HashUpdateCoder::HashUpdateCoder(HashUpdate *h) : h_(h) {
+  h_->add_key_offset(0);
+  h_->add_value_offset(0);
+}
+
+HashUpdateCoder::HashUpdateCoder(const HashUpdate& h) : h_((HashUpdate*)&h) {
+  CHECK_EQ(h_->value_offset_size(), h_->key_offset_size());
+}
+
+void HashUpdateCoder::add_pair(const string& k, const string& v) {
+  h_->mutable_key_data()->append(k);
+  h_->mutable_value_data()->append(v);
+
+  h_->add_key_offset(h_->key_data().size());
+  h_->add_value_offset(h_->value_data().size());
+
+//  CHECK_EQ(key(size() - 1).AsString(), k);
+//  CHECK_EQ(value(size() - 1).AsString(), v);
+}
+
+StringPiece HashUpdateCoder::key(int i) {
+  int start = h_->key_offset(i);
+  int end = h_->key_offset(i + 1);
+//  CHECK_GT(end, start);
+
+  return StringPiece(h_->key_data().data() + start, end - start);
+}
+
+StringPiece HashUpdateCoder::value(int i) {
+  int start = h_->value_offset(i);
+  int end = h_->value_offset(i + 1);
+
+//  CHECK_GT(end, start);
+  return StringPiece(h_->value_data().data() + start, end - start);
+}
+
+int HashUpdateCoder::size() {
+  return h_->key_offset_size() - 1;
+}
+
 void LocalTable::ApplyUpdates(const HashUpdate& req) {
-  CHECK_EQ(req.key_size(), req.value_size());
-  for (int i = 0; i < req.key_size(); ++i) {
-    put_str(req.key(i), req.value(i));
+  CHECK_EQ(req.key_offset_size(), req.value_offset_size());
+  HashUpdateCoder h(req);
+
+  for (int i = 0; i < h.size(); ++i) {
+    put_str(h.key(i), h.value(i));
   }
 }
 
 void LocalTable::SerializePartial(HashUpdate& r, Table::Iterator *it) {
   int bytes_used = 0;
+  HashUpdateCoder h(&r);
+  string k, v;
   for (; !it->done() && bytes_used < kMaxNetworkChunk; it->Next()) {
-    it->key_str(r.add_key());
-    it->value_str(r.add_value());
-    bytes_used += r.key(0).size() + r.value(0).size();
+    it->key_str(&k);
+    it->value_str(&v);
+    h.add_pair(k, v);
+    bytes_used += k.size() + v.size();
   }
 
   r.set_done(it->done());
