@@ -98,6 +98,8 @@ void GlobalTable::CheckForUpdates() {
   do {
     info().worker->PollWorkers();
   } while (info().worker->pending_network_bytes() > kMaxNetworkPending);
+
+  info().worker->PollMaster();
 }
 
 int GlobalTable::pending_write_bytes() {

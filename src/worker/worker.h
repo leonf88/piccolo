@@ -32,6 +32,7 @@ public:
   void Send(int peer, int type, const Message& msg);
   void Read(int peer, int type, Message* msg);
 
+  void PollMaster();
   void PollWorkers();
 
   RPCHelper* rpc() { return rpc_; }
@@ -85,7 +86,6 @@ private:
 
   map<KernelId, DSMKernel*> kernels_;
 
-  void PollMaster();
   Stats stats_;
 };
 
