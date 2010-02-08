@@ -79,11 +79,12 @@ private:
       return assigned.find(MP(table, shard)) != assigned.end();
     }
 
-    bool finished() {
+    int finished() {
       return assigned.size() - pending.size() - active.size();
     }
 
     bool idle() { return pending.empty(); }
+    bool full() { return assigned.size() >= slots; }
 
     void set_serves(int shard, bool should_service);
     bool serves(int table, int shard);

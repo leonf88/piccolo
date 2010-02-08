@@ -10,6 +10,9 @@ Master::Master(const ConfigData &conf) {
   rpc_ = new RPCHelper(&world_);
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(WorkerState(i));
+    RegisterWorkerRequest req;
+    rpc_->Read(i + 1, MTYPE_REGISTER_WORKER, &req);
+    workers_.back().slots = req.slots();
   }
 }
 
@@ -87,9 +90,13 @@ Master::WorkerState* Master::assign_worker(int table, int shard) {
 
   WorkerState* best = &workers_[0];
   for (int i = 0; i < workers_.size(); ++i) {
-    if (workers_[i].shards.size() < best->shards.size()) {
+    if (workers_[i].shards.size() < best->shards.size() && !workers_[i].full()) {
       best = &workers_[i];
     }
+  }
+
+  if (best->full()) {
+    LOG(FATAL) << "Failed to assign work - no available workers!";
   }
 
   VLOG(1) << "Assigning " << MP(table, shard) << " to " << best->id;
@@ -193,7 +200,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       status += StringPrintf("%2d/%2d; ", workers_[k].finished(), workers_[k].assigned.size());
     }
 
-    if (w.idle()) {
+    if (w.idle() && !w.full()) {
       steal_work(r, w_id);
     }
 
