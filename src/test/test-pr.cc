@@ -71,7 +71,7 @@ public:
 
   void Initialize() {
     for (int i = current_shard(); i < FLAGS_nodes; i += get_table(0)->num_shards()) {
-      LOG_EVERY_N(INFO, 1000000) << "Initializing... " << LOG_OCCURRENCES;
+//      LOG_EVERY_N(INFO, 1000000) << "Initializing... " << LOG_OCCURRENCES;
       curr_pr_hash->put(i, (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes));
     }
   }
@@ -102,7 +102,7 @@ public:
 
     char host[1024];
     gethostname(host, 1024);
-    LOG(INFO) << "Finished shard " << current_shard() << " on " << host << " in " << t.elapsed();
+    VLOG(1) << "Finished shard " << current_shard() << " on " << host << " in " << t.elapsed();
   }
 
   void ResetTable() {
