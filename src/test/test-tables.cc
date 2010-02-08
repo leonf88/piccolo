@@ -4,6 +4,7 @@ using namespace dsm;
 
 
 DEFINE_int32(table_size, 100000, "");
+DEFINE_int32(shards, 100, "");
 
 static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
@@ -14,7 +15,6 @@ static TypedGlobalTable<int, int>* replace_hash = NULL;
 class TableKernel : public DSMKernel {
 public:
   void TestPut() {
-    LOG(INFO) << "Here: " << current_shard() << " : " << min_hash->num_shards();
     Pair p;
     for (int i = 0; i < FLAGS_table_size; ++i) {
       min_hash->put(i, i);
@@ -61,34 +61,17 @@ REGISTER_METHOD(TableKernel, TestPut);
 REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
 
-static void TestMarshalling() {
-  ConfigData c;
-  c.set_num_workers(10000);
-  c.set_worker_id(0);
-  c.set_master_id(0);
-
-  LOG(INFO) << c.DebugString();
-
-  string cdata = Data::to_string<ConfigData>(c);
-  ConfigData c2 = Data::from_string<ConfigData>(cdata);
-
-  CHECK_EQ(c2.DebugString(), c.DebugString());
-}
-
 int main(int argc, char **argv) {
   Init(argc, argv);
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+  conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
 
-  TestMarshalling();
-
-  min_hash = Registry::create_table<int, int>(0, conf.num_workers(), &ModSharding, &Accumulator<int>::min);
-  max_hash = Registry::create_table<int, int>(1, conf.num_workers(), &ModSharding, &Accumulator<int>::max);
-  sum_hash = Registry::create_table<int, int>(2, conf.num_workers(), &ModSharding, &Accumulator<int>::sum);
-  replace_hash = Registry::create_table<int, int>(3, conf.num_workers(), &ModSharding, &Accumulator<int>::replace);
-//  pair_hash = Registry::create_table<int, Pair>(4, 10, &ModSharding, &Accumulator<Pair>::replace);
-
+  min_hash = Registry::create_table<int, int>(0, FLAGS_shards, &ModSharding, &Accumulator<int>::min);
+  max_hash = Registry::create_table<int, int>(1, FLAGS_shards, &ModSharding, &Accumulator<int>::max);
+  sum_hash = Registry::create_table<int, int>(2, FLAGS_shards, &ModSharding, &Accumulator<int>::sum);
+  replace_hash = Registry::create_table<int, int>(3, FLAGS_shards, &ModSharding, &Accumulator<int>::replace);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);

@@ -12,7 +12,7 @@
 DEFINE_double(sleep_hack, 0.0, "");
 
 namespace dsm {
-static const int kNetworkTimeout = 7200.0;
+static const double kNetworkTimeout = 7200.0;
 
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
@@ -66,7 +66,7 @@ struct Worker::Peer {
         VLOG(2) << "Finished request to " << id << " of size " << r->payload.size();
 
         if (r->timed_out()) {
-          LOG(FATAL) << "Send of " << r->payload.size() << " to " << r->target << " timed out." << r->elapsed();
+          LOG(FATAL) << "Send of " << r->payload.size() << " to " << r->target << " timed out: " << r->elapsed() << " : " << kNetworkTimeout;
           r->mpi_req.Cancel();
         }
 
@@ -260,9 +260,12 @@ void Worker::PollWorkers() {
     get_resp.set_table(get_req.table());
     get_resp.set_shard(-1);
     get_resp.set_done(true);
-    get_resp.add_key(get_req.key());
-    string *v = get_resp.add_value();
-    Registry::get_table(get_req.table())->get_local(get_req.key(), v);
+
+    HashUpdateCoder h(&get_resp);
+
+    string v;
+    Registry::get_table(get_req.table())->get_local(get_req.key(), &v);
+    h.add_pair(get_req.key(), v);
 
     peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
   }

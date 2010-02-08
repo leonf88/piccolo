@@ -52,6 +52,19 @@ struct Data {
   }
 };
 
+struct HashUpdateCoder {
+  HashUpdateCoder(HashUpdate *h);
+  HashUpdateCoder(const HashUpdate& h);
+
+  void add_pair(const string& k, const string& v);
+  StringPiece key(int idx);
+  StringPiece value(int idx);
+
+  int size();
+
+  HashUpdate *h_;
+};
+
 class Worker;
 
 struct TableInfo {

@@ -68,6 +68,9 @@ public:
   void put_str(const StringPiece &k, const StringPiece &v) {
     const K& kt = Data::from_string<K>(k);
     const V& vt = Data::from_string<V>(v);
+
+//    LOG(INFO) << MP(kt, vt);
+
     put(kt, vt);
   }
 
