@@ -24,7 +24,9 @@ Master::~Master() {
   }
 }
 
-Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {}
+Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {
+  last_ping_time = Now();
+}
 
 bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
   if (pending.empty()) {
@@ -119,8 +121,11 @@ void Master::send_assignments() {
     }
   }
 
-  rpc_->Broadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
+
+  LOG(INFO) << "Waiting for workers...";
   world_.Barrier();
+  LOG(INFO) << "Done waiting for workers";
 }
 
 void Master::steal_work(const RunDescriptor& r, int idle_worker) {
@@ -185,31 +190,41 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   KernelRequest k_done;
 
   int count = 0;
-  for (int j = 0; j < shards.size(); ++j) {
-    int w_id = 0;
-    rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
-    w_id -= 1;
+  while (count < shards.size()) {
+    if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
+      int w_id = 0;
+      rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
+      w_id -= 1;
 
-    WorkerState& w = workers_[w_id];
-    ++count;
+      WorkerState& w = workers_[w_id];
+      ++count;
 
-    w.active.erase(MP(k_done.table(), k_done.shard()));
-
-    string status;
-    for (int k = 0; k < config_.num_workers(); ++k) {
-      status += StringPrintf("%2d/%2d; ", workers_[k].finished(), workers_[k].assigned.size());
+      w.active.erase(MP(k_done.table(), k_done.shard()));
+      w.ping();
+    } else {
+      Sleep(0.001);
     }
 
-    if (w.idle() && !w.full()) {
-      steal_work(r, w_id);
+    for (int i = 0; i < workers_.size(); ++i) {
+      WorkerState& w = workers_[i];
+      if (w.idle() && !w.full()) {
+        steal_work(r, w.id);
+      }
+
+      if (w.active.empty() && !w.pending.empty()) {
+        w.get_next(r, &w_req);
+        rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
+      }
     }
 
-    if (!w.pending.empty()) {
-      w.get_next(r, &w_req);
-      rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
-    }
-
-    LOG(INFO) << "Progress: " << status << " left " << shards.size() - count;
+    PERIODIC(1, {
+               string status;
+               for (int k = 0; k < config_.num_workers(); ++k) {
+                 status += StringPrintf("%d/%d ",
+                                        workers_[k].assigned.size() - workers_[k].pending.size() - workers_[k].active.size(),
+                                        workers_[k].assigned.size());
+               }
+               LOG(INFO) << "Progress: " << status << " left " << shards.size() - count; });
   }
 
   LOG(INFO) << "Kernel run finished in " << t.elapsed();

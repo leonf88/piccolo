@@ -142,7 +142,7 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
-      PERIODIC(0.1,  { PollMaster(); } );
+      PollMaster();
       PollWorkers();
       continue;
     }
@@ -285,7 +285,6 @@ void Worker::PollMaster() {
   ShardAssignmentRequest shard_req;
   set<GlobalTable*> dirty_tables;
   while (rpc_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
-
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
       GlobalTable *t = Registry::get_table(a.table());
@@ -309,24 +308,13 @@ void Worker::PollMaster() {
       }
     }
 
+    LOG(INFO) << "Waiting for everyone to catch up.";
     world_.Barrier();
+    LOG(INFO) << "Done waiting...";
 
     // Flush any tables we no longer own.
     for (set<GlobalTable*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
       (*i)->SendUpdates();
-    }
-  }
-
-  // Check for kernels to avoid running.
-  while (rpc_->TryRead(config_.master_id(), MTYPE_STOP_KERNEL, &k)) {
-    LOG(INFO) << "Got stop request for: " << k;
-    for (int i = 0; i < kernel_queue_.size(); ++i) {
-      const KernelRequest &c = kernel_queue_[i];
-      if (c.table() == k.table() && c.shard() == k.shard()) {
-        LOG(INFO) << "dropping: " << k << " from queue.";
-        kernel_queue_.erase(kernel_queue_.begin() + i);
-        break;
-      }
     }
   }
 

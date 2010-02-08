@@ -83,7 +83,11 @@ private:
       return assigned.size() - pending.size() - active.size();
     }
 
-    bool idle() { return pending.empty(); }
+    void ping() {
+      last_ping_time = Now();
+    }
+
+    bool idle() { return pending.empty() && active.empty() && Now() - last_ping_time > 10; }
     bool full() { return assigned.size() >= slots; }
 
     void set_serves(int shard, bool should_service);
