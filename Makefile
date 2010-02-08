@@ -41,7 +41,7 @@ UPC_THREADS := -T 20
 LDFLAGS := 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
-DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread
+DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread -lrt
 STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 $(PROF_LIBS) -Wl,-Bdynamic
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 

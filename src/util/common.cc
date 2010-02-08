@@ -120,8 +120,7 @@ uint64_t get_memory_rss() {
   return m * 1024;
 }
 
-
-static double get_processor_frequency() {
+double get_processor_frequency() {
   double freq;
   int a, b;
   FILE* procinfo = fopen("/proc/cpuinfo", "r");
@@ -133,20 +132,6 @@ static double get_processor_frequency() {
   fclose(procinfo);
   return freq;
 }
-
-uint64_t init_tsc = 0;
-
-static double setup_time() {
-  init_tsc = rdtsc();
-
-  timeval tv;
-  gettimeofday(&tv, NULL);
-
-  return tv.tv_sec + tv.tv_usec * 1e-6;
-}
-
-double processor_freq = get_processor_frequency();
-double init_time = setup_time();
 
 void Sleep(double t) {
   timespec req;

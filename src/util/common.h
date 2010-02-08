@@ -1,6 +1,8 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <time.h>
+
 #include <stdarg.h>
 #include <glog/logging.h>
 #include <gflags/gflags.h>
@@ -135,10 +137,6 @@ extern void Sleep(double t);
 
 extern void DumpHeapProfile(const string& file);
 
-extern double processor_freq;
-extern double init_time;
-extern uint64_t init_tsc;
-
 static uint64_t rdtsc() {
   uint32_t hi, lo;
   __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
@@ -146,8 +144,9 @@ static uint64_t rdtsc() {
 }
 
 inline double Now() {
-  uint64_t now = rdtsc();
-  return init_time + (now - init_tsc) / processor_freq;
+  timespec tp;
+  clock_gettime(CLOCK_MONOTONIC, &tp);
+  return tp.tv_sec + 1e-9 * tp.tv_nsec;
 }
 
 class SpinLock {
@@ -183,12 +182,11 @@ private:
 }
 
 #define PERIODIC(interval, operation)\
-{ static uint64_t last = 0;\
-  static uint64_t cycles = interval * dsm::processor_freq;\
+{ static double last = 0;\
   static int COUNT = 0; \
   ++COUNT; \
-  uint64_t now = dsm::rdtsc();\
-  if (now - last > cycles) {\
+  double now = dsm::Now();\
+  if (now - last > interval) {\
     last = now;\
     operation;\
   }\

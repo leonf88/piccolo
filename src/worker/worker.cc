@@ -12,7 +12,7 @@
 DEFINE_double(sleep_hack, 0.0, "");
 
 namespace dsm {
-static const int kNetworkTimeout = 100.0;
+static const int kNetworkTimeout = 7200.0;
 
 struct Worker::Peer {
   // An update request containing changes to apply to a remote table.
@@ -25,6 +25,8 @@ struct Worker::Peer {
 
     Request() : start_time(Now()) {}
     ~Request() {}
+
+    bool done() { return mpi_req.Test() || timed_out(); }
 
     double elapsed() { return Now() - start_time; }
     double timed_out() { return elapsed() > kNetworkTimeout; }
@@ -60,12 +62,11 @@ struct Worker::Peer {
     unordered_set<Request*>::iterator i = outgoing_requests_.begin();
     while (i != outgoing_requests_.end()) {
       Request *r = (*i);
-      if (r->mpi_req.Test() || r->timed_out()) {
+      if (r->done()) {
         VLOG(2) << "Finished request to " << id << " of size " << r->payload.size();
 
         if (r->timed_out()) {
-          LOG_EVERY_N(INFO, 100) << "Send of " << r->payload.size()
-                                 << " to " << r->target << " timed out.";
+          LOG(FATAL) << "Send of " << r->payload.size() << " to " << r->target << " timed out." << r->elapsed();
           r->mpi_req.Cancel();
         }
 
@@ -221,7 +222,7 @@ bool Worker::network_idle() const {
 }
 
 void Worker::PollWorkers() {
-  PERIODIC(10,
+  PERIODIC(120,
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss());
 
   for (int i = 0; i < peers_.size(); ++i) {
