@@ -103,6 +103,11 @@ Worker::Worker(const ConfigData &c) {
   }
 
   LOG(INFO) << "Worker " << config_.worker_id() << " started.";
+
+  RegisterWorkerRequest req;
+  req.set_id(id());
+  req.set_slots(config_.slots());
+  rpc_->Send(0, MTYPE_REGISTER_WORKER, req);
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -217,7 +222,7 @@ bool Worker::network_idle() const {
 
 void Worker::PollWorkers() {
   PERIODIC(10,
-           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << resident_set_size());
+           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss());
 
   for (int i = 0; i < peers_.size(); ++i) {
     Peer *p = peers_[i];

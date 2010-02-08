@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
   
   ConfigData conf;                                                            
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+  conf.set_slots(14);
 
   // Cap address space at 2G.
   struct rlimit rl;
@@ -153,7 +154,7 @@ int main(int argc, char **argv) {
 		for (int i = 0; i < FLAGS_iterations; i++) {
 			RUN_ALL(m, PRKernel, PageRankIter, 0);
 			RUN_ALL(m, PRKernel, ResetTable, 1);
-//			RUN_ONE(m, PRKernel, WriteStatus, 0);
+			RUN_ONE(m, PRKernel, WriteStatus, 0);
 		}
   } else {
     Worker w(conf);

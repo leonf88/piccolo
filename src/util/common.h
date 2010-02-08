@@ -51,7 +51,8 @@ using boost::shared_array;
 using boost::shared_ptr;
 
 extern void Init(int argc, char** argv);
-extern uint64_t resident_set_size();
+extern uint64_t get_memory_rss();
+extern uint64_t get_memory_total();
 
 // Log-bucketed histogram.
 class Histogram {
