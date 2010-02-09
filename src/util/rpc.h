@@ -3,9 +3,9 @@
 
 #include "util/common.h"
 #include "util/coder.h"
-#include <mpi.h>
+#include <boost/thread.hpp>
 #include <google/protobuf/message.h>
-
+#include <mpi.h>
 namespace dsm {
 
 typedef google::protobuf::Message Message;
