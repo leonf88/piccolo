@@ -14,15 +14,21 @@ MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal
 
 CXX := distcc g++
 CDEBUG := -ggdb2
-COPT :=  -O3
+COPT :=  -O2
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
 
-USE_GOOGLE_PROFILER := 1
+USE_CPU_PROFILE := 1
+USE_TCMALLOC := 
 USE_OPROFILE := 
 
-ifneq ($(USE_GOOGLE_PROFILER),)
+ifneq ($(USE_CPU_PROFILE),)
 	PROF_LIBS := -lprofiler -lunwind
 	CPPFLAGS := $(CPPFLAGS) -DCPUPROF=1 
+endif
+
+ifneq ($(USE_TCMALLOC),)
+	PROF_LIBS := $(PROF_LIBS) -ltcmalloc
+	CPPFLAGS := $(CPPFLAGS) -DHEAPPROF=1
 endif
 
 ifneq ($(USE_OPROFILE),)
@@ -41,8 +47,8 @@ UPC_THREADS := -T 20
 LDFLAGS := 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
-DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread -lrt
-STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 $(PROF_LIBS) -Wl,-Bdynamic
+DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread -lrt $(PROF_LIBS)
+STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 -Wl,-Bdynamic 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r $(LDFLAGS)
@@ -89,28 +95,28 @@ bin/libtest.a : $(LIBTEST_OBJS)
 	$(LINK_LIB) $^ -o $@
 		
 bin/test-shortest-path: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-shortest-path.o
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 
 bin/test-tables: bin/libworker.a bin/libcommon.a bin/librpc.a src/test/test-tables.o
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS) 
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 	
+bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
+
+bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/k-means.o 
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
+
+bin/test-hashmap: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-hashmap.o
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
+
+bin/mpi-test: src/test/mpi-test.o bin/libcommon.a
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
+
 bin/test-shortest-path-upc: bin/libtest.a bin/libcommon.a src/test/test-shortest-path.upc	 
 	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS) 
 
 bin/test-pr-upc: bin/libcommon.a bin/libtest.a src/test/test-pr.upc
 	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
-
-bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
-
-bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/k-means.o 
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
-
-bin/test-hashmap: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-hashmap.o
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
-
-bin/mpi-test: src/test/mpi-test.o bin/libcommon.a
-	$(LINK_BIN) $(LDDIRS) $(DYNAMIC_LIBS) $^ -o $@ $(STATIC_LIBS)
 
 clean:
 	rm -f bin/*

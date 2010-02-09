@@ -31,7 +31,7 @@ static int BlkModSharding(const int& key, int shards) { return (key/kBlocksize) 
 void BuildGraph(int shards, int nodes, int density) {
   fprintf(stderr, "Building graph: ");
   vector<RecordFile*> out(shards);
-  Mkdirs("testdata/");
+  File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
     out[i] = new RecordFile(StringPrintf("%s-%05d-of-%05d-N%05d",
                                          kTestPrefix, i, shards, nodes), "w");

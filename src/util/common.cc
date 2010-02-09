@@ -12,11 +12,14 @@
 #include <asm/msr.h>
 #include <sys/time.h>
 
-#include <lzo/lzo1x.h>
-
-#include <mpi.h>
-#ifdef CPUPROF
 #include <google/profiler.h>
+#include <google/heap-profiler.h>
+#include <google/malloc_extension.h>
+
+#include <lzo/lzo1x.h>
+#include <mpi.h>
+
+#ifdef CPUPROF
 DEFINE_bool(cpu_profile, false, "");
 #endif
 
@@ -68,6 +71,18 @@ void Histogram::add(double val) {
   if (buckets.size() <= b) { buckets.resize(b + 1); }
   ++buckets[b];
   ++count;
+}
+
+void DumpProfile() {
+#ifdef CPUPROF
+ProfilerFlush();
+#endif
+
+#ifdef HEAPPROF
+string heap_prof;
+MallocExtension::instance()->GetHeapSample(&heap_prof);
+File::Dump(StringPrintf("heap.profile.%d", getpid()), heap_prof);
+#endif
 }
 
 string Histogram::summary() {

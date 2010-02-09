@@ -1,8 +1,5 @@
 #include <boost/bind.hpp>
 #include <signal.h>
-#ifdef CPUPROF
-#include <google/profiler.h>
-#endif
 
 #include "util/common.h"
 #include "worker/worker.h"
@@ -190,9 +187,7 @@ void Worker::KernelLoop() {
     }
 
     VLOG(1) << "Kernel finished: " << k;
-#ifdef CPUPROF
-    ProfilerFlush();
-#endif
+    DumpProfile();
   }
 }
 

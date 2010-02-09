@@ -39,9 +39,24 @@ using std::make_pair;
 using std::min;
 using std::max;
 
-extern void Init(int argc, char** argv);
-extern uint64_t get_memory_rss();
-extern uint64_t get_memory_total();
+void Init(int argc, char** argv);
+uint64_t get_memory_rss();
+uint64_t get_memory_total();
+
+void Sleep(double t);
+void DumpProfile();
+
+static uint64_t rdtsc() {
+  uint32_t hi, lo;
+  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+  return (((uint64_t)hi)<<32) | ((uint64_t)lo);
+}
+
+inline double Now() {
+  timespec tp;
+  clock_gettime(CLOCK_MONOTONIC, &tp);
+  return tp.tv_sec + 1e-9 * tp.tv_nsec;
+}
 
 // Log-bucketed histogram.
 class Histogram {
@@ -117,24 +132,8 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
   return a.data == b.data && a.len == b.len;
 }
 
-extern string StringPrintf(StringPiece fmt, ...);
-extern string VStringPrintf(StringPiece fmt, va_list args);
-
-extern void Sleep(double t);
-
-extern void DumpHeapProfile(const string& file);
-
-static uint64_t rdtsc() {
-  uint32_t hi, lo;
-  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-  return (((uint64_t)hi)<<32) | ((uint64_t)lo);
-}
-
-inline double Now() {
-  timespec tp;
-  clock_gettime(CLOCK_MONOTONIC, &tp);
-  return tp.tv_sec + 1e-9 * tp.tv_nsec;
-}
+string StringPrintf(StringPiece fmt, ...);
+string VStringPrintf(StringPiece fmt, va_list args);
 
 class SpinLock {
 public:
