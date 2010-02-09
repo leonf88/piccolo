@@ -122,10 +122,6 @@ void Master::send_assignments() {
   }
 
   rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
-
-  LOG(INFO) << "Waiting for workers...";
-  world_.Barrier();
-  LOG(INFO) << "Done waiting for workers";
 }
 
 void Master::steal_work(const RunDescriptor& r, int idle_worker) {

@@ -308,10 +308,6 @@ void Worker::PollMaster() {
       }
     }
 
-    LOG(INFO) << "Waiting for everyone to catch up.";
-    world_.Barrier();
-    LOG(INFO) << "Done waiting...";
-
     // Flush any tables we no longer own.
     for (set<GlobalTable*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
       (*i)->SendUpdates();
