@@ -12,7 +12,7 @@ static TypedGlobalTable<int, double>* distance;
 
 void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
-  Mkdirs("testdata/");
+  File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
     out[i] = new RecordFile(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
   }

@@ -5,11 +5,11 @@
 
 namespace dsm {
 
-void Mkdirs(const string& path) {
+void File::Mkdirs(const string& path) {
   system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str());
 }
 
-string Slurp(const string& f) {
+string File::Slurp(const string& f) {
   FILE* fp = fopen(f.c_str(), "r");
   if (!fp) { LOG(FATAL) << "Failed to read input file " << f.c_str(); }
 
@@ -28,7 +28,7 @@ string Slurp(const string& f) {
   return out;
 }
 
-void Dump(const string& f, StringPiece data) {
+void File::Dump(const string& f, StringPiece data) {
   FILE* fp = fopen(f.c_str(), "w+");
   if (!fp) { LOG(FATAL) << "Failed to open output file " << f.c_str(); }
   fwrite(data.data, 1, data.len, fp);

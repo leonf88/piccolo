@@ -10,10 +10,6 @@ namespace google { namespace protobuf { class Message; } }
 
 namespace dsm {
 
-extern string Slurp(const string& file);
-extern void Dump(const string& file, StringPiece data);
-extern void Mkdirs(const string& path);
-
 class File {
 public:
   virtual int read(char *buffer, int len) = 0;
@@ -37,6 +33,9 @@ public:
     return out;
   }
 
+  static string Slurp(const string& file);
+  static void Dump(const string& file, StringPiece data);
+  static void Mkdirs(const string& path);
 private:
 };
 
