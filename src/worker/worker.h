@@ -15,7 +15,7 @@ using boost::shared_ptr;
 namespace dsm {
 
 class Worker : private boost::noncopyable {
-struct Peer;
+struct Stub;
 public:
   Worker(const ConfigData &c);
   ~Worker();
@@ -62,7 +62,7 @@ private:
   ConfigData config_;
 
   // The status of other workers.
-  vector<Peer*> peers_;
+  vector<Stub*> peers_;
 
   struct KernelId {
     string kname_;

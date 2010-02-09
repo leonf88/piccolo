@@ -9,9 +9,9 @@
 DEFINE_double(sleep_hack, 0.0, "");
 
 namespace dsm {
-static const double kNetworkTimeout = 7200.0;
+static const double kNetworkTimeout = 10.0;
 
-struct Worker::Peer {
+struct Worker::Stub {
   // An update request containing changes to apply to a remote table.
   struct Request {
     int target;
@@ -23,7 +23,7 @@ struct Worker::Peer {
     Request() : start_time(Now()) {}
     ~Request() {}
 
-    bool done() { return mpi_req.Test() || timed_out(); }
+    bool finished() { return mpi_req.Test(); }
 
     double elapsed() { return Now() - start_time; }
     double timed_out() { return elapsed() > kNetworkTimeout; }
@@ -35,7 +35,7 @@ struct Worker::Peer {
   RPCHelper *helper;
   int64_t pending_out_;
 
-  Peer(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
+  Stub(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
 
   bool TryRead(int method, Message* msg) {
     return helper->TryRead(id, method, msg);
@@ -59,17 +59,17 @@ struct Worker::Peer {
     unordered_set<Request*>::iterator i = outgoing_requests_.begin();
     while (i != outgoing_requests_.end()) {
       Request *r = (*i);
-      if (r->done()) {
+      if (r->finished()) {
         VLOG(2) << "Finished request to " << id << " of size " << r->payload.size();
-
-        if (r->timed_out()) {
-          LOG(FATAL) << "Send of " << r->payload.size() << " to " << r->target << " timed out: " << r->elapsed() << " : " << kNetworkTimeout;
-          r->mpi_req.Cancel();
-        }
-
         pending_out_ -= r->payload.size();
         delete r;
         i = outgoing_requests_.erase(i);
+      } else if (r->timed_out()) {
+        LOG_EVERY_N(WARNING, 100)  << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
+        r->mpi_req.Cancel();
+        r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
+        r->start_time = Now();
+        ++i;
       } else {
         ++i;
       }
@@ -89,7 +89,7 @@ Worker::Worker(const ConfigData &c) {
   num_peers_ = config_.num_workers();
   peers_.resize(num_peers_);
   for (int i = 0; i < num_peers_; ++i) {
-    peers_[i] = new Peer(i + 1, rpc_);
+    peers_[i] = new Stub(i + 1, rpc_);
   }
 
   running_ = true;
@@ -221,7 +221,7 @@ void Worker::PollWorkers() {
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss());
 
   for (int i = 0; i < peers_.size(); ++i) {
-    Peer *p = peers_[i];
+    Stub *p = peers_[i];
     p->CollectPendingSends();
   }
 
@@ -310,11 +310,11 @@ void Worker::PollMaster() {
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  if (network_idle()) {
-    while (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
-      kernel_queue_.push_back(k);
-    }
+  while (rpc_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
+    kernel_queue_.push_back(k);
+  }
 
+  if (network_idle()) {
     while (!kernel_done_.empty()) {
       rpc_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
       kernel_done_.pop_front();
