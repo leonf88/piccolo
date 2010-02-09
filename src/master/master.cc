@@ -149,6 +149,8 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
   src.set_serves(task->shard, false);
 
   src.pending.erase(tid);
+  src.assigned.erase(tid);
+
   dst.assigned[tid] = task;
   dst.pending[tid] = task;
 
@@ -213,7 +215,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       }
     }
 
-    PERIODIC(1, {
+    PERIODIC(5, {
                string status;
                for (int k = 0; k < config_.num_workers(); ++k) {
                  status += StringPrintf("%d/%d ",
