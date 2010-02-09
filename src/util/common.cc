@@ -25,8 +25,6 @@ DEFINE_bool(localtest, false, "");
 
 namespace dsm {
 
-boost::thread_group programThreads;
-
 StringPiece::StringPiece() : data(NULL), len(0) {}
 StringPiece::StringPiece(const string& s) : data(s.data()), len(s.size()) {}
 StringPiece::StringPiece(const string& s, int len) : data(s.data()), len(len) {}

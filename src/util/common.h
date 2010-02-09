@@ -7,19 +7,11 @@
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-#include <boost/shared_ptr.hpp>
-#include <boost/shared_array.hpp>
-#include <boost/scoped_ptr.hpp>
-#include <boost/scoped_array.hpp>
-#include <boost/thread.hpp>
-#include <boost/function.hpp>
-
 #include <map>
 #include <vector>
 #include <deque>
 #include <string>
 #include <list>
-#include <algorithm>
 #include <set>
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
@@ -46,11 +38,6 @@ using std::pair;
 using std::make_pair;
 using std::min;
 using std::max;
-
-using boost::scoped_array;
-using boost::scoped_ptr;
-using boost::shared_array;
-using boost::shared_ptr;
 
 extern void Init(int argc, char** argv);
 extern uint64_t get_memory_rss();

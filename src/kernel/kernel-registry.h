@@ -2,6 +2,7 @@
 #define KERNELREGISTRY_H_
 
 #include "util/common.h"
+#include <boost/function.hpp>
 
 namespace dsm {
 
