@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
-  conf.set_slots(14);
+  conf.set_slots(16);
 
   // Cap address space at 2G.
   struct rlimit rl;
