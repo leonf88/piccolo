@@ -223,10 +223,11 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
                                         workers_[k].assigned.size() - workers_[k].pending.size() - workers_[k].active.size(),
                                         workers_[k].assigned.size());
                }
-               LOG(INFO) << "Progress: " << status << " left " << shards.size() - count; });
+               LOG(INFO) << StringPrintf("Progress (%s): %s.  Left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
+    });
   }
 
-  LOG(INFO) << "Kernel run finished in " << t.elapsed();
+  LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
 
 }
