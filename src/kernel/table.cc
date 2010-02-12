@@ -1,7 +1,7 @@
 #include "kernel/table.h"
 #include "worker/worker.h"
 
-static const int kMaxNetworkChunk = 1 << 10;
+static const int kMaxNetworkChunk = 1 << 20;
 static const int kMaxNetworkPending = 1 << 26;
 
 namespace dsm {
@@ -90,16 +90,17 @@ void GlobalTable::SendUpdates() {
     }
   }
 
+  VLOG(1) << "Sent " << pending_writes_ << " updates.";
+
   pending_writes_ = 0;
 }
 
 void GlobalTable::CheckForUpdates() {
-//  boost::recursive_mutex::scoped_lock sl(pending_lock_);
   do {
-    info().worker->PollWorkers();
+    info().worker->CheckForWorkerUpdates();
   } while (info().worker->pending_network_bytes() > kMaxNetworkPending);
 
-  info().worker->PollMaster();
+  info().worker->CheckForMasterUpdates();
 }
 
 int GlobalTable::pending_write_bytes() {

@@ -11,72 +11,61 @@ DEFINE_double(sleep_hack, 0.0, "");
 namespace dsm {
 static const double kNetworkTimeout = 10.0;
 
+// Represents an active RPC to a remote peer.
+struct Worker::SendRequest {
+  int target;
+  int rpc_type;
+  int failures;
+
+  string payload;
+  MPI::Request mpi_req;
+  MPI::Status status;
+  double start_time;
+
+  SendRequest() {
+    failures = 0;
+  }
+
+  ~SendRequest() {}
+
+  bool finished() {
+    return mpi_req.Test(status);
+  }
+
+  double elapsed() { return Now() - start_time; }
+  double timed_out() { return elapsed() > kNetworkTimeout; }
+
+  void Send(RPCHelper* helper) {
+    start_time = Now();
+    mpi_req = helper->ISendData(target, rpc_type, payload);
+  }
+
+  void Cancel() {
+    mpi_req.Cancel();
+    ++failures;
+  }
+};
+
 struct Worker::Stub {
-  // An update request containing changes to apply to a remote table.
-  struct Request {
-    int target;
-    int rpc_type;
-    string payload;
-    MPI::Request mpi_req;
-    double start_time;
-
-    Request() : start_time(Now()) {}
-    ~Request() {}
-
-    bool finished() { return mpi_req.Test(); }
-
-    double elapsed() { return Now() - start_time; }
-    double timed_out() { return elapsed() > kNetworkTimeout; }
-  };
-
-  unordered_set<Request*> outgoing_requests_;
-
   int32_t id;
   RPCHelper *helper;
-  int64_t pending_out_;
 
-  Stub(int id, RPCHelper* rpc) : id(id), helper(rpc), pending_out_(0) {}
+  Stub(int id, RPCHelper* rpc) : id(id), helper(rpc) {}
 
   bool TryRead(int method, Message* msg) {
     return helper->TryRead(id, method, msg);
   }
 
   // Send the given message type and data to this peer.
-  Request* Send(int method, const Message& ureq) {
-    Request* r = new Request();
+  SendRequest* Send(int method, const Message& ureq) {
+    SendRequest* r = new SendRequest();
     r->target = id;
     r->rpc_type = method;
     ureq.AppendToString(&r->payload);
 
-    r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
-    outgoing_requests_.insert(r);
-    pending_out_ += r->payload.size();
-
+    r->Send(helper);
     return r;
   }
-
-  void CollectPendingSends() {
-    unordered_set<Request*>::iterator i = outgoing_requests_.begin();
-    while (i != outgoing_requests_.end()) {
-      Request *r = (*i);
-      if (r->finished()) {
-        VLOG(2) << "Finished request to " << id << " of size " << r->payload.size();
-        pending_out_ -= r->payload.size();
-        delete r;
-        i = outgoing_requests_.erase(i);
-      } else if (r->timed_out()) {
-        LOG_EVERY_N(WARNING, 100)  << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
-        r->mpi_req.Cancel();
-        r->mpi_req = helper->SendData(r->target, r->rpc_type, r->payload);
-        r->start_time = Now();
-        ++i;
-      } else {
-        ++i;
-      }
-    }
-  }
-
-  int64_t pending_out_bytes() const { return pending_out_; }
 };
 
 Worker::Worker(const ConfigData &c) {
@@ -100,12 +89,14 @@ Worker::Worker(const ConfigData &c) {
     i->second->info_.worker = this;
   }
 
-  LOG(INFO) << "Worker " << config_.worker_id() << " started.";
-
+  LOG(INFO) << "Worker " << config_.worker_id() << " registering...";
   RegisterWorkerRequest req;
   req.set_id(id());
   req.set_slots(config_.slots());
   rpc_->Send(0, MTYPE_REGISTER_WORKER, req);
+
+
+  LOG(INFO) << "Worker " << config_.worker_id() << " registered.";
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -125,12 +116,15 @@ Worker::~Worker() {
 }
 
 void Worker::Send(int peer, int type, const Message& msg) {
-  peers_[peer]->Send(type, msg);
+  outgoing_requests_.insert(peers_[peer]->Send(type, msg));
+  CheckForWorkerUpdates();
+  CheckForMasterUpdates();
 }
 
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
-    PollWorkers();
+    CheckForMasterUpdates();
+    CheckForWorkerUpdates();
   }
 }
 
@@ -139,8 +133,8 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
-      PollMaster();
-      PollWorkers();
+      CheckForMasterUpdates();
+      CheckForWorkerUpdates();
       continue;
     }
 
@@ -178,6 +172,8 @@ void Worker::KernelLoop() {
       i->second->SendUpdates();
     }
 
+    CheckForWorkerUpdates();
+
     VLOG(1) << "Kernel finished: " << k;
     DumpProfile();
   }
@@ -186,8 +182,8 @@ void Worker::KernelLoop() {
 int64_t Worker::pending_network_bytes() const {
   int64_t t = 0;
 
-  for (int i = 0; i < peers_.size(); ++i) {
-    t += peers_[i]->pending_out_bytes();
+  for (unordered_set<SendRequest*>::const_iterator i = outgoing_requests_.begin(); i != outgoing_requests_.end(); ++i) {
+    t += (*i)->payload.size();
   }
 
   return t;
@@ -208,14 +204,36 @@ bool Worker::network_idle() const {
   return pending_network_bytes() == 0;
 }
 
-void Worker::PollWorkers() {
-  PERIODIC(120,
-           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss());
+void Worker::CollectPending() {
+  unordered_set<SendRequest*>::iterator i = outgoing_requests_.begin();
+  while (i != outgoing_requests_.end()) {
+    SendRequest *r = (*i);
+    if (r->finished()) {
+      if (r->failures > 0) {
+        LOG(INFO) << "Request " << MP(id(), r->target) << " of size " << r->payload.size()
+            << " succeeded after " << r->failures << " failures.";
+      }
+      VLOG(2) << "Finished request to " << r->target << " of size " << r->payload.size();
+      delete r;
+      i = outgoing_requests_.erase(i);
+      continue;
+    }
 
-  for (int i = 0; i < peers_.size(); ++i) {
-    Stub *p = peers_[i];
-    p->CollectPendingSends();
+    if (r->timed_out()) {
+      LOG_EVERY_N(WARNING, 1000)  << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
+      r->Cancel();
+      r->Send(rpc_);
+    }
+    ++i;
   }
+}
+
+void Worker::CheckForWorkerUpdates() {
+  PERIODIC(30,
+           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss()
+           << " poll calls " << COUNT);
+
+  CollectPending();
 
   HashUpdate put;
   while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
@@ -239,7 +257,7 @@ void Worker::PollWorkers() {
 
     stats_.set_get_in(stats_.get_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
-    VLOG(2) << "Returning result for " << get_req.key() << " :: table " << get_req.table();
+    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
 
 
     get_resp.Clear();
@@ -254,11 +272,12 @@ void Worker::PollWorkers() {
     Registry::get_table(get_req.table())->get_local(get_req.key(), &v);
     h.add_pair(get_req.key(), v);
 
-    peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
+    SendRequest *r = peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
+    outgoing_requests_.insert(r);
   }
 }
 
-void Worker::PollMaster() {
+void Worker::CheckForMasterUpdates() {
   // Check for shutdown.
   EmptyMessage msg;
   KernelRequest k;
