@@ -32,10 +32,9 @@ public:
   void Send(int peer, int type, const Message& msg);
   void Read(int peer, int type, Message* msg);
 
-  void PollMaster();
-  void PollWorkers();
-
-  RPCHelper* rpc() { return rpc_; }
+  void CheckForMasterUpdates();
+  void CheckForWorkerUpdates();
+  void CollectPending();
 
   void release_shard(GlobalTable *t, int shard);
   void acquire_shard(GlobalTable *t, int shard);
@@ -48,8 +47,11 @@ public:
   bool network_idle() const;
 
 private:
+  struct SendRequest;
+
   deque<KernelRequest> kernel_queue_;
   deque<KernelRequest> kernel_done_;
+  unordered_set<SendRequest*> outgoing_requests_;
 
   boost::recursive_mutex kernel_lock_;
 
