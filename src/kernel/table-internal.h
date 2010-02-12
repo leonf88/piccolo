@@ -165,17 +165,23 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
     ++pending_writes_;
   }
 
-  if (pending_writes_ > 1000000) {
+  PERIODIC(0.1, { CheckForUpdates(); });
+
+  if (pending_writes_ > 10000000) {
     SendUpdates();
   }
-
-  PERIODIC(0.1, { CheckForUpdates(); });
 }
 
 
 template <class K, class V>
 V TypedGlobalTable<K, V>::get(const K &k) {
   int shard = this->get_shard(k);
+
+  // If we received a get for this shard; but we haven't received all of the
+  // data for it yet. Continue reading from other workers until we do.
+  while (tainted(shard)) {
+    CheckForUpdates();
+  }
 
   if (is_local_shard(shard)) {
     PERIODIC(0.1, { CheckForUpdates(); });
