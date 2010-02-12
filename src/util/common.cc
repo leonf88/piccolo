@@ -240,7 +240,5 @@ void Init(int argc, char** argv) {
     ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
   }
 #endif
-
-  LOG(INFO) << "Initialization done.";
 }
 }

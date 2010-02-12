@@ -22,12 +22,13 @@ public:
   bool HasData(int target, int method);
   bool HasData(int target, int method, MPI::Status &status);
 
-  int Read(int target, int method, Message *msg);
-  int ReadAny(int *target, int method, Message *msg);
+  int Read(int src, int method, Message *msg);
+  int ReadAny(int *src, int method, Message *msg);
   void Send(int target, int method, const Message &msg);
   void SyncSend(int target, int method, const Message &msg);
 
-  MPI::Request SendData(int peer_id, int rpc_id, const string& data);
+  void SendData(int peer_id, int rpc_id, const string& data);
+  MPI::Request ISendData(int peer_id, int rpc_id, const string& data);
 
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
