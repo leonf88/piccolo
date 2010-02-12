@@ -7,6 +7,8 @@
 
 namespace dsm {
 
+static const int kWriteFlushCount = 10000000;
+
 // A local accumulated hash table.
 template <class K, class V>
 class TypedLocalTable : public LocalTable {
@@ -167,7 +169,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
 
   PERIODIC(0.1, { CheckForUpdates(); });
 
-  if (pending_writes_ > 10000000) {
+  if (pending_writes_ > kWriteFlushCount) {
     SendUpdates();
   }
 }
