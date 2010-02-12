@@ -153,14 +153,6 @@ void Worker::KernelLoop() {
       LOG(FATAL) << "Received a shard I can't work on! : " << k.shard() << " : " << peer_for_shard(k.table(), k.shard());
     }
 
-    GlobalTable *t = Registry::get_table(k.table());
-    // We received a run request for a shard we own, but we haven't yet received
-    // all the data for it.  Continue reading from other workers until we do.
-    while (t->tainted(k.shard())) {
-      PollWorkers();
-      PollMaster();
-    }
-
     KernelInfo *helper = Registry::get_kernel(k.kernel());
 
     KernelId id(k.kernel(), k.table(), k.shard());
