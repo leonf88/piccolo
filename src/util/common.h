@@ -175,14 +175,23 @@ private:
   if (now - last > interval) {\
     last = now;\
     operation;\
+    COUNT = 0;\
   }\
 }
 
 #define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
+template <class A, class B, class C>
+struct tuple3 {
+  A a_; B b_; C c_;
+  tuple3(const A& a, const B& b, const C& c) : a_(a), b_(b), c_(c) {}
+};
 template<class A, class B>
 inline pair<A, B> MP(A x, B y) { return pair<A, B>(x, y); }
+
+template<class A, class B, class C>
+inline tuple3<A, B, C> MP(A x, B y, C z) { return tuple3<A, B, C>(x, y, z); }
 
 }
 
@@ -218,6 +227,12 @@ static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
 template <class A, class B>
 static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
   out << "(" << p.first << "," << p.second << ")";
+  return out;
+}
+
+template <class A, class B, class C>
+static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
+  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
   return out;
 }
 
