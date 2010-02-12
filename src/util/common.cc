@@ -11,6 +11,8 @@
 
 #include <asm/msr.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <google/profiler.h>
 #include <google/heap-profiler.h>
@@ -237,7 +239,10 @@ void Init(int argc, char** argv) {
   srandom(time(NULL));
 #ifdef CPUPROF
   if (FLAGS_cpu_profile) {
-    ProfilerStart(StringPrintf("prof.%d", getpid()).c_str());
+    mkdir("profile/", 0755);
+    char buf[100];
+    gethostname(buf, 100);
+    ProfilerStart(StringPrintf("profile/cpu.%s.%d",  buf, getpid()).c_str());
   }
 #endif
 }
