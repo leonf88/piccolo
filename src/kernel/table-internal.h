@@ -139,7 +139,7 @@ public:
   V get_local(const K& k) {
     int shard = this->get_shard(k);
 
-    CHECK(is_local_shard(shard)) << " non-local get? " << shard;
+    CHECK(is_local_shard(shard)) << " non-local for shard: " << shard;
 
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }

@@ -11,6 +11,7 @@ Master::Master(const ConfigData &conf) {
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(WorkerState(i));
     RegisterWorkerRequest req;
+    LOG(INFO) << "Waiting for worker... " << i;
     rpc_->Read(i + 1, MTYPE_REGISTER_WORKER, &req);
     workers_.back().slots = req.slots();
   }

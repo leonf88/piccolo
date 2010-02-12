@@ -11,8 +11,9 @@ namespace dsm {
 bool RPCHelper::HasData(int target, int method) {
   rpc_lock;
 
+  MPI::Status st;
   PERIODIC(1, rpc_log("IProbe", my_rank_, target, method));
-  return mpi_world_->Iprobe(target, method);
+  return mpi_world_->Iprobe(target, method, st);
 }
 
 bool RPCHelper::HasData(int target, int method, MPI::Status &status) {
@@ -69,7 +70,7 @@ int RPCHelper::Read(int target, int method, Message *msg) {
   return r_size;
 }
 
-int RPCHelper::ReadAny(int *target, int method, Message *msg) {
+int RPCHelper::ReadAny(int *src, int method, Message *msg) {
   rpc_lock;
   int r_size = 0;
   string scratch;
@@ -82,10 +83,10 @@ int RPCHelper::ReadAny(int *target, int method, Message *msg) {
   mpi_world_->Probe(MPI_ANY_SOURCE, method, probe_result);
 
   r_size = probe_result.Get_count(MPI::BYTE);
-  *target = probe_result.Get_source();
+  *src = probe_result.Get_source();
 
   scratch.resize(r_size);
-  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, *target, method);
+  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, *src, method, probe_result);
   msg->ParseFromString(scratch);
   return r_size;
 }
@@ -95,10 +96,6 @@ void RPCHelper::Send(int target, int method, const Message &msg) {
   rpc_log("SendStart", my_rank_, target, method);
   string scratch;
   msg.AppendToString(&scratch);
-
-  if (scratch.size() > (1 << 20)) {
-    LOG(FATAL) << "Not going to send a large message. " << scratch.size();
-  }
 
   mpi_world_->Send(&scratch[0], scratch.size(), MPI::BYTE, target, method);
   rpc_log("SendDone", my_rank_, target, method);
@@ -115,14 +112,16 @@ void RPCHelper::SyncSend(int target, int method, const Message &msg) {
   rpc_log("SyncSendDone", my_rank_, target, method);
 }
 
-
-MPI::Request RPCHelper::SendData(int target, int method, const string& msg) {
+void RPCHelper::SendData(int target, int method, const string& msg) {
   rpc_lock;
   rpc_log("SendData", my_rank_, target, method);
-  if (msg.size() > (1 << 20)) {
-    LOG(FATAL) << "Not going to send a large message. " << msg.size();
-  }
+  mpi_world_->Send(&msg[0], msg.size(), MPI::BYTE, target, method);
+}
 
+
+MPI::Request RPCHelper::ISendData(int target, int method, const string& msg) {
+  rpc_lock;
+  rpc_log("ISendData", my_rank_, target, method);
   return mpi_world_->Isend(&msg[0], msg.size(), MPI::BYTE, target, method);
 }
 
