@@ -102,8 +102,6 @@ public:
   virtual string get_str(const StringPiece &k) = 0;
   virtual void put_str(const StringPiece &k, const StringPiece& v) = 0;
 
-  // Clear the local portion of a shared table.
-  virtual void clear() = 0;
   virtual bool empty() = 0;
   virtual int64_t size() = 0;
 
@@ -121,6 +119,8 @@ public:
 class LocalTable : public Table {
 public:
   LocalTable(const TableInfo& info) : Table(info), dirty(false), tainted(false), owner(-1) {}
+
+  virtual void clear() = 0;
 
   // Returns a view on the global table containing values only from 'shard'.
   // 'shard' must be local.
@@ -171,7 +171,7 @@ public:
 
   // Clear any local data for which this table has ownership.  Pending updates
   // are *not* cleared.
-  void clear();
+  void clear(int shard);
   bool empty();
   int64_t size() { return 1; }
 

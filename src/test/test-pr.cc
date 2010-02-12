@@ -46,7 +46,7 @@ void BuildGraph(int shards, int nodes, int density) {
     for (int j = 0; j < density; j++) { n.add_target(j); }
 
     out[sharding(i,shards)]->write(n);
-    EVERY_N((nodes / 50), fprintf(stderr, "."));
+    EVERY_N(max(1, (nodes / 50)), fprintf(stderr, "."));
   }
 
   fprintf(stderr, " done.\n");
@@ -54,6 +54,10 @@ void BuildGraph(int shards, int nodes, int density) {
   for (int i = 0; i < shards; ++i) {
     delete out[i];
   }
+}
+
+static double random_restart_seed() {
+  return (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes);
 }
 
 class PRKernel : public DSMKernel {
@@ -71,8 +75,7 @@ public:
 
   void Initialize() {
     for (int i = current_shard(); i < FLAGS_nodes; i += get_table(0)->num_shards()) {
-//      LOG_EVERY_N(INFO, 1000000) << "Initializing... " << LOG_OCCURRENCES;
-      curr_pr_hash->put(i, (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes));
+      next_pr_hash->put(i, random_restart_seed());
     }
   }
 
@@ -88,15 +91,16 @@ public:
     ++iter;
 
     RecordFile r(StringPrintf(FLAGS_graph_prefix + "-%05d-of-%05d-N%05d",
-                              current_shard(), curr_pr_hash->info().num_shards, FLAGS_nodes), "r");
+                              current_shard(), FLAGS_shards, FLAGS_nodes), "r");
     Page n;
     Timer t;
     while (r.read(&n)) {
       double v = curr_pr_hash->get_local(n.id());
-
+      double contribution = kPropagationFactor * v / n.target_size();
       for (int i = 0; i < n.target_size(); ++i) {
-//        LOG_EVERY_N(INFO, 1000) << "Adding: " << kPropagationFactor * v / n.target_size() << " to " << n.target(i);
-        next_pr_hash->put(n.target(i), kPropagationFactor*v/n.target_size());
+//        LOG_EVERY_N(INFO, 1000) << "Adding: " <<  MP(n.id(), n.target(i))
+//                             << " : " << MP(n.target(i), next_pr_hash->get(n.target(i)), contribution);
+        next_pr_hash->put(n.target(i), contribution);
       }
     }
 
@@ -109,11 +113,11 @@ public:
     // Move the values computed from the last iteration into the current table, and reset
     // the values local to our node to the random restart value.
     swap(curr_pr_hash, next_pr_hash);
-    next_pr_hash->clear();
+    next_pr_hash->clear(current_shard());
 
     TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
     while (!it->done()) {
-      next_pr_hash->put(it->key(), (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes));
+      next_pr_hash->put(it->key(), random_restart_seed());
       it->Next();
     }
   }
@@ -126,15 +130,6 @@ REGISTER_METHOD(PRKernel, ResetTable);
 
 int main(int argc, char **argv) {
 	Init(argc, argv);
-
-//	while (1) {
-//	  Timer t;
-//	  Sleep(0.1);
-//	  LOG(INFO) << t.elapsed();
-//	  t.Reset();
-//	  for (int i = 0; i < 100000000; ++i);
-//	  LOG(INFO) << t.elapsed();
-//	}
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
@@ -163,7 +158,7 @@ int main(int argc, char **argv) {
     RUN_ALL(m, PRKernel, Initialize, 0);
 		for (int i = 0; i < FLAGS_iterations; i++) {
 			RUN_ALL(m, PRKernel, PageRankIter, 0);
-			RUN_ALL(m, PRKernel, ResetTable, 1);
+			RUN_ALL(m, PRKernel, ResetTable, 0);
 			RUN_ONE(m, PRKernel, WriteStatus, 0);
 		}
   } else {

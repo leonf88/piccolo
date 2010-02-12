@@ -10,11 +10,11 @@ GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
 }
 
-void GlobalTable::clear() {
- for (int i = 0; i < partitions_.size(); ++i) {
-    if (is_local_shard(i)) {
-      partitions_[i]->clear();
-    }
+void GlobalTable::clear(int shard) {
+  if (is_local_shard(shard)) {
+    partitions_[shard]->clear();
+  } else {
+    LOG(FATAL) << "Tried to clear a non-local shard - this is not supported.";
   }
 }
 
