@@ -2,14 +2,19 @@
 
 VPATH := src/
 
-MPI_INC := -I/usr/lib/openmpi/include/
-MPI_LINK := mpic++.openmpi
-MPI_LIBDIR := -L/usr/local/lib
-MPI_LIBS := -lmpi_cxx -lmpi  -lopen-rte -lopen-pal
+#MPI_INC :=  -I/usr/lib/openmpi/include/
+#MPI_LINK := mpic++.openmpi
+#MPI_LIBDIR := 
+#MPI_LIBS := 
 
-#MPI_LINK := /home/power/local/mpich2/bin/mpic++ -mpe=mpicheck
-#MPI_INC := -I/home/power/local/mpich2/include
-#MPI_LIBDIR := -L/home/power/local/mpich2/lib
+MPI_INC :=  -I/home/power/share/include
+MPI_LINK := /home/power/share/bin/mpic++
+MPI_LIBDIR := -L/home/power/share/lib/ 
+MPI_LIBS := 
+
+#MPI_LINK := /home/power/share/mpich2/bin/mpic++ -mpe=mpicheck
+#MPI_INC := -I/home/power/share/mpich2/include
+#MPI_LIBDIR := -L/home/power/share/mpich2/lib
 #MPI_LIBS := -lmpichcxx -lmpich
 
 CXX := distcc g++
@@ -38,17 +43,17 @@ endif
 CFLAGS := $(CFLAGS) $(CDEBUG) $(COPT) -Wall -Wno-unused-function -Wno-sign-compare $(CPPFLAGS)
 CXXFLAGS := $(CFLAGS)
 
-UPCC := /home/power/local/bupc/bin/upcc
+UPCC := /home/power/share/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp -O
-UPC_LIBDIR := -L/home/power/local/upc/opt/lib
+UPC_LIBDIR := -L/home/power/share/upc/opt/lib
 UPC_THREADS := -T 20
 #UPC_THREADS :=
 
 LDFLAGS := 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
 
-DYNAMIC_LIBS := -lprotobuf -ldl -lutil -lpthread -lrt $(PROF_LIBS)
-STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 -Wl,-Bdynamic 
+DYNAMIC_LIBS := -Wl,-Bdynamic -ldl -lutil -lpthread -lrt -lprotobuf -lnuma $(PROF_LIBS)  
+STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 $(MPI_LIBS) 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LINK_LIB := ld -r $(LDFLAGS)
