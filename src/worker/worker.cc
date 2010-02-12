@@ -233,6 +233,8 @@ void Worker::CheckForWorkerUpdates() {
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss()
            << " poll calls " << COUNT);
 
+  PERIODIC(5, DumpProfile();)
+
   CollectPending();
 
   HashUpdate put;
@@ -273,6 +275,8 @@ void Worker::CheckForWorkerUpdates() {
     h.add_pair(get_req.key(), v);
 
     SendRequest *r = peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
+    stats_.set_bytes_out(stats_.bytes_out() + r->payload.size());
+    stats_.set_put_out(stats_.put_out() + 1);
     outgoing_requests_.insert(r);
   }
 }
