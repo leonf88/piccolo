@@ -2,6 +2,8 @@
 #include "kernel/table-registry.h"
 #include "kernel/kernel-registry.h"
 
+DEFINE_bool(work_stealing, true, "");
+
 namespace dsm {
 
 Master::Master(const ConfigData &conf) {
@@ -10,10 +12,14 @@ Master::Master(const ConfigData &conf) {
   rpc_ = new RPCHelper(&world_);
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(WorkerState(i));
+  }
+
+  for (int i = 0; i < config_.num_workers(); ++i) {
     RegisterWorkerRequest req;
-    LOG(INFO) << "Waiting for worker... " << i;
-    rpc_->Read(i + 1, MTYPE_REGISTER_WORKER, &req);
-    workers_.back().slots = req.slots();
+    LOG(INFO) << "Waiting for workers... " << i << " of " << world_.Get_size();
+    int src = 0;
+    rpc_->ReadAny(&src, MTYPE_REGISTER_WORKER, &req);
+    workers_[src - 1].slots = req.slots();
   }
 }
 
@@ -126,6 +132,10 @@ void Master::send_assignments() {
 }
 
 void Master::steal_work(const RunDescriptor& r, int idle_worker) {
+  if (!FLAGS_work_stealing) {
+    return;
+  }
+
   WorkerState &dst = workers_[idle_worker];
 
   // Find a worker with an idle task.
