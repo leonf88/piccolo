@@ -2,6 +2,7 @@
 #include "util/common.h"
 #include "google/protobuf/message.h"
 #include <lzo/lzo1x.h>
+#include <stdio.h>
 
 namespace dsm {
 
@@ -42,9 +43,11 @@ File::Error::Error(string r) : reason(r) {
   LOG(ERROR) << "File exception: " << reason << " :: " << sys_error;
 }
 
-void LocalFile::readLine(string *out) {
+bool LocalFile::readLine(string *out) {
   out->resize(8192);
-  fgets((char*)out->data(), out->size(), fp);
+  char* res = fgets(&(*out)[0], out->size(), fp);
+  out->resize(strlen(out->data()));
+  return res == NULL;
 }
 
 int LocalFile::read(char *buffer, int len) {

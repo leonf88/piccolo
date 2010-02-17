@@ -13,7 +13,7 @@ namespace dsm {
 class File {
 public:
   virtual int read(char *buffer, int len) = 0;
-  virtual void readLine(string *out) = 0;
+  virtual bool readLine(string *out) = 0;
 
   int writeString(const string& buffer) {
     return write(buffer.data(), buffer.size());
@@ -45,7 +45,7 @@ public:
   ~LocalFile() { fflush(fp); fclose(fp); }
 
 
-  virtual void readLine(string *out);
+  virtual bool readLine(string *out);
   virtual int read(char *buffer, int len);
   virtual int write(const char* buffer, int len);
 
