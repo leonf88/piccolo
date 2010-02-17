@@ -1,5 +1,5 @@
 #include "client.h"
-#include "test/test.pb.h"
+#include "examples/graph.pb.h"
 
 #include <sys/time.h>
 #include <sys/resource.h>

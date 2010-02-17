@@ -2,25 +2,15 @@
 
 VPATH := src/
 
-#MPI_INC :=  -I/usr/lib/openmpi/include/
-#MPI_LINK := mpic++.openmpi
-#MPI_LIBDIR := 
-#MPI_LIBS := 
-
 MPI_INC :=  -I/home/power/share/include
 MPI_LINK := /home/power/share/bin/mpic++
 MPI_LIBDIR := -L/home/power/share/lib/ 
 MPI_LIBS := 
 
-#MPI_LINK := /home/power/share/mpich2/bin/mpic++ -mpe=mpicheck
-#MPI_INC := -I/home/power/share/mpich2/include
-#MPI_LIBDIR := -L/home/power/share/mpich2/lib
-#MPI_LIBS := -lmpichcxx -lmpich
-
 CXX := distcc g++
 CDEBUG := -ggdb2
 COPT :=  -O2
-CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/  $(MPI_INC)
+CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC)
 
 USE_CPU_PROFILE := 1
 USE_TCMALLOC := 
@@ -60,11 +50,19 @@ LINK_LIB := ld -r $(LDFLAGS)
 LINK_BIN := $(MPI_LINK)  $(LDFLAGS)
 
 
-LIBCOMMON_OBJS := src/util/common.pb.o src/util/file.o src/util/common.o src/util/coder.o
+LIBCOMMON_OBJS := src/util/common.pb.o \
+									src/util/file.o \
+									src/util/common.o \
+									src/util/coder.o
+
 LIBRPC_OBJS := src/util/rpc.o
-LIBTEST_OBJS := src/test/file-helper.o src/test/test.pb.o
+
+LIBEXAMPLE_OBJS := src/examples/upc/file-helper.o \
+									 src/examples/graph.pb.o
+
 LIBKERNEL_OBJS := src/kernel/table.o\
-									src/kernel/table-registry.o src/kernel/kernel-registry.o
+									src/kernel/table-registry.o \
+									src/kernel/kernel-registry.o
 
 LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
 								  src/master/master.o $(LIBKERNEL_OBJS)
@@ -72,15 +70,19 @@ LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
-all: bin/test-shortest-path\
-	 bin/mpi-test bin/test-tables\
-	 bin/test-pr\
+all: bin/shortest-path\
+	 bin/mpi-test \
+	 bin/pagerank\
 	 bin/k-means\
+	 bin/test-tables\
 	 bin/test-hashmap
-#  bin/test-shortest-path-upc\
-#	 bin/test-pr-upc\
+#  bin/shortest-path-upc\
+#	 bin/pr-upc\
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
+
+CORE_LIBS := bin/libworker.a bin/libcommon.a bin/librpc.a
+EXAMPLE_LIBS := $(CORE_LIBS) bin/libexample.a
 
 depend: Makefile.dep
 
@@ -96,31 +98,31 @@ bin/libworker.a : $(LIBWORKER_OBJS)
 bin/librpc.a : $(LIBRPC_OBJS)
 	$(LINK_LIB) $^ -o $@
 	
-bin/libtest.a : $(LIBTEST_OBJS)
+bin/libexample.a : $(LIBEXAMPLE_OBJS)
 	$(LINK_LIB) $^ -o $@
 		
-bin/test-shortest-path: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-shortest-path.o
-	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
-
-bin/test-tables: bin/libworker.a bin/libcommon.a bin/librpc.a src/test/test-tables.o
+bin/test-tables: $(CORE_LIBS) src/test/test-tables.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 	
-bin/test-pr: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-pr.o 
+bin/shortest-path: $(EXAMPLE_LIBS) src/examples/shortest-path.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 
-bin/k-means: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/k-means.o 
+bin/pagerank: $(EXAMPLE_LIBS) src/examples/pagerank.o 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 
-bin/test-hashmap: bin/libworker.a bin/libcommon.a bin/librpc.a bin/libtest.a src/test/test-hashmap.o
+bin/k-means: $(EXAMPLE_LIBS) src/examples/k-means.o 
+	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
+
+bin/test-hashmap: $(EXAMPLE_LIBS) src/test/test-hashmap.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 
 bin/mpi-test: src/test/mpi-test.o bin/libcommon.a
 	$(LINK_BIN) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) 
 
-bin/test-shortest-path-upc: bin/libtest.a bin/libcommon.a src/test/test-shortest-path.upc	 
+bin/shortest-path-upc: bin/libexample.a bin/libcommon.a src/examples/upc/shortest-path.upc	 
 	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS) 
 
-bin/test-pr-upc: bin/libcommon.a bin/libtest.a src/test/test-pr.upc
+bin/pagerank-upc: bin/libexample.a bin/libcommon.a src/examples/upc/pagerank.upc
 	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
 
 clean:
