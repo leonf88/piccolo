@@ -1,6 +1,6 @@
 #include "util/file.h"
-#include "test/file-helper.h"
-#include "test/test.pb.h"
+#include "examples/graph.pb.h"
+#include "file-helper.h"
 
 using namespace dsm;
 

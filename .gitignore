@@ -17,3 +17,11 @@ logs/
 testdata/
 .libs/
 .deps/
+.settings
+Makefile.dep
+paper/dsm.aux
+paper/dsm.bbl
+paper/dsm.blg
+paper/dsm.dvi
+paper/dsm.ent
+paper/dsm.log
