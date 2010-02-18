@@ -7,10 +7,12 @@ MPI_LINK := /home/power/share/bin/mpic++
 MPI_LIBDIR := -L/home/power/share/lib/ 
 MPI_LIBS := 
 
+PY_INC := -I/usr/include/python2.6/
+
 CXX := distcc g++
 CDEBUG := -ggdb2
 COPT :=  -O2
-CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC)
+CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
 USE_TCMALLOC := 
@@ -67,15 +69,13 @@ LIBKERNEL_OBJS := src/kernel/table.o\
 LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
 								  src/master/master.o $(LIBKERNEL_OBJS)
 
-%.o: %.cc
-	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
-
 all: bin/shortest-path\
 	 bin/mpi-test \
 	 bin/pagerank\
 	 bin/k-means\
 	 bin/test-tables\
-	 bin/test-hashmap
+	 bin/test-hashmap\
+	 bin/crawler_support.so
 #  bin/shortest-path-upc\
 #	 bin/pr-upc\
 
@@ -125,6 +125,9 @@ bin/shortest-path-upc: bin/libexample.a bin/libcommon.a src/examples/upc/shortes
 bin/pagerank-upc: bin/libexample.a bin/libcommon.a src/examples/upc/pagerank.upc
 	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(STATIC_LIBS) $(DYNAMIC_LIBS) $(MPI_LIBS)
 
+bin/crawler_support.so: src/examples/crawler_support_wrap.o src/examples/crawler_support.o
+	touch bin/crawler_support.so
+
 clean:
 	rm -f bin/*
 	find src -name '*.o' -exec rm {} \;
@@ -135,6 +138,16 @@ clean:
 	protoc -Isrc/ --cpp_out=$(CURDIR)/src $<
 
 %.upc.o: %.upc	 
+
+%.o: %.cc
+	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
+
+%.o: %.cxx
+	$(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
+
+%_wrap.cxx : %.swig Makefile %.h
+	swig -c++ -python $(CPPFLAGS)  $<
+
 
 $(shell mkdir -p bin/)
 -include Makefile.dep
