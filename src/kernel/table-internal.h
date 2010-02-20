@@ -105,7 +105,7 @@ public:
   void remove(const K &k);
 
   Table::Iterator* get_iterator(int shard);
-  typename TypedTable<K, V>::Iterator* get_typed_iterator(int shard);
+  TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
   const TableInfo& info() { return this->info_; }
 
@@ -206,7 +206,7 @@ Table::Iterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
 }
 
 template <class K, class V>
-typename TypedTable<K, V>::Iterator* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+TypedTable_Iterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
   return (typename TypedTable<K, V>::Iterator*)partitions_[shard]->get_iterator();
 }
 
