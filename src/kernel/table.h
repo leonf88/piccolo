@@ -84,16 +84,19 @@ public:
   Worker *worker;
 };
 
+class Table;
+struct Table_Iterator {
+  virtual void key_str(string *out) = 0;
+  virtual void value_str(string *out) = 0;
+  virtual bool done() = 0;
+  virtual void Next() = 0;
+
+  virtual Table *owner() = 0;
+};
+
 class Table {
 public:
-  struct Iterator {
-    virtual void key_str(string *out) = 0;
-    virtual void value_str(string *out) = 0;
-    virtual bool done() = 0;
-    virtual void Next() = 0;
-
-    virtual Table *owner() = 0;
-  };
+  typedef Table_Iterator Iterator;
 
   Table(TableInfo tinfo) : info_(tinfo) {}
   virtual ~Table() {}
@@ -192,12 +195,15 @@ protected:
 };
 
 template <class K, class V>
+struct TypedTable_Iterator : public Table_Iterator {
+  virtual const K& key() = 0;
+  virtual V& value() = 0;
+};
+
+template <class K, class V>
 class TypedTable {
 public:
-  struct Iterator : public Table::Iterator {
-    virtual const K& key() = 0;
-    virtual V& value() = 0;
-  };
+  typedef TypedTable_Iterator<K, V> Iterator;
 
   // Functions for locating and accumulating data.
   typedef V (*AccumFunction)(const V& a, const V& b);

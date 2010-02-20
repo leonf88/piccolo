@@ -39,7 +39,10 @@ using std::make_pair;
 using std::min;
 using std::max;
 
+#ifndef SWIG
 void Init(int argc, char** argv);
+#endif
+
 uint64_t get_memory_rss();
 uint64_t get_memory_total();
 
@@ -132,8 +135,10 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
   return a.data == b.data && a.len == b.len;
 }
 
+#ifndef SWIG
 string StringPrintf(StringPiece fmt, ...);
 string VStringPrintf(StringPiece fmt, va_list args);
+#endif
 
 class SpinLock {
 public:
