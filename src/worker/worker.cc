@@ -164,7 +164,6 @@ void Worker::KernelLoop() {
     }
 
     helper->Run(d, k.method());
-    kernel_done_.push_back(k);
 
     // Flush any table updates leftover.
     for (Registry::TableMap::iterator i = Registry::get_tables().begin();
@@ -172,7 +171,11 @@ void Worker::KernelLoop() {
       i->second->SendUpdates();
     }
 
-    CheckForWorkerUpdates();
+    while (pending_network_bytes()) {
+      CheckForWorkerUpdates();
+    }
+
+    kernel_done_.push_back(k);
 
     VLOG(1) << "Kernel finished: " << k;
     DumpProfile();
