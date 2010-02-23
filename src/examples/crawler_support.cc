@@ -49,12 +49,8 @@ REGISTER_KERNEL(PythonKernel);
 REGISTER_METHOD(PythonKernel, initialize_crawl);
 REGISTER_METHOD(PythonKernel, run_crawl);
 
-TypedGlobalTable<string, int>* get_table(int table) {
-  return the_kernel->get_table<string, int>(table);
-}
-
-int get_shard() {
-  return the_kernel->current_shard();
+DSMKernel* kernel() {
+  return the_kernel;
 }
 
 extern "C" void init_crawler_support();
@@ -69,6 +65,7 @@ int main(int argc, const char* argv[]) {
 
 	Registry::create_table<string, int>(0, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
   Registry::create_table<string, int>(1, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
+  Registry::create_table<string, string>(2, conf.num_workers(), &StringSharding, &Accumulator<string>::replace);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
