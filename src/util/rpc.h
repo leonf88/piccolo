@@ -2,7 +2,7 @@
 #define UTIL_RPC_H
 
 #include "util/common.h"
-#include "util/coder.h"
+#include "util/file.h"
 #include <boost/thread.hpp>
 #include <google/protobuf/message.h>
 #include <mpi.h>

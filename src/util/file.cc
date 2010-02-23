@@ -37,12 +37,6 @@ void File::Dump(const string& f, StringPiece data) {
   fclose(fp);
 }
 
-
-File::Error::Error(string r) : reason(r) {
-  strcpy(sys_error, strerror(errno));
-  LOG(ERROR) << "File exception: " << reason << " :: " << sys_error;
-}
-
 bool LocalFile::readLine(string *out) {
   out->resize(8192);
   char* res = fgets(&(*out)[0], out->size(), fp);
@@ -73,8 +67,38 @@ LocalFile::LocalFile(const string &name, const string& mode) {
   fp = fopen(name.c_str(), mode.c_str());
   path = name;
   if (!fp) {
-    throw new File::Error(StringPrintf("Failed to open file! %s with mode %s.", name.c_str(), mode.c_str()));
+    LOG(FATAL) << StringPrintf("Failed to open file! %s with mode %s.", name.c_str(), mode.c_str());
   }
+}
+
+template <class T>
+void Encoder::write(const T& v) {
+  if (out_) {
+    out_->append((const char*)&v, (size_t)sizeof(v));
+  } else {
+    out_f_->write((const char*)&v, (size_t)sizeof(v));
+  }
+}
+
+#define INSTANTIATE(T) template void Encoder::write<T>(const T& t)
+INSTANTIATE(double);
+INSTANTIATE(uint64_t);
+INSTANTIATE(uint32_t);
+INSTANTIATE(float);
+
+void Encoder::write_string(const string& v) {
+  write((uint32_t)v.size());
+  out_->append(v);
+}
+
+void Encoder::write_bytes(StringPiece s) {
+  if (out_) { out_->append(s.data, s.len); }
+  else { out_f_->write(s.data, s.len); }
+}
+
+void Encoder::write_bytes(const char* a, int len) {
+  if (out_) { out_->append(a, len); }
+  else { out_f_->write(a, len); }
 }
 
 RecordFile::RecordFile(const string& path,
