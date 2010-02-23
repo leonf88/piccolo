@@ -220,6 +220,7 @@ struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
 
 }}
 
+#ifndef SWIG
 // operator<< overload to allow protocol buffers to be output from the logging methods.
 #include <google/protobuf/message.h>
 namespace std{
@@ -240,10 +241,9 @@ static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
   out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
   return out;
 }
-
-
 }
+#endif
 
-
+#define COMPILE_ASSERT(x) extern int __dummy[(int)x]
 
 #endif /* COMMON_H_ */
