@@ -1,4 +1,4 @@
-.PRECIOUS : %.pb.cc %.pb.h
+.PRECIOUS : %.pb.cc %.pb.h %_wrap.cc
 
 VPATH := src/
 
@@ -11,7 +11,7 @@ PY_INC := -I/usr/include/python2.6/
 
 DISTCC := distcc
 CXX := g++
-CDEBUG := -ggdb2
+CDEBUG := -ggdb1
 COPT :=  -O2
 CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
@@ -42,8 +42,8 @@ UPC_LIBDIR := -L/home/power/share/upc/opt/lib
 UPC_THREADS := -T 20
 #UPC_THREADS :=
 
-DYNAMIC_LIBS := -Wl,-Bdynamic -ldl -lutil -lpthread -lrt -lprotobuf  $(PROF_LIBS)
-STATIC_LIBS := -Wl,-Bstatic -lglog -lgflags -lboost_thread-mt -llzo2 $(MPI_LIBS)
+DYNAMIC_LIBS := -ldl -lutil -lpthread -lrt -lprotobuf -lnuma  $(PROF_LIBS)
+STATIC_LIBS := -lglog -lgflags -lboost_thread-mt -llzo2 
 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
@@ -51,12 +51,11 @@ LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(
 
 LINK_LIB := ld -r 
 LINK_BIN := $(MPI_LINK) 
-LINK_BIN_FLAGS := $(LDDIRS) -Wl,-Bdynamic $(DYNAMIC_LIBS) -Wl,-Bstatic $(STATIC_LIBS) -Wl,-Bdynamic
+LINK_BIN_FLAGS := $(LDDIRS) -Wl,-Bstatic $(STATIC_LIBS) -Wl,-Bdynamic $(DYNAMIC_LIBS) 
 
 LIBCOMMON_OBJS := src/util/common.pb.o \
 									src/util/file.o \
-									src/util/common.o \
-									src/util/coder.o
+									src/util/common.o
 
 LIBRPC_OBJS := src/util/rpc.o
 
@@ -144,7 +143,7 @@ clean:
 %.o: %.cc
 	$(DISTCC) $(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
-%_wrap.cc : %.swig %.h
+%_wrap.cc : %.h
 	swig -O -c++ -python $(CPPFLAGS) -o $@ $< 
 
 
