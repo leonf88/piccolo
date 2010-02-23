@@ -12,18 +12,20 @@ public:
   Master(const ConfigData &conf);
   ~Master();
 
-  // N.B.  All run_* methods are blocking.
-
   struct RunDescriptor {
-    RunDescriptor(const string& k, const string& m, int t) :
-      kernel(k), method(m), table(t) {}
-
     string kernel;
     string method;
 
     int table;
+    int checkpoint_interval;
+
+    static RunDescriptor C(const string& k, const string& m, int t, int c_interval=-1) {
+      RunDescriptor r = { k, m, t, c_interval };
+      return r;
+    }
   };
 
+  // N.B.  All run_* methods are blocking.
   void run_all(const RunDescriptor& r);
 
   // Run the given kernel function on one (arbitrary) worker node.
@@ -31,6 +33,10 @@ public:
 
   // Run the kernel function on the given set of shards.
   void run_range(const RunDescriptor& r, vector<int> shards);
+
+  // Blocking.  Instruct workers to save all table state.  When this call returns,
+  // all active tables in the system will have been committed to disk.
+  void checkpoint();
 
 private:
   ConfigData config_;
@@ -111,13 +117,13 @@ private:
 };
 
 #define RUN_ONE(m, klass, method, table)\
-  m.run_one(Master::RunDescriptor(#klass, #method, table))
+  m.run_one(Master::RunDescriptor::C(#klass, #method, table))
 
 #define RUN_ALL(m, klass, method, table)\
-  m.run_all(Master::RunDescriptor(#klass, #method, table))
+  m.run_all(Master::RunDescriptor::C(#klass, #method, table))
 
 #define RUN_RANGE(m, klass, method, table, shards)\
-  m.run_range(Master::RunDescriptor(#klass, #method, table), shards)
+  m.run_range(Master::RunDescriptor::C(#klass, #method, table), shards)
 
 }
 
