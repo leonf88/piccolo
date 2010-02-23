@@ -95,6 +95,8 @@ public:
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
 
+  bool contains(const K& k);
+
   // Store the given key-value pair in this hash, applying the accumulation
   // policy set at construction.  If 'k' has affinity for a remote thread,
   // the application occurs immediately on the local host, and the update is
@@ -193,6 +195,28 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   string v_str;
   get_remote(shard, Data::to_string<K>(k), &v_str);
   return Data::from_string<V>(v_str);
+}
+
+template <class K, class V>
+bool TypedGlobalTable<K, V>::contains(const K &k) {
+  int shard = this->get_shard(k);
+
+  // If we received a get for this shard; but we haven't received all of the
+  // data for it yet. Continue reading from other workers until we do.
+  while (tainted(shard)) {
+    CheckForUpdates();
+  }
+
+  if (is_local_shard(shard)) {
+    PERIODIC(0.1, { CheckForUpdates(); });
+    return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->contains(k);
+  }
+
+  return false;
+
+//  string v_str;
+//  get_remote(shard, Data::to_string<K>(k), &v_str);
+//  return Data::from_string<V>(v_str);
 }
 
 template <class K, class V>
