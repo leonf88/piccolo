@@ -9,11 +9,45 @@
 #define HASHMAP_H_
 
 #include "util/common.h"
+#include "util/file.h"
 #include "util/hash.h"
-
-#include <boost/dynamic_bitset.hpp>
+#include <tr1/type_traits>
 
 namespace dsm {
+
+struct Data {
+  // strings
+  static void marshal(const string& t, string *out) { *out = t; }
+  static void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
+
+  // protocol messages
+  static void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
+  static void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
+
+  template <class T>
+  static void marshal(const T& t, string* out) {
+    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
+  }
+
+  template <class T>
+  static void unmarshal(const StringPiece& s, T *t) {
+    *t = *reinterpret_cast<const T*>(s.data);
+  }
+
+  template <class T>
+  static string to_string(const T& t) {
+    string t_marshal;
+    marshal(t, &t_marshal);
+    return t_marshal;
+  }
+
+  template <class T>
+  static T from_string(const StringPiece& t) {
+    T t_marshal;
+    unmarshal(t, &t_marshal);
+    return t_marshal;
+  }
+};
 
 template <class K>
 static int simple_hash(K k) {
@@ -44,7 +78,6 @@ private:
   };
 
   static const double kLoadFactor = 0.7;
-  typedef boost::dynamic_bitset<uint64_t> BitSet;
 
   int bucket_idx(K k) {
     return simple_hash<K>(k) & (size_ - 1);
@@ -81,6 +114,7 @@ private:
   iterator *end_;
 
 public:
+  // Construct a hashmap with the given initial size; it will be expanded as necessary.
   HashMap(int size);
   ~HashMap() {
     delete end_;
@@ -109,23 +143,13 @@ public:
     entries_ = 0;
   }
 
-  iterator begin() {
-    return iterator(buckets_);
-  }
-
-  const iterator& end() { return *end_; }
-
   struct iterator {
-     iterator(vector<Bucket>& b) : pos(-1), b_(b) {
-       ++(*this);
-     }
+    iterator(vector<Bucket>& b) : pos(-1), b_(b) { ++(*this); }
 
      bool operator==(const iterator &o) { return o.pos == pos; }
 
      iterator& operator++() {
-       do {
-         ++pos;
-       } while (pos < b_.size() && !b_[pos].in_use);
+       do { ++pos; } while (pos < b_.size() && !b_[pos].in_use);
        return *this;
      }
 
@@ -136,6 +160,11 @@ public:
      vector<Bucket>& b_;
   };
 
+  iterator begin() { return iterator(buckets_); }
+  const iterator& end() { return *end_; }
+
+  void checkpoint(const string& file);
+  void restore(const string& file);
 };
 
 template <class K, class V>
@@ -239,6 +268,23 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   }
 
   return buckets_[b].value;
+}
+
+template <class K, class V>
+void HashMap<K, V>::checkpoint(const string& file) {
+  LocalFile lf(file, "w");
+  Encoder e(&lf);
+  if (std::tr1::is_pod<K>::value && std::tr1::is_pod<V>::value) {
+    e.write<uint64_t>(buckets_.size() * sizeof(Bucket));
+    e.write((char*)&buckets_[0], buckets_.size() * sizeof(Bucket));
+  } else {
+    e.write(buckets_.size());
+    string b;
+    for (iterator i = begin(); i != end(); ++i) {
+      Data::marshal(i.key(), &b); e.write_string(b);
+      Data::marshal(i.value(), &b); e.write_string(b);
+    }
+  }
 }
 
 }

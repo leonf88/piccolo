@@ -18,40 +18,6 @@ struct Accumulator {
   static V replace(const V& a, const V& b) { return b; }
 };
 
-struct Data {
-  // strings
-  static void marshal(const string& t, string *out) { *out = t; }
-  static void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
-
-  // protocol messages
-  static void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
-  static void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
-
-  template <class T>
-  static void marshal(const T& t, string* out) {
-    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
-  }
-
-  template <class T>
-  static void unmarshal(const StringPiece& s, T *t) {
-    *t = *reinterpret_cast<const T*>(s.data);
-  }
-
-  template <class T>
-  static string to_string(const T& t) {
-    string t_marshal;
-    marshal(t, &t_marshal);
-    return t_marshal;
-  }
-
-  template <class T>
-  static T from_string(const StringPiece& t) {
-    T t_marshal;
-    unmarshal(t, &t_marshal);
-    return t_marshal;
-  }
-};
-
 struct HashUpdateCoder {
   HashUpdateCoder(HashUpdate *h);
   HashUpdateCoder(const HashUpdate& h);
