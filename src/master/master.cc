@@ -205,10 +205,14 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
       w_id -= 1;
 
+      pair<int, int> task_id = MP(k_done.table(), k_done.shard());
+
+      VLOG(1) << "Finished: " << task_id;
       WorkerState& w = workers_[w_id];
       ++count;
 
-      w.active.erase(MP(k_done.table(), k_done.shard()));
+      CHECK(w.active.find(task_id) != w.active.end());
+      w.active.erase(task_id);
       w.ping();
     } else {
       Sleep(0.001);
@@ -233,7 +237,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
                                         workers_[k].assigned.size() - workers_[k].pending.size() - workers_[k].active.size(),
                                         workers_[k].assigned.size());
                }
-               LOG(INFO) << StringPrintf("Progress (%s): %s.  Left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
+               LOG(INFO) << StringPrintf("Progress (%s): %s left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
     });
   }
 
