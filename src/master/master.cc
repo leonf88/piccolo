@@ -9,6 +9,7 @@ namespace dsm {
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
+  epoch_ = 0;
   rpc_ = new RPCHelper(&world_);
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(WorkerState(i));
@@ -66,6 +67,13 @@ void Master::WorkerState::set_serves(int shard, bool should_service) {
 
 bool Master::WorkerState::serves(int table, int shard) {
   return shards.find(MP(table, shard)) != shards.end();
+}
+
+void Master::checkpoint() {
+  epoch_ += 1;
+  CheckpointRequest req;
+  req.set_epoch(epoch_);
+  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
 }
 
 void Master::run_all(const RunDescriptor& r) {

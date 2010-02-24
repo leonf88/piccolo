@@ -2,6 +2,13 @@ package dsm;
 
 option optimize_for = SPEED;
 
+message ConfigData {
+  required int32 num_workers = 1;
+  required int32 worker_id = 2;
+  required int32 master_id = 3;
+  optional int32 slots = 4 [default = 10];
+}
+
 enum MessageTypes {
   MTYPE_RUN_KERNEL = 1;
   MTYPE_STOP_KERNEL = 9;
@@ -15,6 +22,7 @@ enum MessageTypes {
   
   MTYPE_WORKER_SHUTDOWN = 8;
   MTYPE_REGISTER_WORKER = 9;
+  MTYPE_CHECKPOINT = 10;
 };
 
 message RegisterWorkerRequest {
@@ -49,23 +57,23 @@ message Pair {
   required bytes value = 2;
 }
 
-message ConfigData {
-  required int32 num_workers = 1;
-  required int32 worker_id = 2;
-  required int32 master_id = 3;
-  optional int32 slots = 4 [default = 10];
-}
-
 message KernelRequest {
   required string kernel = 1;
   required string method = 2;
   optional int32 table = 3;
   optional int32 shard = 4;
 }
+
+message CheckpointRequest {
+  required int32 epoch = 1;
+}
+
 message HashRequest {
   required uint32 table = 1;
   required uint32 shard = 2;
   required bytes key = 3;
+  
+  required int32 epoch = 4;
 }
 
 message HashUpdate {
@@ -79,6 +87,9 @@ message HashUpdate {
 
   optional bytes key_data = 9;
   optional bytes value_data = 10;
+  
+  optional int32 epoch = 11;
+  optional int32 marker = 12;
 }
 
 message EmptyMessage {}

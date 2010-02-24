@@ -103,14 +103,19 @@ public:
     return v;
   }
 
+  void read_bytes(char* b, int len) {
+    if (src_p_) { memcpy(b, src_p_ + pos_, len); }
+    else { f_src_->read(b, len); }
+
+    pos_ += len;
+  }
+
   void read_string(string* v) {
     uint32_t len;
     read<uint32_t>(&len);
+    v->resize(len);
 
-    if (src_p_) { v->assign(src_p_ + pos_, len); }
-    else { v->resize(len); f_src_->read(&(*v)[0], len); }
-
-    pos_ += len;
+    read_bytes(&(*v)[0], len);
   }
 
   bool done() {

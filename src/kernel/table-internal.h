@@ -80,6 +80,9 @@ public:
     remove(Data::from_string<K>(k));
   }
 
+  void checkpoint(const string& f) { data_.checkpoint(f); }
+  void restore(const string& f) { data_.restore(f); }
+
 private:
   DataMap data_;
 };

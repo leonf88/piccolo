@@ -76,7 +76,9 @@ int main(int argc, char **argv) {
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
     RUN_ALL(m, TableKernel, TestPut, 0);
+    m.checkpoint();
     RUN_ALL(m, TableKernel, TestGetLocal, 0);
+    m.checkpoint();
     RUN_ALL(m, TableKernel, TestGet, 0);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);

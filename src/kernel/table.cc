@@ -62,6 +62,27 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   v->assign(h.value(0).data, h.value(0).len);
 }
 
+void GlobalTable::checkpoint(const string& f) {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    LocalTable *t = partitions_[i];
+
+    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
+      t->checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+    }
+  }
+}
+
+void GlobalTable::restore(const string& f) {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    LocalTable *t = partitions_[i];
+
+    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
+      t->restore(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+    }
+  }
+}
+
+
 void GlobalTable::SendUpdates() {
   HashUpdate put;
   for (int i = 0; i < partitions_.size(); ++i) {
@@ -79,6 +100,7 @@ void GlobalTable::SendUpdates() {
         put.set_shard(i);
         put.set_source(info().worker->id());
         put.set_table(id());
+        put.set_epoch(info().worker->epoch());
 
         LocalTable::SerializePartial(put, it);
         info().worker->Send(get_owner(i), MTYPE_PUT_REQUEST, put);

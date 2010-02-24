@@ -42,6 +42,7 @@ private:
   ConfigData config_;
   RPCHelper *rpc_;
   MPI::Intracomm world_;
+  int epoch_;
 
   enum TaskStatus {
     ASSIGNED  = 0,
