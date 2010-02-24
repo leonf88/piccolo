@@ -147,6 +147,7 @@ public:
     iterator(vector<Bucket>& b) : pos(-1), b_(b) { ++(*this); }
 
      bool operator==(const iterator &o) { return o.pos == pos; }
+     bool operator!=(const iterator &o) { return o.pos != pos; }
 
      iterator& operator++() {
        do { ++pos; } while (pos < b_.size() && !b_[pos].in_use);
@@ -274,15 +275,36 @@ template <class K, class V>
 void HashMap<K, V>::checkpoint(const string& file) {
   LocalFile lf(file, "w");
   Encoder e(&lf);
+  e.write<uint64_t>(buckets_.size());
+
   if (std::tr1::is_pod<K>::value && std::tr1::is_pod<V>::value) {
-    e.write<uint64_t>(buckets_.size() * sizeof(Bucket));
-    e.write((char*)&buckets_[0], buckets_.size() * sizeof(Bucket));
+    e.write_bytes((char*)&buckets_[0], buckets_.size() * sizeof(Bucket));
   } else {
-    e.write(buckets_.size());
     string b;
     for (iterator i = begin(); i != end(); ++i) {
       Data::marshal(i.key(), &b); e.write_string(b);
       Data::marshal(i.value(), &b); e.write_string(b);
+    }
+  }
+}
+
+template <class K, class V>
+void HashMap<K, V>::restore(const string& file) {
+  LocalFile lf(file, "r");
+  Decoder d(&lf);
+  uint64_t size;
+  d.read<uint64_t>(&size);
+
+  if (std::tr1::is_pod<K>::value && std::tr1::is_pod<V>::value) {
+    buckets_.resize(size);
+    d.read_bytes((char*)&buckets_[0], size * sizeof(Bucket));
+  } else {
+    string k, v;
+    rehash((int)(size * 1.5));
+    for (int i = 0; i < size; ++i) {
+      d.read_string(&k);
+      d.read_string(&v);
+      put(Data::from_string<K>(k), Data::from_string<V>(v));
     }
   }
 }

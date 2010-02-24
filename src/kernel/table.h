@@ -81,6 +81,9 @@ public:
   int shard() const { return info_.shard; }
   int num_shards() const { return info_.num_shards; }
 
+  virtual void checkpoint(const string& f) = 0;
+  virtual void restore(const string& f) = 0;
+
   TableInfo info_;
 };
 
@@ -150,6 +153,9 @@ public:
   void set_tainted(int shard) { partitions_[shard]->tainted = true; }
   void clear_tainted(int shard) { partitions_[shard]->tainted = false; }
   bool tainted(int shard) { return partitions_[shard]->tainted; }
+
+  void checkpoint(const string& f);
+  void restore(const string& f);
 
 protected:
   friend class Worker;

@@ -7,6 +7,7 @@
 #include "kernel/table-registry.h"
 
 DEFINE_double(sleep_hack, 0.0, "");
+DEFINE_string(checkpoint_dir, "checkpoints", "");
 
 namespace dsm {
 static const double kNetworkTimeout = 10.0;
@@ -48,9 +49,21 @@ struct Worker::SendRequest {
 
 struct Worker::Stub {
   int32_t id;
+  int32_t epoch;
   RPCHelper *helper;
+  vector<RecordFile*> deltas;
 
-  Stub(int id, RPCHelper* rpc) : id(id), helper(rpc) {}
+  Stub(int id, RPCHelper* rpc) : id(id), epoch(0), helper(rpc) {
+    InitDeltas();
+  }
+
+  void InitDeltas() {
+    Registry::TableMap &t = Registry::get_tables();
+    deltas.resize(t.size());
+    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+      deltas[i->first] = new RecordFile(StringPrintf("%s/checkpoint.delta.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch), "w");
+    }
+  }
 
   bool TryRead(int method, Message* msg) {
     return helper->TryRead(id, method, msg);
@@ -66,9 +79,20 @@ struct Worker::Stub {
     r->Send(helper);
     return r;
   }
+
+  void RecordDelta(const HashUpdate& put) {
+    deltas[put.table()]->write(put);
+  }
+
+  void FlushDelta() {
+    for (int i = 0; i < deltas.size(); ++i) { delete deltas[i]; }
+    InitDeltas();
+  }
 };
 
 Worker::Worker(const ConfigData &c) {
+  epoch_ = 0;
+
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
@@ -148,7 +172,6 @@ void Worker::KernelLoop() {
     }
 
     KernelInfo *helper = Registry::get_kernel(k.kernel());
-
     KernelId id(k.kernel(), k.table(), k.shard());
     DSMKernel* d = kernels_[id];
 
@@ -231,6 +254,38 @@ void Worker::CollectPending() {
   }
 }
 
+void Worker::UpdateEpoch(int peer, int peer_marker) {
+  LOG(INFO) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
+  if (epoch_ < peer_marker) {
+    LOG(INFO) << "Checkpointing; received update marker from peer:" << MP(epoch_, peer_marker);
+    Checkpoint(peer_marker);
+    peers_[peer - 1]->epoch = peer_marker;
+  } else {
+    peers_[peer - 1]->FlushDelta();
+  }
+}
+
+void Worker::Checkpoint(int epoch) {
+  LOG(INFO) << "Checkpointing... " << epoch;
+  if (epoch >= epoch_) {
+    LOG(INFO) << "Skipping checkpoint; " << MP(epoch, epoch_);
+    return;
+  }
+
+  Registry::TableMap &t = Registry::get_tables();
+  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+    GlobalTable* t = i->second;
+    t->checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
+  }
+
+  epoch_ = epoch;
+  HashUpdate epoch_marker;
+  epoch_marker.set_epoch(epoch_);
+  for (int i = 0; i < peers_.size(); ++i) {
+    peers_[i]->Send(MTYPE_PUT_REQUEST, epoch_marker);
+  }
+}
+
 void Worker::CheckForWorkerUpdates() {
   PERIODIC(30,
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss()
@@ -242,6 +297,16 @@ void Worker::CheckForWorkerUpdates() {
 
   HashUpdate put;
   while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
+    if (put.marker() != -1) {
+      UpdateEpoch(put.source(), put.marker());
+      continue;
+    }
+
+    // Record messages from our peer channel up until they checkpointed.
+    if (put.epoch() < epoch_) {
+      peers_[put.source() - 1]->RecordDelta(put);
+    }
+
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
@@ -263,7 +328,6 @@ void Worker::CheckForWorkerUpdates() {
     stats_.set_get_in(stats_.get_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
     VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
-
 
     get_resp.Clear();
     get_resp.set_source(config_.worker_id());
@@ -293,6 +357,11 @@ void Worker::CheckForMasterUpdates() {
     VLOG(1) << "Shutting down worker " << config_.worker_id();
     running_ = false;
     return;
+  }
+
+  CheckpointRequest checkpoint_msg;
+  while (rpc_->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
+    Checkpoint(checkpoint_msg.epoch());
   }
 
   ShardAssignmentRequest shard_req;

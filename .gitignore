@@ -5,6 +5,7 @@
 *.so
 *.pb.h
 *.pb.cc
+*.pyc
 .project
 .pydevproject
 .cproject
