@@ -66,7 +66,7 @@ void GlobalTable::checkpoint(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
-    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
+    if (is_local_shard(i)) {
       t->checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
     }
   }
