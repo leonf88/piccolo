@@ -5,7 +5,7 @@
 
 namespace dsm {
 
-class HashUpdate;
+class HashPut;
 
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
 static int ModSharding(const int& key, int shards) { return key % shards; }
@@ -18,9 +18,9 @@ struct Accumulator {
   static V replace(const V& a, const V& b) { return b; }
 };
 
-struct HashUpdateCoder {
-  HashUpdateCoder(HashUpdate *h);
-  HashUpdateCoder(const HashUpdate& h);
+struct HashPutCoder {
+  HashPutCoder(HashPut *h);
+  HashPutCoder(const HashPut& h);
 
   void add_pair(const string& k, const string& v);
   StringPiece key(int idx);
@@ -28,7 +28,7 @@ struct HashUpdateCoder {
 
   int size();
 
-  HashUpdate *h_;
+  HashPut *h_;
 };
 
 class Worker;
@@ -97,9 +97,9 @@ public:
   // Returns a view on the global table containing values only from 'shard'.
   // 'shard' must be local.
   virtual Table::Iterator* get_iterator() = 0;
-  void ApplyUpdates(const HashUpdate& up);
+  void ApplyUpdates(const HashPut& up);
 
-  static void SerializePartial(HashUpdate& r, Table::Iterator *it);
+  static void SerializePartial(HashPut& r, Table::Iterator *it);
 
 protected:
   friend class GlobalTable;
@@ -136,7 +136,7 @@ public:
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
-  void ApplyUpdates(const HashUpdate& req);
+  void ApplyUpdates(const HashPut& req);
   void CheckForUpdates();
 
   int pending_write_bytes();

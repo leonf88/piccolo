@@ -44,8 +44,8 @@ int GlobalTable::get_owner(int shard) {
 }
 
 void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
-  HashRequest req;
-  HashUpdate resp;
+  HashGet req;
+  HashPut resp;
 
   req.set_key(k.AsString());
   req.set_table(info().table_id);
@@ -58,7 +58,7 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   w->Send(peer, MTYPE_GET_REQUEST, req);
   w->Read(peer, MTYPE_GET_RESPONSE, &resp);
 
-  HashUpdateCoder h(&resp);
+  HashPutCoder h(&resp);
   v->assign(h.value(0).data, h.value(0).len);
 }
 
@@ -84,7 +84,7 @@ void GlobalTable::restore(const string& f) {
 
 
 void GlobalTable::SendUpdates() {
-  HashUpdate put;
+  HashPut put;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
@@ -137,7 +137,7 @@ int GlobalTable::pending_write_bytes() {
   return s;
 }
 
-void GlobalTable::ApplyUpdates(const dsm::HashUpdate& req) {
+void GlobalTable::ApplyUpdates(const dsm::HashPut& req) {
   if (!is_local_shard(req.shard())) {
     LOG_EVERY_N(INFO, 1000)
         << "Received unexpected push request for: " << MP(id(), req.shard())
@@ -159,16 +159,16 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   v->assign(h->get_str(k));
 }
 
-HashUpdateCoder::HashUpdateCoder(HashUpdate *h) : h_(h) {
+HashPutCoder::HashPutCoder(HashPut *h) : h_(h) {
   h_->add_key_offset(0);
   h_->add_value_offset(0);
 }
 
-HashUpdateCoder::HashUpdateCoder(const HashUpdate& h) : h_((HashUpdate*)&h) {
+HashPutCoder::HashPutCoder(const HashPut& h) : h_((HashPut*)&h) {
   CHECK_EQ(h_->value_offset_size(), h_->key_offset_size());
 }
 
-void HashUpdateCoder::add_pair(const string& k, const string& v) {
+void HashPutCoder::add_pair(const string& k, const string& v) {
   h_->mutable_key_data()->append(k);
   h_->mutable_value_data()->append(v);
 
@@ -179,7 +179,7 @@ void HashUpdateCoder::add_pair(const string& k, const string& v) {
 //  CHECK_EQ(value(size() - 1).AsString(), v);
 }
 
-StringPiece HashUpdateCoder::key(int i) {
+StringPiece HashPutCoder::key(int i) {
   int start = h_->key_offset(i);
   int end = h_->key_offset(i + 1);
 //  CHECK_GT(end, start);
@@ -187,7 +187,7 @@ StringPiece HashUpdateCoder::key(int i) {
   return StringPiece(h_->key_data().data() + start, end - start);
 }
 
-StringPiece HashUpdateCoder::value(int i) {
+StringPiece HashPutCoder::value(int i) {
   int start = h_->value_offset(i);
   int end = h_->value_offset(i + 1);
 
@@ -195,22 +195,22 @@ StringPiece HashUpdateCoder::value(int i) {
   return StringPiece(h_->value_data().data() + start, end - start);
 }
 
-int HashUpdateCoder::size() {
+int HashPutCoder::size() {
   return h_->key_offset_size() - 1;
 }
 
-void LocalTable::ApplyUpdates(const HashUpdate& req) {
+void LocalTable::ApplyUpdates(const HashPut& req) {
   CHECK_EQ(req.key_offset_size(), req.value_offset_size());
-  HashUpdateCoder h(req);
+  HashPutCoder h(req);
 
   for (int i = 0; i < h.size(); ++i) {
     put_str(h.key(i), h.value(i));
   }
 }
 
-void LocalTable::SerializePartial(HashUpdate& r, Table::Iterator *it) {
+void LocalTable::SerializePartial(HashPut& r, Table::Iterator *it) {
   int bytes_used = 0;
-  HashUpdateCoder h(&r);
+  HashPutCoder h(&r);
   string k, v;
   for (; !it->done() && bytes_used < kMaxNetworkChunk; it->Next()) {
     it->key_str(&k);

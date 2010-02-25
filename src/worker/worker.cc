@@ -281,7 +281,7 @@ void Worker::Checkpoint(int epoch) {
 
   checkpoint_delta_ = new RecordFile(StringPrintf("%s/checkpoint.delta.epoch_%d", FLAGS_checkpoint_dir.c_str(), epoch_), "w");
 
-  HashUpdate epoch_marker;
+  HashPut epoch_marker;
   epoch_marker.set_source(id());
   epoch_marker.set_table(-1);
   epoch_marker.set_shard(-1);
@@ -301,7 +301,7 @@ void Worker::CheckForWorkerUpdates() {
 
   CollectPending();
 
-  HashUpdate put;
+  HashPut put;
   while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     if (put.marker() != -1) {
       UpdateEpoch(put.source(), put.marker());
@@ -326,8 +326,8 @@ void Worker::CheckForWorkerUpdates() {
   }
 
   MPI::Status status;
-  HashRequest get_req;
-  HashUpdate get_resp;
+  HashGet get_req;
+  HashPut get_resp;
   while (rpc_->HasData(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, status)) {
     rpc_->Read(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req);
 
@@ -342,7 +342,7 @@ void Worker::CheckForWorkerUpdates() {
     get_resp.set_done(true);
     get_resp.set_epoch(epoch_);
 
-    HashUpdateCoder h(&get_resp);
+    HashPutCoder h(&get_resp);
 
     string v;
     Registry::get_table(get_req.table())->get_local(get_req.key(), &v);
