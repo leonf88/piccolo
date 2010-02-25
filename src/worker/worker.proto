@@ -74,13 +74,13 @@ message CheckpointDone {
   required int32 epoch = 1;
 }
 
-message HashRequest {
+message HashGet {
   required uint32 table = 1;
   required uint32 shard = 2;
   required bytes key = 3;
 }
 
-message HashUpdate {
+message HashPut {
   required uint32 source = 1;
   required uint32 table = 2;
   required uint32 shard = 3;
