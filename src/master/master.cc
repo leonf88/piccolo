@@ -73,7 +73,7 @@ void Master::checkpoint() {
   epoch_ += 1;
   CheckpointRequest req;
   req.set_epoch(epoch_);
-  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  rpc_->Broadcast(MTYPE_CHECKPOINT, req);
 }
 
 void Master::run_all(const RunDescriptor& r) {

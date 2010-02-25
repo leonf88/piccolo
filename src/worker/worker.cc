@@ -51,19 +51,8 @@ struct Worker::Stub {
   int32_t id;
   int32_t epoch;
   RPCHelper *helper;
-  vector<RecordFile*> deltas;
 
-  Stub(int id, RPCHelper* rpc) : id(id), epoch(0), helper(rpc) {
-    InitDeltas();
-  }
-
-  void InitDeltas() {
-    Registry::TableMap &t = Registry::get_tables();
-    deltas.resize(t.size());
-    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-      deltas[i->first] = new RecordFile(StringPrintf("%s/checkpoint.delta.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch), "w");
-    }
-  }
+  Stub(int id, RPCHelper* rpc) : id(id), epoch(0), helper(rpc) { }
 
   bool TryRead(int method, Message* msg) {
     return helper->TryRead(id, method, msg);
@@ -79,19 +68,12 @@ struct Worker::Stub {
     r->Send(helper);
     return r;
   }
-
-  void RecordDelta(const HashUpdate& put) {
-    deltas[put.table()]->write(put);
-  }
-
-  void FlushDelta() {
-    for (int i = 0; i < deltas.size(); ++i) { delete deltas[i]; }
-    InitDeltas();
-  }
 };
 
 Worker::Worker(const ConfigData &c) {
   epoch_ = 0;
+
+  checkpoint_delta_ = NULL;
 
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -118,7 +100,6 @@ Worker::Worker(const ConfigData &c) {
   req.set_id(id());
   req.set_slots(config_.slots());
   rpc_->Send(0, MTYPE_REGISTER_WORKER, req);
-
 
   LOG(INFO) << "Worker " << config_.worker_id() << " registered.";
 }
@@ -257,20 +238,36 @@ void Worker::CollectPending() {
 void Worker::UpdateEpoch(int peer, int peer_marker) {
   LOG(INFO) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
   if (epoch_ < peer_marker) {
-    LOG(INFO) << "Checkpointing; received update marker from peer:" << MP(epoch_, peer_marker);
+    LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_marker);
     Checkpoint(peer_marker);
-    peers_[peer - 1]->epoch = peer_marker;
-  } else {
-    peers_[peer - 1]->FlushDelta();
+  }
+
+  peers_[peer]->epoch = peer_marker;
+
+  bool checkpoint_done = true;
+  for (int i = 0; i < peers_.size(); ++i) {
+    if (peers_[i]->epoch != epoch_) {
+      checkpoint_done = false;
+      LOG(INFO) << "Channel is out of date: " << i << " : " << MP(peers_[i]->epoch, epoch_);
+    }
+  }
+
+  if (checkpoint_done) {
+    LOG(INFO) << "All channels up to date; flushing delta.";
+    delete checkpoint_delta_;
+    checkpoint_delta_ = NULL;
   }
 }
 
 void Worker::Checkpoint(int epoch) {
-  LOG(INFO) << "Checkpointing... " << epoch;
-  if (epoch >= epoch_) {
-    LOG(INFO) << "Skipping checkpoint; " << MP(epoch, epoch_);
+  if (epoch_ >= epoch) {
+    LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
     return;
   }
+
+  LOG(INFO) << "Checkpointing... " << MP(epoch_, epoch);
+
+  epoch_ = epoch;
 
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
@@ -278,9 +275,14 @@ void Worker::Checkpoint(int epoch) {
     t->checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
   }
 
-  epoch_ = epoch;
+  checkpoint_delta_ = new RecordFile(StringPrintf("%s/checkpoint.delta.epoch_%d", FLAGS_checkpoint_dir.c_str(), epoch_), "w");
+
   HashUpdate epoch_marker;
-  epoch_marker.set_epoch(epoch_);
+  epoch_marker.set_source(id());
+  epoch_marker.set_table(-1);
+  epoch_marker.set_shard(-1);
+  epoch_marker.set_done(true);
+  epoch_marker.set_marker(epoch_);
   for (int i = 0; i < peers_.size(); ++i) {
     peers_[i]->Send(MTYPE_PUT_REQUEST, epoch_marker);
   }
@@ -304,7 +306,7 @@ void Worker::CheckForWorkerUpdates() {
 
     // Record messages from our peer channel up until they checkpointed.
     if (put.epoch() < epoch_) {
-      peers_[put.source() - 1]->RecordDelta(put);
+      checkpoint_delta_->write(put);
     }
 
     stats_.set_put_in(stats_.put_in() + 1);
@@ -334,6 +336,7 @@ void Worker::CheckForWorkerUpdates() {
     get_resp.set_table(get_req.table());
     get_resp.set_shard(-1);
     get_resp.set_done(true);
+    get_resp.set_epoch(epoch_);
 
     HashUpdateCoder h(&get_resp);
 

@@ -72,8 +72,6 @@ message HashRequest {
   required uint32 table = 1;
   required uint32 shard = 2;
   required bytes key = 3;
-  
-  required int32 epoch = 4;
 }
 
 message HashUpdate {
@@ -89,7 +87,7 @@ message HashUpdate {
   optional bytes value_data = 10;
   
   optional int32 epoch = 11;
-  optional int32 marker = 12;
+  optional int32 marker = 12 [default = -1];
 }
 
 message EmptyMessage {}

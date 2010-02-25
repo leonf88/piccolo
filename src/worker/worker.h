@@ -51,6 +51,8 @@ private:
   void Checkpoint(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
 
+  RecordFile *checkpoint_delta_;
+
   struct SendRequest;
 
   deque<KernelRequest> kernel_queue_;
