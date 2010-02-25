@@ -256,6 +256,10 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
     LOG(INFO) << "All channels up to date; flushing delta.";
     delete checkpoint_delta_;
     checkpoint_delta_ = NULL;
+
+    CheckpointDone req;
+    req.set_epoch(epoch_);
+    rpc_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
   }
 }
 
@@ -362,7 +366,7 @@ void Worker::CheckForMasterUpdates() {
     return;
   }
 
-  CheckpointRequest checkpoint_msg;
+  StartCheckpoint checkpoint_msg;
   while (rpc_->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
     Checkpoint(checkpoint_msg.epoch());
   }

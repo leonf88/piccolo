@@ -22,7 +22,9 @@ enum MessageTypes {
   
   MTYPE_WORKER_SHUTDOWN = 8;
   MTYPE_REGISTER_WORKER = 9;
+  
   MTYPE_CHECKPOINT = 10;
+  MTYPE_CHECKPOINT_DONE = 11;
 };
 
 message RegisterWorkerRequest {
@@ -64,7 +66,11 @@ message KernelRequest {
   optional int32 shard = 4;
 }
 
-message CheckpointRequest {
+message StartCheckpoint {
+  required int32 epoch = 1;
+}
+
+message CheckpointDone {
   required int32 epoch = 1;
 }
 

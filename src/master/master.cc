@@ -71,9 +71,18 @@ bool Master::WorkerState::serves(int table, int shard) {
 
 void Master::checkpoint() {
   epoch_ += 1;
-  CheckpointRequest req;
+  StartCheckpoint req;
   req.set_epoch(epoch_);
   rpc_->Broadcast(MTYPE_CHECKPOINT, req);
+
+  // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
+  // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
+  // is complete.
+  for (int i = 0; i < config_.num_workers(); ++i) {
+    CheckpointDone resp;
+    LOG(INFO) << "Waiting for checkpoint to finish... " << i << " of " << world_.Get_size();
+    rpc_->ReadAny(NULL, MTYPE_CHECKPOINT_DONE, &resp);
+  }
 }
 
 void Master::run_all(const RunDescriptor& r) {
