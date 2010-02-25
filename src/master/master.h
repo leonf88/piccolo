@@ -64,6 +64,17 @@ private:
   typedef map<Taskid, Task*> TaskMap;
   typedef map<Taskid, ShardInfo> ShardMap;
 
+  struct WorkerState;
+  WorkerState* worker_for_shard(int table, int shard);
+
+  // Find a worker to run a kernel on the given table and shard.  If a worker
+  // already serves the given shard, return it.  Otherwise, find an eligible
+  // worker and assign it to them.
+  WorkerState* assign_worker(int table, int shard);
+
+  void send_assignments();
+  void steal_work(const RunDescriptor& r, int idle_worker);
+
   struct WorkerState {
     WorkerState(int id);
 
@@ -104,17 +115,6 @@ private:
   };
 
   vector<WorkerState> workers_;
-
-  WorkerState* worker_for_shard(int table, int shard);
-
-  // Find a worker to run a kernel on the given table and shard.  If a worker
-  // already serves the given shard, return it.  Otherwise, find an eligible
-  // worker and assign it to them.
-  WorkerState* assign_worker(int table, int shard);
-
-  void send_assignments();
-
-  void steal_work(const RunDescriptor& r, int idle_worker);
 };
 
 #define RUN_ONE(m, klass, method, table)\

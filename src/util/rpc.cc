@@ -83,11 +83,14 @@ int RPCHelper::ReadAny(int *src, int method, Message *msg) {
   mpi_world_->Probe(MPI_ANY_SOURCE, method, probe_result);
 
   r_size = probe_result.Get_count(MPI::BYTE);
-  *src = probe_result.Get_source();
+  int r_src = probe_result.Get_source();
 
   scratch.resize(r_size);
-  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, *src, method, probe_result);
+  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, r_src, method, probe_result);
   msg->ParseFromString(scratch);
+
+  if (src) { *src = r_src; }
+
   return r_size;
 }
 
