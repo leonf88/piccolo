@@ -38,7 +38,7 @@ class CrawlOpener(object):
 
 crawl_opener = CrawlOpener()
 
-CRAWLER_THREADS = 25
+CRAWLER_THREADS = 200
 
 class FetchStatus:
     SHOULD_FETCH = 0
@@ -124,11 +124,11 @@ def fetch_robots(site):
         if e.code == 404: 
             rtxt = ''
         else:
-            info('Failed robots fetch for %s.', site, exc_info=1) 
+            info('Failed robots fetch for %s.', site) 
             robots_table.put(site, ROBOTS_REJECT_ALL)
             return
     except:
-        info('Failed robots fetch for %s.', site, exc_info=1)
+        info('Failed robots fetch for %s.', site)
         robots_table.put(site, ROBOTS_REJECT_ALL)
         return
     
@@ -150,7 +150,7 @@ def fetch_page(page):
         print >>data_log, page.content
         fetch_table.put(page.url_s, FetchStatus.FETCH_DONE)
     except:
-        warn('Fetch of %s failed.', page.url_s, exc_info=1)
+        warn('Fetch of %s failed.', page.url_s)
         page.content = None
         fetch_table.put(page.url_s, FetchStatus.ERROR)
 
@@ -163,7 +163,7 @@ def extract_links(page):
         else: base_href = page.url_s.strip()
         page.outlinks = set([urlparse.urljoin(base_href, l) for l in href_xpath(root)]) 
     except:
-        warn('Parse of %s failed.', page.url_s, exc_info=1)
+        warn('Parse of %s failed.', page.url_s)
 
 def add_links(page):
     for l in page.outlinks:
@@ -175,11 +175,13 @@ class CrawlThread(Thread):
         Thread.__init__(self)
         self.status = ThreadStatus.IDLE
         self.url = ''
-
+        self.last_active = time.time()
+        
     def run(self):
         while 1:
             self.status = ThreadStatus.IDLE
             self.url = ''
+            self.last_active = time.time()
             
             try:
                 site = robots_queue.get(0)
@@ -197,12 +199,12 @@ class CrawlThread(Thread):
                 self.status = ThreadStatus.EXTRACTING
                 extract_links(page)
                 self.status = ThreadStatus.ADDING
-                add_links(page)                
+                add_links(page)
             except Empty: pass
-            
-                            
-            #data = urllib2.urlopen(url).read(
-            
+            except:
+                info('Error when processing %s; skipping.', page.url_s, exc_info=1)
+                fetch_table.put(page.url_s, FetchStatus.ERROR)
+                                        
 def crawl():
     global fetch_table, robots_table    
     threads = [CrawlThread() for i in range(CRAWLER_THREADS)]
@@ -259,4 +261,5 @@ def crawl():
             info('Page status [%s]: %s', k, v)
         
         for i in range(len(threads)):
-            info('Thread status [%d]: %s %s', i, threads[i].status, threads[i].url)
+            info('Thread status [%d]: %d %s %s', 
+                 i, int(threads[i].last_active - time.time()), threads[i].status, threads[i].url)
