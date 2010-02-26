@@ -1,54 +1,69 @@
 #!/usr/bin/python
 
-import os, sys
-
+import os, re, sys, time
 import urllib, urlparse, cgi, httplib, urllib2
-import crawler_support as cs
-import time
-import re
 
-import logging
-from urllib2 import HTTPError
-logging.basicConfig(level=logging.DEBUG)
+import cStringIO
 
-def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args)
-def info(fmt, *args, **kwargs): logging.info(str(fmt) % args)
-def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args)
-def error(fmt, *args, **kwargs): logging.error(str(fmt) % args)
-def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args)
+from lxml import etree
+html_parser = etree.HTMLParser()
 
-from threading import *
+href_xpath = etree.XPath('//a/@href')
+base_xpath = etree.XPath('//base/@href')
+
+from threading import Thread
 from Queue import PriorityQueue, Queue, Empty, Full  
 
-C_SHOULD_FETCH = 0
-C_FETCHING = 1
-C_FETCH_DONE = 2
-C_PARSE_DONE = 3
-C_DONE = 4
-C_ROBOTS_BLACKLIST = 5
+import logging; logging.basicConfig(level=logging.DEBUG)
+
+def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args, **kwargs)
+def info(fmt, *args, **kwargs): logging.info(str(fmt) % args, **kwargs)
+def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args, **kwargs)
+def error(fmt, *args, **kwargs): logging.error(str(fmt) % args, **kwargs)
+def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args, **kwargs)
+
+class CrawlStatus:
+    SHOULD_FETCH = 0
+    FETCHING = 1
+    FETCH_DONE = 2
+    PARSE_DONE = 3
+    DONE = 4
+    ROBOTS_BLACKLIST = 5
+
+class RobotStatus:
+    FETCHING = 'FETCHING'
+
+ROBOTS_REJECT_ALL = '/'
+ROBOTS_TIMEOUT = 10
 
 crawl_queue = Queue()
 robots_queue = Queue()
 
+output_log = open('crawler.out', 'w')
+
+class Page(object):
+    @staticmethod
+    def Create(url):
+        p = Page()
+        p.url = url
+        p.url_s = url.geturl()
+        p.content = None
+        p.outlinks = []
+        return p
+
+
+import crawler_support as cs
+
 fetch_table = None
 crawltime_table = None
 robots_table = None
-
-output_log = open('crawler.out', 'w')
-
-R_FETCHING = 'FETCHING'
-ROBOTS_REJECT_ALL = '/'
-ROBOTS_TIMEOUT = 10
-
-DISALLOW_RE = re.compile('Disallow:(.*)')
-
 
 def initialize():
     global fetch_table, crawltime_table, robots_table
     fetch_table = cs.kernel().crawl_table(0)
     crawltime_table = cs.kernel().crawl_table(1)
     robots_table = cs.kernel().robots_table(2)
-    fetch_table.put("http://rjpower.org/gitweb", C_SHOULD_FETCH)
+    fetch_table.put("http://rjpower.org/gitweb", CrawlStatus.SHOULD_FETCH)
     return 0
 
 def check_robots(url):
@@ -58,16 +73,17 @@ def check_robots(url):
         if url.path.startswith(d): return False
     return True
 
+DISALLOW_RE = re.compile('Disallow:(.*)')
 def fetch_robots(site):
     info('Fetching robots... %s', site)
     disallow = {}
     try:
         rtxt = urllib2.urlopen('http://%s/robots.txt' % site, timeout=ROBOTS_TIMEOUT).read()
-    except HTTPError, e:
+    except urllib2.HTTPError, e:
         if e.code == 404: rtxt = ''
         else: raise e
     except:
-        info('Failed robots fetch for %s: %s', site, e)
+        info('Failed robots fetch for %s.', site, exc_info=1)
         robots_table.put(site, ROBOTS_REJECT_ALL)
         return
     
@@ -80,18 +96,28 @@ def fetch_robots(site):
     robots_table.put(site, '\n'.join(disallow.keys()))
     info('Robots fetch of %s successful: %s', site, ','.join(disallow.keys()))
 
-def fetch_page(url):
-    url_s = url.geturl()
-    info('Fetching... %s', url_s)
+def fetch_page(page):
+    info('Fetching... %s', page.url_s)
     try:
-        return urllib2.urlopen(url_s).read()
+        page.content = urllib2.urlopen(page.url_s).read()
     except:
-        warn('Fetch of %s failed.', url_s.geturl())
-        return ''
+        warn('Fetch of %s failed.', page.url_s, exc_info=1)
+        page.content = None
 
+def extract_links(page):
+    info('Extracting... %s [%d]', page.url_s, len(page.content))
+    try:
+        root = etree.parse(cStringIO.StringIO(page.content), html_parser)
+        base_href = base_xpath(root)
+        if not base_href: base_href = page.url_s        
+        page.outlinks = set([urlparse.urljoin(base_href, l) for l in href_xpath(root)]) 
+    except:
+        warn('Parse of %s failed.', page.url_s, exc_info=1)
 
-def extract_links(url, content):
-    info('Extracting... %s', url)
+def add_links(page):
+    for l in page.outlinks:
+        info('Adding link to fetch queue: %s', l)
+        fetch_table.put(l, CrawlStatus.SHOULD_FETCH)
 
 class CrawlThread(Thread):
     def __init__(self): 
@@ -106,10 +132,11 @@ class CrawlThread(Thread):
             except Empty: pass
 
             try:
-                url = crawl_queue.get(1, 0.1)
-                data = fetch_page(url)
-                outlinks = extract_links(data)
-                
+                page = crawl_queue.get(1, 0.1)
+                fetch_table.put(page.url_s, CrawlStatus.FETCH_DONE)
+                fetch_page(page)
+                extract_links(page)
+                add_links(page)                
             except Empty: pass
                             
             #data = urllib2.urlopen(url).read(
@@ -121,41 +148,40 @@ def crawl():
         
     while 1:
         it = fetch_table.get_typed_iterator(cs.kernel().current_shard())
+        time.sleep(1)
         while not it.done():
-            time.sleep(0.1)
             url_s = it.key()
-            if it.value() == C_SHOULD_FETCH:
-                info('Checking... %s', it.key())
-                url = urlparse.urlparse(url_s)
-                site = url.netloc
-                if not robots_table.contains(site):
-                    info('Fetching robots: %s', site)
-                    robots_queue.put(site)
-                    robots_table.put(site, R_FETCHING)
-                    it.Next()
-                    continue         
-                
-                if robots_table.get(site) == R_FETCHING:
-                    info('Waiting for robot fetch: %s', url_s)
-                    it.Next()
-                    continue
-                
-                if not check_robots(url):
-                    info('Blocked by robots %s', url_s)
-                    fetch_table.put(url_s, C_ROBOTS_BLACKLIST)
-                    it.Next()
-                    continue
-                  
-                last_crawl = 0
-                if crawltime_table.contains(site):
-                    last_crawl = crawltime_table.get(site)
-                
-                if time.time() - last_crawl < 60:
-                    info('Waiting for politeness: %s, %d', url_s, time.time() - last_crawl)
-                else:
-                    info('Queueing: %s', url_s)
-                    crawl_queue.put(url)
-                    fetch_table.put(url_s, C_FETCHING)
-                    crawltime_table.put(site, int(time.time()))                
-                    it.Next()
-    
+            it.Next()
+            
+            debug('Queue thread running... %s', url_s)
+            if it.value() != CrawlStatus.SHOULD_FETCH:
+                continue
+        
+            url = urlparse.urlparse(url_s)
+            site = url.netloc
+            if not robots_table.contains(site):
+                info('Fetching robots: %s', site)
+                robots_queue.put(site)
+                robots_table.put(site, RobotStatus.FETCHING)
+                continue         
+            
+            if robots_table.get(site) == RobotStatus.FETCHING:
+                info('Waiting for robot fetch: %s', url_s)
+                continue
+            
+            if not check_robots(url):
+                info('Blocked by robots %s', url_s)
+                fetch_table.put(url_s, CrawlStatus.ROBOTS_BLACKLIST)
+                continue
+              
+            last_crawl = 0
+            if crawltime_table.contains(site):
+                last_crawl = crawltime_table.get(site)
+            
+            if time.time() - last_crawl < 60:
+                info('Waiting for politeness: %s, %d', url_s, time.time() - last_crawl)
+            else:
+                info('Queueing: %s', url_s)
+                crawl_queue.put(Page.Create(url))
+                fetch_table.put(url_s, CrawlStatus.FETCHING)
+                crawltime_table.put(site, int(time.time()))
