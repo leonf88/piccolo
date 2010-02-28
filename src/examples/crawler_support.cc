@@ -13,6 +13,11 @@ class PythonKernel : public DSMKernel {
 public:
   PythonKernel() {
     try {
+      object sys_module = import("sys");
+      object sys_ns = sys_module.attr("__dict__");
+      exec("path += ['src/examples']", sys_ns, sys_ns);
+      exec("print path", sys_ns, sys_ns);
+
       crawl_module_ = import("crawler");
       crawl_ns_ = crawl_module_.attr("__dict__");
     } catch (error_already_set e) {
@@ -55,21 +60,23 @@ DSMKernel* kernel() {
 
 extern "C" void init_crawler_support();
 int main(int argc, const char* argv[]) {
-	Init(argc, (char**)argv);
-	Py_Initialize();
-	init_crawler_support();
+  Init(argc, (char**)argv);
+
+  Py_Initialize();
+  init_crawler_support();
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_slots(1);
 
-	Registry::create_table<string, int>(0, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
+  Registry::create_table<string, int>(0, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
   Registry::create_table<string, int>(1, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
   Registry::create_table<string, string>(2, conf.num_workers(), &StringSharding, &Accumulator<string>::replace);
+  Registry::create_table<string, int>(3, conf.num_workers(), &StringSharding, &Accumulator<int>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    RUN_ONE(m, PythonKernel, initialize_crawl, 0);
+    RUN_ALL(m, PythonKernel, initialize_crawl, 0);
     RUN_ALL(m, PythonKernel, run_crawl, 0);
   } else {
     Worker w(conf);
