@@ -7,7 +7,9 @@ for f in `find src -name '*.cc'` `find src -name '*.c'`; do
   if [[ $depfile -ot $f ]]; then
     echo -n 'N'
     mkdir -p .deps/`dirname $f`
-    gcc $CPPFLAGS -MM -MG -MF $depfile -MT ${f/.cc/.o} $f
+    o=${f/.cc/.o}
+    o=${o/src/bin}
+    gcc $CPPFLAGS -MM -MG -MF $depfile -MT $o $f
   else
     echo -n 'O'
   fi
