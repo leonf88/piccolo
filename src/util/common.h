@@ -16,11 +16,12 @@
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 
+#include "util/hash.h"
+#include "util/common.pb.h"
+
 #ifdef SWIG
 #define __attribute__(X)
 #endif
-
-#include "util/hash.h"
 
 namespace dsm {
 
@@ -163,6 +164,58 @@ public:
 private:
   double start_time_;
   uint64_t start_cycle_;
+};
+
+namespace data {
+  // I really, really, really hate C++.
+  template <class T>
+  static void marshal(const T& t, string* out) {
+    DCHECK(std::tr1::is_pod<T>::value);
+    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
+  }
+
+  template <class T>
+  static void unmarshal(const StringPiece& s, T *t) {
+    DCHECK(std::tr1::is_pod<T>::value);
+    *t = *reinterpret_cast<const T*>(s.data);
+  }
+
+  // strings
+  template <>
+  void marshal(const string& t, string *out) {
+    *out = t;
+  }
+
+  template <>
+  void unmarshal(const StringPiece& s, string *t) {
+    t->assign(s.data, s.len);
+  }
+
+  // protocol messages
+  typedef google::protobuf::Message Message;
+  template <>
+  void marshal(const Message& t, string *out) {
+    t.SerializePartialToString(out);
+  }
+
+  template <>
+  void unmarshal(const StringPiece& s, Message* t) {
+    t->ParseFromArray(s.data, s.len);
+  }
+
+  template <class T>
+  static string to_string(const T& t) {
+    string t_marshal;
+    marshal(t, &t_marshal);
+    return t_marshal;
+  }
+
+  template <class T>
+  static T from_string(const StringPiece& t) {
+    T t_marshal;
+    unmarshal(t, &t_marshal);
+    return t_marshal;
+  }
 };
 
 #define EVERY_N(interval, operation)\

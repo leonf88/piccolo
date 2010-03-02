@@ -10,6 +10,8 @@ static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
 static TypedGlobalTable<int, int>* sum_hash = NULL;
 static TypedGlobalTable<int, int>* replace_hash = NULL;
+static TypedGlobalTable<int, string>* string_hash = NULL;
+
 //static TypedGlobalTable<int, Pair>* pair_hash = NULL;
 
 class TableKernel : public DSMKernel {
@@ -21,6 +23,7 @@ public:
       max_hash->put(i, i);
       sum_hash->put(i, 1);
       replace_hash->put(i, i);
+      string_hash->put(i, StringPrintf("%d", i));
 //      p.set_key(StringPrintf("%d", i));
 //      p.set_value(StringPrintf("%d", i));
 //      pair_hash->put(i, p);
@@ -36,6 +39,7 @@ public:
       CHECK_EQ(max_hash->get(i), i) << " i= " << i;
       CHECK_EQ(replace_hash->get(i), i) << " i= " << i;
       CHECK_EQ(sum_hash->get(i), num_shards) << " i= " << i;
+      CHECK_EQ(string_hash->get(i), StringPrintf("%d", i)) << " i= " << i;
 //      CHECK_EQ(pair_hash->get(i).value(), StringPrintf("%d", i));
     }
   }
@@ -50,6 +54,7 @@ public:
       CHECK_EQ(max_hash->get(k), k) << " k= " << k;
       CHECK_EQ(replace_hash->get(k), k) << " k= " << k;
       CHECK_EQ(sum_hash->get(k), num_shards) << " k= " << k;
+      CHECK_EQ(string_hash->get(k), StringPrintf("%d", k)) << " i= " << k;
 //      CHECK_EQ(pair_hash->get(k).value(), StringPrintf("%d", k));
       it->Next();
     }
@@ -72,6 +77,7 @@ int main(int argc, char **argv) {
   max_hash = Registry::create_table<int, int>(1, FLAGS_shards, &ModSharding, &Accumulator<int>::max);
   sum_hash = Registry::create_table<int, int>(2, FLAGS_shards, &ModSharding, &Accumulator<int>::sum);
   replace_hash = Registry::create_table<int, int>(3, FLAGS_shards, &ModSharding, &Accumulator<int>::replace);
+  string_hash = Registry::create_table<int, string>(4, FLAGS_shards, &ModSharding, &Accumulator<string>::replace);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);

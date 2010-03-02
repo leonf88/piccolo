@@ -85,10 +85,11 @@ INSTANTIATE(double);
 INSTANTIATE(uint64_t);
 INSTANTIATE(uint32_t);
 INSTANTIATE(float);
+#undef INSTANTIATE
 
 void Encoder::write_string(const string& v) {
   write((uint32_t)v.size());
-  out_->append(v);
+  write_bytes(v);
 }
 
 void Encoder::write_bytes(StringPiece s) {
