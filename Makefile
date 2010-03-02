@@ -9,18 +9,17 @@ MPI_LIBS := -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma
 
 PY_INC := -I/usr/include/python2.6/
 
-DISTCC := distcc
+DISTCC :=
 CXX := g++
-CDEBUG := -ggdb1
-COPT :=  -O2
+CDEBUG := -ggdb3
+COPT :=
+#COPT := -O2 -DNDEBUG
+
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
 USE_TCMALLOC := 
 USE_OPROFILE :=
-
-vpath %.o bin/ 
-vpath %.a bin/
 
 ifneq ($(USE_CPU_PROFILE),)
 	PROF_LIBS := -lprofiler -lunwind
@@ -85,6 +84,7 @@ all: 	 setup\
 
 setup:
 	cd src && find . -type d -exec mkdir -p ../bin/{} \;
+
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
 CORE_LIBS := bin/libworker.a bin/libcommon.a bin/librpc.a
