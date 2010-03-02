@@ -15,40 +15,6 @@
 
 namespace dsm {
 
-struct Data {
-  // strings
-  static void marshal(const string& t, string *out) { *out = t; }
-  static void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
-
-  // protocol messages
-  static void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
-  static void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
-
-  template <class T>
-  static void marshal(const T& t, string* out) {
-    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
-  }
-
-  template <class T>
-  static void unmarshal(const StringPiece& s, T *t) {
-    *t = *reinterpret_cast<const T*>(s.data);
-  }
-
-  template <class T>
-  static string to_string(const T& t) {
-    string t_marshal;
-    marshal(t, &t_marshal);
-    return t_marshal;
-  }
-
-  template <class T>
-  static T from_string(const StringPiece& t) {
-    T t_marshal;
-    unmarshal(t, &t_marshal);
-    return t_marshal;
-  }
-};
-
 template <class K>
 static int simple_hash(K k) {
   k = (k ^ 61) ^ (k >> 16);
@@ -282,8 +248,8 @@ void HashMap<K, V>::checkpoint(const string& file) {
   } else {
     string b;
     for (iterator i = begin(); i != end(); ++i) {
-      Data::marshal(i.key(), &b); e.write_string(b);
-      Data::marshal(i.value(), &b); e.write_string(b);
+      data::marshal(i.key(), &b); e.write_string(b);
+      data::marshal(i.value(), &b); e.write_string(b);
     }
   }
 }
@@ -304,7 +270,7 @@ void HashMap<K, V>::restore(const string& file) {
     for (int i = 0; i < size; ++i) {
       d.read_string(&k);
       d.read_string(&v);
-      put(Data::from_string<K>(k), Data::from_string<V>(v));
+      put(data::from_string<K>(k), data::from_string<V>(v));
     }
   }
 }

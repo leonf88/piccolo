@@ -20,8 +20,8 @@ public:
       t_ = t;
     }
 
-    void key_str(string *out) { Data::marshal<K>(key(), out); }
-    void value_str(string *out) { Data::marshal<V>(value(), out); }
+    void key_str(string *out) { data::marshal<K>(key(), out); }
+    void value_str(string *out) { data::marshal<V>(value(), out); }
 
     bool done() { return  it_ == t_->data_.end(); }
     void Next() { ++it_; }
@@ -64,12 +64,12 @@ public:
   void clear() { data_.clear(); }
 
   string get_str(const StringPiece &k) {
-    return Data::to_string<V>(get(Data::from_string<K>(k)));
+    return data::to_string<V>(get(data::from_string<K>(k)));
   }
 
   void put_str(const StringPiece &k, const StringPiece &v) {
-    const K& kt = Data::from_string<K>(k);
-    const V& vt = Data::from_string<V>(v);
+    const K& kt = data::from_string<K>(k);
+    const V& vt = data::from_string<V>(v);
 
 //    LOG(INFO) << MP(kt, vt);
 
@@ -77,7 +77,7 @@ public:
   }
 
   void remove_str(const StringPiece &k) {
-    remove(Data::from_string<K>(k));
+    remove(data::from_string<K>(k));
   }
 
   void checkpoint(const string& f) { data_.checkpoint(f); }
@@ -126,21 +126,21 @@ public:
   }
 
   int get_shard_str(StringPiece k) {
-    return get_shard(Data::from_string<K>(k));
+    return get_shard(data::from_string<K>(k));
   }
 
   string get_str(const StringPiece &k) {
-    return Data::to_string<V>(get(Data::from_string<K>(k)));
+    return data::to_string<V>(get(data::from_string<K>(k)));
   }
 
   void put_str(const StringPiece &k, const StringPiece &v) {
-    const K& kt = Data::from_string<K>(k);
-    const V& vt = Data::from_string<V>(v);
+    const K& kt = data::from_string<K>(k);
+    const V& vt = data::from_string<V>(v);
     put(kt, vt);
   }
 
   void remove_str(const StringPiece &k) {
-    remove(Data::from_string<K>(k));
+    remove(data::from_string<K>(k));
   }
 
   V get_local(const K& k) {
@@ -196,8 +196,8 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   }
 
   string v_str;
-  get_remote(shard, Data::to_string<K>(k), &v_str);
-  return Data::from_string<V>(v_str);
+  get_remote(shard, data::to_string<K>(k), &v_str);
+  return data::from_string<V>(v_str);
 }
 
 template <class K, class V>
