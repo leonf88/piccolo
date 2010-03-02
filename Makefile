@@ -13,11 +13,14 @@ DISTCC := distcc
 CXX := g++
 CDEBUG := -ggdb1
 COPT :=  -O2
-CPPFLAGS := $(CPPFLAGS) -I. -Isrc -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
+CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
 USE_TCMALLOC := 
-USE_OPROFILE := 
+USE_OPROFILE :=
+
+vpath %.o bin/ 
+vpath %.a bin/
 
 ifneq ($(USE_CPU_PROFILE),)
 	PROF_LIBS := -lprofiler -lunwind
@@ -53,23 +56,24 @@ LINK_LIB := ld -r
 LINK_BIN := $(MPI_LINK) 
 LINK_BIN_FLAGS := $(LDDIRS) -Wl,-Bstatic $(STATIC_LIBS) -Wl,-Bdynamic $(DYNAMIC_LIBS) 
 
-LIBCOMMON_OBJS := src/util/common.pb.o \
-									src/util/file.o \
-									src/util/common.o
+LIBCOMMON_OBJS := bin/util/common.pb.o \
+		  bin/util/file.o \
+		  bin/util/common.o
 
-LIBRPC_OBJS := src/util/rpc.o
+LIBRPC_OBJS := bin/util/rpc.o
 
-LIBEXAMPLE_OBJS := src/examples/upc/file-helper.o \
-									 src/examples/graph.pb.o
+LIBEXAMPLE_OBJS := bin/examples/upc/file-helper.o \
+		   bin/examples/graph.pb.o
 
-LIBKERNEL_OBJS := src/kernel/table.o\
-									src/kernel/table-registry.o \
-									src/kernel/kernel-registry.o
+LIBKERNEL_OBJS := bin/kernel/table.o\
+		  bin/kernel/table-registry.o \
+		  bin/kernel/kernel-registry.o
 
-LIBWORKER_OBJS := src/worker/worker.pb.o src/worker/worker.o\
-								  src/master/master.o $(LIBKERNEL_OBJS)
+LIBWORKER_OBJS := bin/worker/worker.pb.o bin/worker/worker.o\
+		  bin/master/master.o $(LIBKERNEL_OBJS)
 
-all: bin/shortest-path\
+all: 	 setup\
+         bin/shortest-path\
 	 bin/mpi-test \
 	 bin/pagerank\
 	 bin/k-means\
@@ -79,6 +83,8 @@ all: bin/shortest-path\
 #  bin/shortest-path-upc\
 #	 bin/pr-upc\
 
+setup:
+	cd src && find . -type d -exec mkdir -p ../bin/{} \;
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
 CORE_LIBS := bin/libworker.a bin/libcommon.a bin/librpc.a
@@ -90,36 +96,36 @@ Makefile.dep: $(ALL_SOURCES)
 	CPPFLAGS="$(CPPFLAGS)" ./makedep.sh
 
 bin/libcommon.a : $(LIBCOMMON_OBJS)
-	$(LINK_LIB) $^ -o $@
+	$(LINK_LIB) $(LIBCOMMON_OBJS) -o $@
 
-bin/libworker.a : $(LIBWORKER_OBJS)
-	$(LINK_LIB) $^ -o $@
+bin/librpc.a : $(LIBRPC_OBJS) $(LIBCOMMON_OBJS)
+	$(LINK_LIB) $(LIBRPC_OBJS) -o $@
 
-bin/librpc.a : $(LIBRPC_OBJS)
-	$(LINK_LIB) $^ -o $@
+bin/libworker.a :  $(LIBCOMMON_OBJS) $(LIBRPC_OBJS) $(LIBWORKER_OBJS)
+	$(LINK_LIB) $(LIBWORKER_OBJS) -o $@
 
 bin/libexample.a : $(LIBEXAMPLE_OBJS)
 	$(LINK_LIB) $^ -o $@
 
-bin/test-tables: $(CORE_LIBS) src/test/test-tables.o
+bin/test-tables: $(CORE_LIBS) bin/test/test-tables.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 
-bin/shortest-path: $(EXAMPLE_LIBS) src/examples/shortest-path.o
+bin/shortest-path: $(EXAMPLE_LIBS) bin/examples/shortest-path.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 
-bin/pagerank: $(EXAMPLE_LIBS) src/examples/pagerank.o 
+bin/pagerank: $(EXAMPLE_LIBS) bin/examples/pagerank.o 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 
-bin/k-means: $(EXAMPLE_LIBS) src/examples/k-means.o 
+bin/k-means: $(EXAMPLE_LIBS) bin/examples/k-means.o 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 	
-bin/crawler: src/examples/crawler_support_wrap.o src/examples/crawler_support.o $(EXAMPLE_LIBS)
+bin/crawler: bin/examples/crawler_support_wrap.o bin/examples/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lpython2.6 -lboost_python-mt
 
-bin/test-hashmap: $(EXAMPLE_LIBS) src/test/test-hashmap.o
+bin/test-hashmap: $(EXAMPLE_LIBS) bin/test/test-hashmap.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 
-bin/mpi-test: src/test/mpi-test.o bin/libcommon.a
+bin/mpi-test: bin/test/mpi-test.o bin/libcommon.a
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
 
 bin/shortest-path-upc: bin/libexample.a bin/libcommon.a src/examples/upc/shortest-path.upc	 
@@ -129,22 +135,21 @@ bin/pagerank-upc: bin/libexample.a bin/libcommon.a src/examples/upc/pagerank.upc
 	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(MPI_LIBS) $(LINK_BIN_FLAGS)
 
 clean:
-	rm -f bin/*
-	find src -name '*.o' -exec rm {} \;
+	rm -rf bin/
 	find src -name '*.pb.h' -exec rm {} \;
 	find src -name '*.pb.cc' -exec rm {} \;
 	find src -name '*_wrap.cc' -exec rm {} \;
 
 %.pb.cc %.pb.h : %.proto
-	protoc -Isrc/ --cpp_out=$(CURDIR)/src $<
-
-%.upc.o: %.upc	 
-
-%.o: %.cc
-	$(DISTCC) $(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
+	protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
 
 %_wrap.cc : %.h
 	swig -O -c++ -python $(CPPFLAGS) -o $@ $< 
+
+%.upc.o: %.upc	 
+
+bin/%.o: src/%.cc
+	$(DISTCC) $(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
 
 $(shell mkdir -p bin/)
