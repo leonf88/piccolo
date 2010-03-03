@@ -34,15 +34,15 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-build_triplet = i686-pc-linux-gnu
-host_triplet = i686-pc-linux-gnu
+build_triplet = x86_64-unknown-linux-gnu
+host_triplet = x86_64-unknown-linux-gnu
 
 # These are good warnings to turn on by default
 am__append_1 = -Wall -Wwrite-strings -Woverloaded-virtual -Wno-sign-compare
 
 # These are x86-specific, having to do with frame-pointers
-##am__append_2 = -fno-omit-frame-pointer
-#am__append_3 = -DNO_FRAME_POINTER
+#am__append_2 = -fno-omit-frame-pointer
+am__append_3 = -DNO_FRAME_POINTER
 TESTS = logging_unittest$(EXEEXT) demangle_unittest$(EXEEXT) \
 	stacktrace_unittest$(EXEEXT) symbolize_unittest$(EXEEXT) \
 	stl_logging_unittest$(EXEEXT) utilities_unittest$(EXEEXT) \
@@ -300,21 +300,21 @@ DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
 distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
-ACLOCAL = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run aclocal-1.10
-AMTAR = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run tar
+ACLOCAL = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run aclocal-1.10
+AMTAR = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run tar
 AR = ar
-AUTOCONF = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run automake-1.10
-AWK = mawk
+AUTOCONF = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run autoconf
+AUTOHEADER = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run autoheader
+AUTOMAKE = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run automake-1.10
+AWK = gawk
 CC = gcc
-CCDEPMODE = depmode=gcc3
+CCDEPMODE = depmode=none
 CFLAGS = -g -O2
 CPP = gcc -E
-CPPFLAGS = 
+CPPFLAGS = -I../gflags/src/
 CXX = g++
 CXXCPP = g++ -E
-CXXDEPMODE = depmode=gcc3
+CXXDEPMODE = depmode=none
 CXXFLAGS = -g -O2
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
@@ -326,10 +326,10 @@ ECHO_N = -n
 ECHO_T = 
 EGREP = /bin/grep -E
 EXEEXT = 
-F77 = g77
-FFLAGS = -g -O2
+F77 = 
+FFLAGS = 
 GFLAGS_CFLAGS = 
-GFLAGS_LIBS = -lgflags
+GFLAGS_LIBS = 
 GMOCK_CFLAGS = 
 GMOCK_CONFIG = 
 GMOCK_LIBS = 
@@ -342,14 +342,14 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LDFLAGS = 
+LDFLAGS = -L../gflags/.libs
 LIBOBJS = 
 LIBS = -lpthread 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIBTOOL_DEPS = ./ltmain.sh
 LN_S = ln -s
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} /home/jinyang/co/upc_hash/extlib/glog/missing --run makeinfo
+MAKEINFO = ${SHELL} /home/power/w/hashdsm/extlib/glog/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
 NMEDIT = 
 OBJEXT = o
@@ -370,20 +370,20 @@ SHELL = /bin/bash
 STRIP = strip
 UNWIND_LIBS = 
 VERSION = 0.3.0
-abs_builddir = /home/jinyang/co/upc_hash/extlib/glog
-abs_srcdir = /home/jinyang/co/upc_hash/extlib/glog
-abs_top_builddir = /home/jinyang/co/upc_hash/extlib/glog
-abs_top_srcdir = /home/jinyang/co/upc_hash/extlib/glog
+abs_builddir = /home/power/w/hashdsm/extlib/glog
+abs_srcdir = /home/power/w/hashdsm/extlib/glog
+abs_top_builddir = /home/power/w/hashdsm/extlib/glog
+abs_top_srcdir = /home/power/w/hashdsm/extlib/glog
 ac_ct_CC = gcc
 ac_ct_CXX = g++
-ac_ct_F77 = g77
+ac_ct_F77 = 
 ac_cv___attribute___noreturn = __attribute__ ((noreturn))
 ac_cv___attribute___printf_4_5 = __attribute__((__format__ (__printf__, 4, 5)))
 ac_cv_cxx_using_operator = 1
 ac_cv_have___builtin_expect = 1
 ac_cv_have___uint16 = 0
 ac_cv_have_inttypes_h = 1
-ac_cv_have_libgflags = 1
+ac_cv_have_libgflags = 0
 ac_cv_have_stdint_h = 1
 ac_cv_have_systypes_h = 1
 ac_cv_have_u_int16_t = 1
@@ -399,26 +399,26 @@ am__quote =
 am__tar = ${AMTAR} chof - "$$tardir"
 am__untar = ${AMTAR} xf -
 bindir = ${exec_prefix}/bin
-build = i686-pc-linux-gnu
+build = x86_64-unknown-linux-gnu
 build_alias = 
-build_cpu = i686
+build_cpu = x86_64
 build_os = linux-gnu
-build_vendor = pc
+build_vendor = unknown
 builddir = .
 datadir = ${datarootdir}
 datarootdir = ${prefix}/share
 docdir = $(prefix)/share/doc/$(PACKAGE)-$(VERSION)
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host = i686-pc-linux-gnu
+host = x86_64-unknown-linux-gnu
 host_alias = 
-host_cpu = i686
+host_cpu = x86_64
 host_os = linux-gnu
-host_vendor = pc
+host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = $(SHELL) /home/jinyang/co/upc_hash/extlib/glog/install-sh
+install_sh = $(SHELL) /home/power/w/hashdsm/extlib/glog/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -725,248 +725,248 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/demangle_unittest-demangle_unittest.Po
-include ./$(DEPDIR)/libglog_la-demangle.Plo
-include ./$(DEPDIR)/libglog_la-logging.Plo
-include ./$(DEPDIR)/libglog_la-raw_logging.Plo
-include ./$(DEPDIR)/libglog_la-signalhandler.Plo
-include ./$(DEPDIR)/libglog_la-symbolize.Plo
-include ./$(DEPDIR)/libglog_la-utilities.Plo
-include ./$(DEPDIR)/libglog_la-vlog_is_on.Plo
-include ./$(DEPDIR)/logging_striptest0-logging_striptest_main.Po
-include ./$(DEPDIR)/logging_striptest10-logging_striptest10.Po
-include ./$(DEPDIR)/logging_striptest2-logging_striptest2.Po
-include ./$(DEPDIR)/logging_unittest-logging_unittest.Po
-include ./$(DEPDIR)/mock_log_test-mock-log_test.Po
-include ./$(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
-include ./$(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
-include ./$(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
-include ./$(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
-include ./$(DEPDIR)/utilities_unittest-utilities_unittest.Po
+#include ./$(DEPDIR)/demangle_unittest-demangle_unittest.Po
+#include ./$(DEPDIR)/libglog_la-demangle.Plo
+#include ./$(DEPDIR)/libglog_la-logging.Plo
+#include ./$(DEPDIR)/libglog_la-raw_logging.Plo
+#include ./$(DEPDIR)/libglog_la-signalhandler.Plo
+#include ./$(DEPDIR)/libglog_la-symbolize.Plo
+#include ./$(DEPDIR)/libglog_la-utilities.Plo
+#include ./$(DEPDIR)/libglog_la-vlog_is_on.Plo
+#include ./$(DEPDIR)/logging_striptest0-logging_striptest_main.Po
+#include ./$(DEPDIR)/logging_striptest10-logging_striptest10.Po
+#include ./$(DEPDIR)/logging_striptest2-logging_striptest2.Po
+#include ./$(DEPDIR)/logging_unittest-logging_unittest.Po
+#include ./$(DEPDIR)/mock_log_test-mock-log_test.Po
+#include ./$(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
+#include ./$(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
+#include ./$(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
+#include ./$(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
+#include ./$(DEPDIR)/utilities_unittest-utilities_unittest.Po
 
 .cc.o:
-	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-#	source='$<' object='$@' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXXCOMPILE) -c -o $@ $<
+#	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+#	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+#	source='$<' object='$@' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-#	source='$<' object='$@' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+#	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+#	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+#	source='$<' object='$@' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cc.lo:
-	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
-#	source='$<' object='$@' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LTCXXCOMPILE) -c -o $@ $<
+#	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+#	mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+#	source='$<' object='$@' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LTCXXCOMPILE) -c -o $@ $<
 
 libglog_la-logging.lo: src/logging.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-logging.lo -MD -MP -MF $(DEPDIR)/libglog_la-logging.Tpo -c -o libglog_la-logging.lo `test -f 'src/logging.cc' || echo '$(srcdir)/'`src/logging.cc
-	mv -f $(DEPDIR)/libglog_la-logging.Tpo $(DEPDIR)/libglog_la-logging.Plo
-#	source='src/logging.cc' object='libglog_la-logging.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-logging.lo `test -f 'src/logging.cc' || echo '$(srcdir)/'`src/logging.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-logging.lo -MD -MP -MF $(DEPDIR)/libglog_la-logging.Tpo -c -o libglog_la-logging.lo `test -f 'src/logging.cc' || echo '$(srcdir)/'`src/logging.cc
+#	mv -f $(DEPDIR)/libglog_la-logging.Tpo $(DEPDIR)/libglog_la-logging.Plo
+#	source='src/logging.cc' object='libglog_la-logging.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-logging.lo `test -f 'src/logging.cc' || echo '$(srcdir)/'`src/logging.cc
 
 libglog_la-raw_logging.lo: src/raw_logging.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-raw_logging.lo -MD -MP -MF $(DEPDIR)/libglog_la-raw_logging.Tpo -c -o libglog_la-raw_logging.lo `test -f 'src/raw_logging.cc' || echo '$(srcdir)/'`src/raw_logging.cc
-	mv -f $(DEPDIR)/libglog_la-raw_logging.Tpo $(DEPDIR)/libglog_la-raw_logging.Plo
-#	source='src/raw_logging.cc' object='libglog_la-raw_logging.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-raw_logging.lo `test -f 'src/raw_logging.cc' || echo '$(srcdir)/'`src/raw_logging.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-raw_logging.lo -MD -MP -MF $(DEPDIR)/libglog_la-raw_logging.Tpo -c -o libglog_la-raw_logging.lo `test -f 'src/raw_logging.cc' || echo '$(srcdir)/'`src/raw_logging.cc
+#	mv -f $(DEPDIR)/libglog_la-raw_logging.Tpo $(DEPDIR)/libglog_la-raw_logging.Plo
+#	source='src/raw_logging.cc' object='libglog_la-raw_logging.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-raw_logging.lo `test -f 'src/raw_logging.cc' || echo '$(srcdir)/'`src/raw_logging.cc
 
 libglog_la-vlog_is_on.lo: src/vlog_is_on.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-vlog_is_on.lo -MD -MP -MF $(DEPDIR)/libglog_la-vlog_is_on.Tpo -c -o libglog_la-vlog_is_on.lo `test -f 'src/vlog_is_on.cc' || echo '$(srcdir)/'`src/vlog_is_on.cc
-	mv -f $(DEPDIR)/libglog_la-vlog_is_on.Tpo $(DEPDIR)/libglog_la-vlog_is_on.Plo
-#	source='src/vlog_is_on.cc' object='libglog_la-vlog_is_on.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-vlog_is_on.lo `test -f 'src/vlog_is_on.cc' || echo '$(srcdir)/'`src/vlog_is_on.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-vlog_is_on.lo -MD -MP -MF $(DEPDIR)/libglog_la-vlog_is_on.Tpo -c -o libglog_la-vlog_is_on.lo `test -f 'src/vlog_is_on.cc' || echo '$(srcdir)/'`src/vlog_is_on.cc
+#	mv -f $(DEPDIR)/libglog_la-vlog_is_on.Tpo $(DEPDIR)/libglog_la-vlog_is_on.Plo
+#	source='src/vlog_is_on.cc' object='libglog_la-vlog_is_on.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-vlog_is_on.lo `test -f 'src/vlog_is_on.cc' || echo '$(srcdir)/'`src/vlog_is_on.cc
 
 libglog_la-utilities.lo: src/utilities.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-utilities.lo -MD -MP -MF $(DEPDIR)/libglog_la-utilities.Tpo -c -o libglog_la-utilities.lo `test -f 'src/utilities.cc' || echo '$(srcdir)/'`src/utilities.cc
-	mv -f $(DEPDIR)/libglog_la-utilities.Tpo $(DEPDIR)/libglog_la-utilities.Plo
-#	source='src/utilities.cc' object='libglog_la-utilities.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-utilities.lo `test -f 'src/utilities.cc' || echo '$(srcdir)/'`src/utilities.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-utilities.lo -MD -MP -MF $(DEPDIR)/libglog_la-utilities.Tpo -c -o libglog_la-utilities.lo `test -f 'src/utilities.cc' || echo '$(srcdir)/'`src/utilities.cc
+#	mv -f $(DEPDIR)/libglog_la-utilities.Tpo $(DEPDIR)/libglog_la-utilities.Plo
+#	source='src/utilities.cc' object='libglog_la-utilities.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-utilities.lo `test -f 'src/utilities.cc' || echo '$(srcdir)/'`src/utilities.cc
 
 libglog_la-demangle.lo: src/demangle.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-demangle.lo -MD -MP -MF $(DEPDIR)/libglog_la-demangle.Tpo -c -o libglog_la-demangle.lo `test -f 'src/demangle.cc' || echo '$(srcdir)/'`src/demangle.cc
-	mv -f $(DEPDIR)/libglog_la-demangle.Tpo $(DEPDIR)/libglog_la-demangle.Plo
-#	source='src/demangle.cc' object='libglog_la-demangle.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-demangle.lo `test -f 'src/demangle.cc' || echo '$(srcdir)/'`src/demangle.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-demangle.lo -MD -MP -MF $(DEPDIR)/libglog_la-demangle.Tpo -c -o libglog_la-demangle.lo `test -f 'src/demangle.cc' || echo '$(srcdir)/'`src/demangle.cc
+#	mv -f $(DEPDIR)/libglog_la-demangle.Tpo $(DEPDIR)/libglog_la-demangle.Plo
+#	source='src/demangle.cc' object='libglog_la-demangle.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-demangle.lo `test -f 'src/demangle.cc' || echo '$(srcdir)/'`src/demangle.cc
 
 libglog_la-symbolize.lo: src/symbolize.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-symbolize.lo -MD -MP -MF $(DEPDIR)/libglog_la-symbolize.Tpo -c -o libglog_la-symbolize.lo `test -f 'src/symbolize.cc' || echo '$(srcdir)/'`src/symbolize.cc
-	mv -f $(DEPDIR)/libglog_la-symbolize.Tpo $(DEPDIR)/libglog_la-symbolize.Plo
-#	source='src/symbolize.cc' object='libglog_la-symbolize.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-symbolize.lo `test -f 'src/symbolize.cc' || echo '$(srcdir)/'`src/symbolize.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-symbolize.lo -MD -MP -MF $(DEPDIR)/libglog_la-symbolize.Tpo -c -o libglog_la-symbolize.lo `test -f 'src/symbolize.cc' || echo '$(srcdir)/'`src/symbolize.cc
+#	mv -f $(DEPDIR)/libglog_la-symbolize.Tpo $(DEPDIR)/libglog_la-symbolize.Plo
+#	source='src/symbolize.cc' object='libglog_la-symbolize.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-symbolize.lo `test -f 'src/symbolize.cc' || echo '$(srcdir)/'`src/symbolize.cc
 
 libglog_la-signalhandler.lo: src/signalhandler.cc
-	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-signalhandler.lo -MD -MP -MF $(DEPDIR)/libglog_la-signalhandler.Tpo -c -o libglog_la-signalhandler.lo `test -f 'src/signalhandler.cc' || echo '$(srcdir)/'`src/signalhandler.cc
-	mv -f $(DEPDIR)/libglog_la-signalhandler.Tpo $(DEPDIR)/libglog_la-signalhandler.Plo
-#	source='src/signalhandler.cc' object='libglog_la-signalhandler.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-signalhandler.lo `test -f 'src/signalhandler.cc' || echo '$(srcdir)/'`src/signalhandler.cc
+#	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -MT libglog_la-signalhandler.lo -MD -MP -MF $(DEPDIR)/libglog_la-signalhandler.Tpo -c -o libglog_la-signalhandler.lo `test -f 'src/signalhandler.cc' || echo '$(srcdir)/'`src/signalhandler.cc
+#	mv -f $(DEPDIR)/libglog_la-signalhandler.Tpo $(DEPDIR)/libglog_la-signalhandler.Plo
+#	source='src/signalhandler.cc' object='libglog_la-signalhandler.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libglog_la_CXXFLAGS) $(CXXFLAGS) -c -o libglog_la-signalhandler.lo `test -f 'src/signalhandler.cc' || echo '$(srcdir)/'`src/signalhandler.cc
 
 demangle_unittest-demangle_unittest.o: src/demangle_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -MT demangle_unittest-demangle_unittest.o -MD -MP -MF $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo -c -o demangle_unittest-demangle_unittest.o `test -f 'src/demangle_unittest.cc' || echo '$(srcdir)/'`src/demangle_unittest.cc
-	mv -f $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo $(DEPDIR)/demangle_unittest-demangle_unittest.Po
-#	source='src/demangle_unittest.cc' object='demangle_unittest-demangle_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -c -o demangle_unittest-demangle_unittest.o `test -f 'src/demangle_unittest.cc' || echo '$(srcdir)/'`src/demangle_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -MT demangle_unittest-demangle_unittest.o -MD -MP -MF $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo -c -o demangle_unittest-demangle_unittest.o `test -f 'src/demangle_unittest.cc' || echo '$(srcdir)/'`src/demangle_unittest.cc
+#	mv -f $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo $(DEPDIR)/demangle_unittest-demangle_unittest.Po
+#	source='src/demangle_unittest.cc' object='demangle_unittest-demangle_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -c -o demangle_unittest-demangle_unittest.o `test -f 'src/demangle_unittest.cc' || echo '$(srcdir)/'`src/demangle_unittest.cc
 
 demangle_unittest-demangle_unittest.obj: src/demangle_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -MT demangle_unittest-demangle_unittest.obj -MD -MP -MF $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo -c -o demangle_unittest-demangle_unittest.obj `if test -f 'src/demangle_unittest.cc'; then $(CYGPATH_W) 'src/demangle_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/demangle_unittest.cc'; fi`
-	mv -f $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo $(DEPDIR)/demangle_unittest-demangle_unittest.Po
-#	source='src/demangle_unittest.cc' object='demangle_unittest-demangle_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -c -o demangle_unittest-demangle_unittest.obj `if test -f 'src/demangle_unittest.cc'; then $(CYGPATH_W) 'src/demangle_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/demangle_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -MT demangle_unittest-demangle_unittest.obj -MD -MP -MF $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo -c -o demangle_unittest-demangle_unittest.obj `if test -f 'src/demangle_unittest.cc'; then $(CYGPATH_W) 'src/demangle_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/demangle_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/demangle_unittest-demangle_unittest.Tpo $(DEPDIR)/demangle_unittest-demangle_unittest.Po
+#	source='src/demangle_unittest.cc' object='demangle_unittest-demangle_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(demangle_unittest_CXXFLAGS) $(CXXFLAGS) -c -o demangle_unittest-demangle_unittest.obj `if test -f 'src/demangle_unittest.cc'; then $(CYGPATH_W) 'src/demangle_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/demangle_unittest.cc'; fi`
 
 logging_striptest0-logging_striptest_main.o: src/logging_striptest_main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest0-logging_striptest_main.o -MD -MP -MF $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo -c -o logging_striptest0-logging_striptest_main.o `test -f 'src/logging_striptest_main.cc' || echo '$(srcdir)/'`src/logging_striptest_main.cc
-	mv -f $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo $(DEPDIR)/logging_striptest0-logging_striptest_main.Po
-#	source='src/logging_striptest_main.cc' object='logging_striptest0-logging_striptest_main.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest0-logging_striptest_main.o `test -f 'src/logging_striptest_main.cc' || echo '$(srcdir)/'`src/logging_striptest_main.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest0-logging_striptest_main.o -MD -MP -MF $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo -c -o logging_striptest0-logging_striptest_main.o `test -f 'src/logging_striptest_main.cc' || echo '$(srcdir)/'`src/logging_striptest_main.cc
+#	mv -f $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo $(DEPDIR)/logging_striptest0-logging_striptest_main.Po
+#	source='src/logging_striptest_main.cc' object='logging_striptest0-logging_striptest_main.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest0-logging_striptest_main.o `test -f 'src/logging_striptest_main.cc' || echo '$(srcdir)/'`src/logging_striptest_main.cc
 
 logging_striptest0-logging_striptest_main.obj: src/logging_striptest_main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest0-logging_striptest_main.obj -MD -MP -MF $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo -c -o logging_striptest0-logging_striptest_main.obj `if test -f 'src/logging_striptest_main.cc'; then $(CYGPATH_W) 'src/logging_striptest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest_main.cc'; fi`
-	mv -f $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo $(DEPDIR)/logging_striptest0-logging_striptest_main.Po
-#	source='src/logging_striptest_main.cc' object='logging_striptest0-logging_striptest_main.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest0-logging_striptest_main.obj `if test -f 'src/logging_striptest_main.cc'; then $(CYGPATH_W) 'src/logging_striptest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest_main.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest0-logging_striptest_main.obj -MD -MP -MF $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo -c -o logging_striptest0-logging_striptest_main.obj `if test -f 'src/logging_striptest_main.cc'; then $(CYGPATH_W) 'src/logging_striptest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest_main.cc'; fi`
+#	mv -f $(DEPDIR)/logging_striptest0-logging_striptest_main.Tpo $(DEPDIR)/logging_striptest0-logging_striptest_main.Po
+#	source='src/logging_striptest_main.cc' object='logging_striptest0-logging_striptest_main.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest0_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest0-logging_striptest_main.obj `if test -f 'src/logging_striptest_main.cc'; then $(CYGPATH_W) 'src/logging_striptest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest_main.cc'; fi`
 
 logging_striptest10-logging_striptest10.o: src/logging_striptest10.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest10-logging_striptest10.o -MD -MP -MF $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo -c -o logging_striptest10-logging_striptest10.o `test -f 'src/logging_striptest10.cc' || echo '$(srcdir)/'`src/logging_striptest10.cc
-	mv -f $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo $(DEPDIR)/logging_striptest10-logging_striptest10.Po
-#	source='src/logging_striptest10.cc' object='logging_striptest10-logging_striptest10.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest10-logging_striptest10.o `test -f 'src/logging_striptest10.cc' || echo '$(srcdir)/'`src/logging_striptest10.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest10-logging_striptest10.o -MD -MP -MF $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo -c -o logging_striptest10-logging_striptest10.o `test -f 'src/logging_striptest10.cc' || echo '$(srcdir)/'`src/logging_striptest10.cc
+#	mv -f $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo $(DEPDIR)/logging_striptest10-logging_striptest10.Po
+#	source='src/logging_striptest10.cc' object='logging_striptest10-logging_striptest10.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest10-logging_striptest10.o `test -f 'src/logging_striptest10.cc' || echo '$(srcdir)/'`src/logging_striptest10.cc
 
 logging_striptest10-logging_striptest10.obj: src/logging_striptest10.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest10-logging_striptest10.obj -MD -MP -MF $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo -c -o logging_striptest10-logging_striptest10.obj `if test -f 'src/logging_striptest10.cc'; then $(CYGPATH_W) 'src/logging_striptest10.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest10.cc'; fi`
-	mv -f $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo $(DEPDIR)/logging_striptest10-logging_striptest10.Po
-#	source='src/logging_striptest10.cc' object='logging_striptest10-logging_striptest10.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest10-logging_striptest10.obj `if test -f 'src/logging_striptest10.cc'; then $(CYGPATH_W) 'src/logging_striptest10.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest10.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest10-logging_striptest10.obj -MD -MP -MF $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo -c -o logging_striptest10-logging_striptest10.obj `if test -f 'src/logging_striptest10.cc'; then $(CYGPATH_W) 'src/logging_striptest10.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest10.cc'; fi`
+#	mv -f $(DEPDIR)/logging_striptest10-logging_striptest10.Tpo $(DEPDIR)/logging_striptest10-logging_striptest10.Po
+#	source='src/logging_striptest10.cc' object='logging_striptest10-logging_striptest10.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest10_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest10-logging_striptest10.obj `if test -f 'src/logging_striptest10.cc'; then $(CYGPATH_W) 'src/logging_striptest10.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest10.cc'; fi`
 
 logging_striptest2-logging_striptest2.o: src/logging_striptest2.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest2-logging_striptest2.o -MD -MP -MF $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo -c -o logging_striptest2-logging_striptest2.o `test -f 'src/logging_striptest2.cc' || echo '$(srcdir)/'`src/logging_striptest2.cc
-	mv -f $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo $(DEPDIR)/logging_striptest2-logging_striptest2.Po
-#	source='src/logging_striptest2.cc' object='logging_striptest2-logging_striptest2.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest2-logging_striptest2.o `test -f 'src/logging_striptest2.cc' || echo '$(srcdir)/'`src/logging_striptest2.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest2-logging_striptest2.o -MD -MP -MF $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo -c -o logging_striptest2-logging_striptest2.o `test -f 'src/logging_striptest2.cc' || echo '$(srcdir)/'`src/logging_striptest2.cc
+#	mv -f $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo $(DEPDIR)/logging_striptest2-logging_striptest2.Po
+#	source='src/logging_striptest2.cc' object='logging_striptest2-logging_striptest2.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest2-logging_striptest2.o `test -f 'src/logging_striptest2.cc' || echo '$(srcdir)/'`src/logging_striptest2.cc
 
 logging_striptest2-logging_striptest2.obj: src/logging_striptest2.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest2-logging_striptest2.obj -MD -MP -MF $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo -c -o logging_striptest2-logging_striptest2.obj `if test -f 'src/logging_striptest2.cc'; then $(CYGPATH_W) 'src/logging_striptest2.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest2.cc'; fi`
-	mv -f $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo $(DEPDIR)/logging_striptest2-logging_striptest2.Po
-#	source='src/logging_striptest2.cc' object='logging_striptest2-logging_striptest2.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest2-logging_striptest2.obj `if test -f 'src/logging_striptest2.cc'; then $(CYGPATH_W) 'src/logging_striptest2.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest2.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -MT logging_striptest2-logging_striptest2.obj -MD -MP -MF $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo -c -o logging_striptest2-logging_striptest2.obj `if test -f 'src/logging_striptest2.cc'; then $(CYGPATH_W) 'src/logging_striptest2.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest2.cc'; fi`
+#	mv -f $(DEPDIR)/logging_striptest2-logging_striptest2.Tpo $(DEPDIR)/logging_striptest2-logging_striptest2.Po
+#	source='src/logging_striptest2.cc' object='logging_striptest2-logging_striptest2.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_striptest2_CXXFLAGS) $(CXXFLAGS) -c -o logging_striptest2-logging_striptest2.obj `if test -f 'src/logging_striptest2.cc'; then $(CYGPATH_W) 'src/logging_striptest2.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_striptest2.cc'; fi`
 
 logging_unittest-logging_unittest.o: src/logging_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT logging_unittest-logging_unittest.o -MD -MP -MF $(DEPDIR)/logging_unittest-logging_unittest.Tpo -c -o logging_unittest-logging_unittest.o `test -f 'src/logging_unittest.cc' || echo '$(srcdir)/'`src/logging_unittest.cc
-	mv -f $(DEPDIR)/logging_unittest-logging_unittest.Tpo $(DEPDIR)/logging_unittest-logging_unittest.Po
-#	source='src/logging_unittest.cc' object='logging_unittest-logging_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o logging_unittest-logging_unittest.o `test -f 'src/logging_unittest.cc' || echo '$(srcdir)/'`src/logging_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT logging_unittest-logging_unittest.o -MD -MP -MF $(DEPDIR)/logging_unittest-logging_unittest.Tpo -c -o logging_unittest-logging_unittest.o `test -f 'src/logging_unittest.cc' || echo '$(srcdir)/'`src/logging_unittest.cc
+#	mv -f $(DEPDIR)/logging_unittest-logging_unittest.Tpo $(DEPDIR)/logging_unittest-logging_unittest.Po
+#	source='src/logging_unittest.cc' object='logging_unittest-logging_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o logging_unittest-logging_unittest.o `test -f 'src/logging_unittest.cc' || echo '$(srcdir)/'`src/logging_unittest.cc
 
 logging_unittest-logging_unittest.obj: src/logging_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT logging_unittest-logging_unittest.obj -MD -MP -MF $(DEPDIR)/logging_unittest-logging_unittest.Tpo -c -o logging_unittest-logging_unittest.obj `if test -f 'src/logging_unittest.cc'; then $(CYGPATH_W) 'src/logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_unittest.cc'; fi`
-	mv -f $(DEPDIR)/logging_unittest-logging_unittest.Tpo $(DEPDIR)/logging_unittest-logging_unittest.Po
-#	source='src/logging_unittest.cc' object='logging_unittest-logging_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o logging_unittest-logging_unittest.obj `if test -f 'src/logging_unittest.cc'; then $(CYGPATH_W) 'src/logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT logging_unittest-logging_unittest.obj -MD -MP -MF $(DEPDIR)/logging_unittest-logging_unittest.Tpo -c -o logging_unittest-logging_unittest.obj `if test -f 'src/logging_unittest.cc'; then $(CYGPATH_W) 'src/logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/logging_unittest-logging_unittest.Tpo $(DEPDIR)/logging_unittest-logging_unittest.Po
+#	source='src/logging_unittest.cc' object='logging_unittest-logging_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o logging_unittest-logging_unittest.obj `if test -f 'src/logging_unittest.cc'; then $(CYGPATH_W) 'src/logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/logging_unittest.cc'; fi`
 
 mock_log_test-mock-log_test.o: src/mock-log_test.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -MT mock_log_test-mock-log_test.o -MD -MP -MF $(DEPDIR)/mock_log_test-mock-log_test.Tpo -c -o mock_log_test-mock-log_test.o `test -f 'src/mock-log_test.cc' || echo '$(srcdir)/'`src/mock-log_test.cc
-	mv -f $(DEPDIR)/mock_log_test-mock-log_test.Tpo $(DEPDIR)/mock_log_test-mock-log_test.Po
-#	source='src/mock-log_test.cc' object='mock_log_test-mock-log_test.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -c -o mock_log_test-mock-log_test.o `test -f 'src/mock-log_test.cc' || echo '$(srcdir)/'`src/mock-log_test.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -MT mock_log_test-mock-log_test.o -MD -MP -MF $(DEPDIR)/mock_log_test-mock-log_test.Tpo -c -o mock_log_test-mock-log_test.o `test -f 'src/mock-log_test.cc' || echo '$(srcdir)/'`src/mock-log_test.cc
+#	mv -f $(DEPDIR)/mock_log_test-mock-log_test.Tpo $(DEPDIR)/mock_log_test-mock-log_test.Po
+#	source='src/mock-log_test.cc' object='mock_log_test-mock-log_test.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -c -o mock_log_test-mock-log_test.o `test -f 'src/mock-log_test.cc' || echo '$(srcdir)/'`src/mock-log_test.cc
 
 mock_log_test-mock-log_test.obj: src/mock-log_test.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -MT mock_log_test-mock-log_test.obj -MD -MP -MF $(DEPDIR)/mock_log_test-mock-log_test.Tpo -c -o mock_log_test-mock-log_test.obj `if test -f 'src/mock-log_test.cc'; then $(CYGPATH_W) 'src/mock-log_test.cc'; else $(CYGPATH_W) '$(srcdir)/src/mock-log_test.cc'; fi`
-	mv -f $(DEPDIR)/mock_log_test-mock-log_test.Tpo $(DEPDIR)/mock_log_test-mock-log_test.Po
-#	source='src/mock-log_test.cc' object='mock_log_test-mock-log_test.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -c -o mock_log_test-mock-log_test.obj `if test -f 'src/mock-log_test.cc'; then $(CYGPATH_W) 'src/mock-log_test.cc'; else $(CYGPATH_W) '$(srcdir)/src/mock-log_test.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -MT mock_log_test-mock-log_test.obj -MD -MP -MF $(DEPDIR)/mock_log_test-mock-log_test.Tpo -c -o mock_log_test-mock-log_test.obj `if test -f 'src/mock-log_test.cc'; then $(CYGPATH_W) 'src/mock-log_test.cc'; else $(CYGPATH_W) '$(srcdir)/src/mock-log_test.cc'; fi`
+#	mv -f $(DEPDIR)/mock_log_test-mock-log_test.Tpo $(DEPDIR)/mock_log_test-mock-log_test.Po
+#	source='src/mock-log_test.cc' object='mock_log_test-mock-log_test.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(mock_log_test_CXXFLAGS) $(CXXFLAGS) -c -o mock_log_test-mock-log_test.obj `if test -f 'src/mock-log_test.cc'; then $(CYGPATH_W) 'src/mock-log_test.cc'; else $(CYGPATH_W) '$(srcdir)/src/mock-log_test.cc'; fi`
 
 signalhandler_unittest-signalhandler_unittest.o: src/signalhandler_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -MT signalhandler_unittest-signalhandler_unittest.o -MD -MP -MF $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo -c -o signalhandler_unittest-signalhandler_unittest.o `test -f 'src/signalhandler_unittest.cc' || echo '$(srcdir)/'`src/signalhandler_unittest.cc
-	mv -f $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
-#	source='src/signalhandler_unittest.cc' object='signalhandler_unittest-signalhandler_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -c -o signalhandler_unittest-signalhandler_unittest.o `test -f 'src/signalhandler_unittest.cc' || echo '$(srcdir)/'`src/signalhandler_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -MT signalhandler_unittest-signalhandler_unittest.o -MD -MP -MF $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo -c -o signalhandler_unittest-signalhandler_unittest.o `test -f 'src/signalhandler_unittest.cc' || echo '$(srcdir)/'`src/signalhandler_unittest.cc
+#	mv -f $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
+#	source='src/signalhandler_unittest.cc' object='signalhandler_unittest-signalhandler_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -c -o signalhandler_unittest-signalhandler_unittest.o `test -f 'src/signalhandler_unittest.cc' || echo '$(srcdir)/'`src/signalhandler_unittest.cc
 
 signalhandler_unittest-signalhandler_unittest.obj: src/signalhandler_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -MT signalhandler_unittest-signalhandler_unittest.obj -MD -MP -MF $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo -c -o signalhandler_unittest-signalhandler_unittest.obj `if test -f 'src/signalhandler_unittest.cc'; then $(CYGPATH_W) 'src/signalhandler_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/signalhandler_unittest.cc'; fi`
-	mv -f $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
-#	source='src/signalhandler_unittest.cc' object='signalhandler_unittest-signalhandler_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -c -o signalhandler_unittest-signalhandler_unittest.obj `if test -f 'src/signalhandler_unittest.cc'; then $(CYGPATH_W) 'src/signalhandler_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/signalhandler_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -MT signalhandler_unittest-signalhandler_unittest.obj -MD -MP -MF $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo -c -o signalhandler_unittest-signalhandler_unittest.obj `if test -f 'src/signalhandler_unittest.cc'; then $(CYGPATH_W) 'src/signalhandler_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/signalhandler_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Tpo $(DEPDIR)/signalhandler_unittest-signalhandler_unittest.Po
+#	source='src/signalhandler_unittest.cc' object='signalhandler_unittest-signalhandler_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(signalhandler_unittest_CXXFLAGS) $(CXXFLAGS) -c -o signalhandler_unittest-signalhandler_unittest.obj `if test -f 'src/signalhandler_unittest.cc'; then $(CYGPATH_W) 'src/signalhandler_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/signalhandler_unittest.cc'; fi`
 
 stacktrace_unittest-stacktrace_unittest.o: src/stacktrace_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -MT stacktrace_unittest-stacktrace_unittest.o -MD -MP -MF $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo -c -o stacktrace_unittest-stacktrace_unittest.o `test -f 'src/stacktrace_unittest.cc' || echo '$(srcdir)/'`src/stacktrace_unittest.cc
-	mv -f $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
-#	source='src/stacktrace_unittest.cc' object='stacktrace_unittest-stacktrace_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stacktrace_unittest-stacktrace_unittest.o `test -f 'src/stacktrace_unittest.cc' || echo '$(srcdir)/'`src/stacktrace_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -MT stacktrace_unittest-stacktrace_unittest.o -MD -MP -MF $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo -c -o stacktrace_unittest-stacktrace_unittest.o `test -f 'src/stacktrace_unittest.cc' || echo '$(srcdir)/'`src/stacktrace_unittest.cc
+#	mv -f $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
+#	source='src/stacktrace_unittest.cc' object='stacktrace_unittest-stacktrace_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stacktrace_unittest-stacktrace_unittest.o `test -f 'src/stacktrace_unittest.cc' || echo '$(srcdir)/'`src/stacktrace_unittest.cc
 
 stacktrace_unittest-stacktrace_unittest.obj: src/stacktrace_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -MT stacktrace_unittest-stacktrace_unittest.obj -MD -MP -MF $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo -c -o stacktrace_unittest-stacktrace_unittest.obj `if test -f 'src/stacktrace_unittest.cc'; then $(CYGPATH_W) 'src/stacktrace_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stacktrace_unittest.cc'; fi`
-	mv -f $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
-#	source='src/stacktrace_unittest.cc' object='stacktrace_unittest-stacktrace_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stacktrace_unittest-stacktrace_unittest.obj `if test -f 'src/stacktrace_unittest.cc'; then $(CYGPATH_W) 'src/stacktrace_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stacktrace_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -MT stacktrace_unittest-stacktrace_unittest.obj -MD -MP -MF $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo -c -o stacktrace_unittest-stacktrace_unittest.obj `if test -f 'src/stacktrace_unittest.cc'; then $(CYGPATH_W) 'src/stacktrace_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stacktrace_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Tpo $(DEPDIR)/stacktrace_unittest-stacktrace_unittest.Po
+#	source='src/stacktrace_unittest.cc' object='stacktrace_unittest-stacktrace_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stacktrace_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stacktrace_unittest-stacktrace_unittest.obj `if test -f 'src/stacktrace_unittest.cc'; then $(CYGPATH_W) 'src/stacktrace_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stacktrace_unittest.cc'; fi`
 
 stl_logging_unittest-stl_logging_unittest.o: src/stl_logging_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT stl_logging_unittest-stl_logging_unittest.o -MD -MP -MF $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo -c -o stl_logging_unittest-stl_logging_unittest.o `test -f 'src/stl_logging_unittest.cc' || echo '$(srcdir)/'`src/stl_logging_unittest.cc
-	mv -f $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
-#	source='src/stl_logging_unittest.cc' object='stl_logging_unittest-stl_logging_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stl_logging_unittest-stl_logging_unittest.o `test -f 'src/stl_logging_unittest.cc' || echo '$(srcdir)/'`src/stl_logging_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT stl_logging_unittest-stl_logging_unittest.o -MD -MP -MF $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo -c -o stl_logging_unittest-stl_logging_unittest.o `test -f 'src/stl_logging_unittest.cc' || echo '$(srcdir)/'`src/stl_logging_unittest.cc
+#	mv -f $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
+#	source='src/stl_logging_unittest.cc' object='stl_logging_unittest-stl_logging_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stl_logging_unittest-stl_logging_unittest.o `test -f 'src/stl_logging_unittest.cc' || echo '$(srcdir)/'`src/stl_logging_unittest.cc
 
 stl_logging_unittest-stl_logging_unittest.obj: src/stl_logging_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT stl_logging_unittest-stl_logging_unittest.obj -MD -MP -MF $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo -c -o stl_logging_unittest-stl_logging_unittest.obj `if test -f 'src/stl_logging_unittest.cc'; then $(CYGPATH_W) 'src/stl_logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stl_logging_unittest.cc'; fi`
-	mv -f $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
-#	source='src/stl_logging_unittest.cc' object='stl_logging_unittest-stl_logging_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stl_logging_unittest-stl_logging_unittest.obj `if test -f 'src/stl_logging_unittest.cc'; then $(CYGPATH_W) 'src/stl_logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stl_logging_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -MT stl_logging_unittest-stl_logging_unittest.obj -MD -MP -MF $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo -c -o stl_logging_unittest-stl_logging_unittest.obj `if test -f 'src/stl_logging_unittest.cc'; then $(CYGPATH_W) 'src/stl_logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stl_logging_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Tpo $(DEPDIR)/stl_logging_unittest-stl_logging_unittest.Po
+#	source='src/stl_logging_unittest.cc' object='stl_logging_unittest-stl_logging_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stl_logging_unittest_CXXFLAGS) $(CXXFLAGS) -c -o stl_logging_unittest-stl_logging_unittest.obj `if test -f 'src/stl_logging_unittest.cc'; then $(CYGPATH_W) 'src/stl_logging_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/stl_logging_unittest.cc'; fi`
 
 symbolize_unittest-symbolize_unittest.o: src/symbolize_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -MT symbolize_unittest-symbolize_unittest.o -MD -MP -MF $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo -c -o symbolize_unittest-symbolize_unittest.o `test -f 'src/symbolize_unittest.cc' || echo '$(srcdir)/'`src/symbolize_unittest.cc
-	mv -f $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo $(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
-#	source='src/symbolize_unittest.cc' object='symbolize_unittest-symbolize_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -c -o symbolize_unittest-symbolize_unittest.o `test -f 'src/symbolize_unittest.cc' || echo '$(srcdir)/'`src/symbolize_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -MT symbolize_unittest-symbolize_unittest.o -MD -MP -MF $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo -c -o symbolize_unittest-symbolize_unittest.o `test -f 'src/symbolize_unittest.cc' || echo '$(srcdir)/'`src/symbolize_unittest.cc
+#	mv -f $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo $(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
+#	source='src/symbolize_unittest.cc' object='symbolize_unittest-symbolize_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -c -o symbolize_unittest-symbolize_unittest.o `test -f 'src/symbolize_unittest.cc' || echo '$(srcdir)/'`src/symbolize_unittest.cc
 
 symbolize_unittest-symbolize_unittest.obj: src/symbolize_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -MT symbolize_unittest-symbolize_unittest.obj -MD -MP -MF $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo -c -o symbolize_unittest-symbolize_unittest.obj `if test -f 'src/symbolize_unittest.cc'; then $(CYGPATH_W) 'src/symbolize_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/symbolize_unittest.cc'; fi`
-	mv -f $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo $(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
-#	source='src/symbolize_unittest.cc' object='symbolize_unittest-symbolize_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -c -o symbolize_unittest-symbolize_unittest.obj `if test -f 'src/symbolize_unittest.cc'; then $(CYGPATH_W) 'src/symbolize_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/symbolize_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -MT symbolize_unittest-symbolize_unittest.obj -MD -MP -MF $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo -c -o symbolize_unittest-symbolize_unittest.obj `if test -f 'src/symbolize_unittest.cc'; then $(CYGPATH_W) 'src/symbolize_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/symbolize_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/symbolize_unittest-symbolize_unittest.Tpo $(DEPDIR)/symbolize_unittest-symbolize_unittest.Po
+#	source='src/symbolize_unittest.cc' object='symbolize_unittest-symbolize_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(symbolize_unittest_CXXFLAGS) $(CXXFLAGS) -c -o symbolize_unittest-symbolize_unittest.obj `if test -f 'src/symbolize_unittest.cc'; then $(CYGPATH_W) 'src/symbolize_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/symbolize_unittest.cc'; fi`
 
 utilities_unittest-utilities_unittest.o: src/utilities_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -MT utilities_unittest-utilities_unittest.o -MD -MP -MF $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo -c -o utilities_unittest-utilities_unittest.o `test -f 'src/utilities_unittest.cc' || echo '$(srcdir)/'`src/utilities_unittest.cc
-	mv -f $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo $(DEPDIR)/utilities_unittest-utilities_unittest.Po
-#	source='src/utilities_unittest.cc' object='utilities_unittest-utilities_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -c -o utilities_unittest-utilities_unittest.o `test -f 'src/utilities_unittest.cc' || echo '$(srcdir)/'`src/utilities_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -MT utilities_unittest-utilities_unittest.o -MD -MP -MF $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo -c -o utilities_unittest-utilities_unittest.o `test -f 'src/utilities_unittest.cc' || echo '$(srcdir)/'`src/utilities_unittest.cc
+#	mv -f $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo $(DEPDIR)/utilities_unittest-utilities_unittest.Po
+#	source='src/utilities_unittest.cc' object='utilities_unittest-utilities_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -c -o utilities_unittest-utilities_unittest.o `test -f 'src/utilities_unittest.cc' || echo '$(srcdir)/'`src/utilities_unittest.cc
 
 utilities_unittest-utilities_unittest.obj: src/utilities_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -MT utilities_unittest-utilities_unittest.obj -MD -MP -MF $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo -c -o utilities_unittest-utilities_unittest.obj `if test -f 'src/utilities_unittest.cc'; then $(CYGPATH_W) 'src/utilities_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/utilities_unittest.cc'; fi`
-	mv -f $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo $(DEPDIR)/utilities_unittest-utilities_unittest.Po
-#	source='src/utilities_unittest.cc' object='utilities_unittest-utilities_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -c -o utilities_unittest-utilities_unittest.obj `if test -f 'src/utilities_unittest.cc'; then $(CYGPATH_W) 'src/utilities_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/utilities_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -MT utilities_unittest-utilities_unittest.obj -MD -MP -MF $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo -c -o utilities_unittest-utilities_unittest.obj `if test -f 'src/utilities_unittest.cc'; then $(CYGPATH_W) 'src/utilities_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/utilities_unittest.cc'; fi`
+#	mv -f $(DEPDIR)/utilities_unittest-utilities_unittest.Tpo $(DEPDIR)/utilities_unittest-utilities_unittest.Po
+#	source='src/utilities_unittest.cc' object='utilities_unittest-utilities_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(utilities_unittest_CXXFLAGS) $(CXXFLAGS) -c -o utilities_unittest-utilities_unittest.obj `if test -f 'src/utilities_unittest.cc'; then $(CYGPATH_W) 'src/utilities_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/utilities_unittest.cc'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1421,8 +1421,8 @@ uninstall-am: uninstall-dist_docDATA uninstall-glogincludeHEADERS \
 	uninstall-glogincludeHEADERS uninstall-libLTLIBRARIES \
 	uninstall-nodist_glogincludeHEADERS uninstall-pkgconfigDATA
 
-#  # TODO(csilvers): check if -fomit-frame-pointer might be in $(CXXFLAGS),
-#  #                 before setting this.
+  # TODO(csilvers): check if -fomit-frame-pointer might be in $(CXXFLAGS),
+  #                 before setting this.
 logging_striplog_test_sh: logging_striptest0 logging_striptest2 logging_striptest10
 	$(top_srcdir)/src/logging_striplog_test.sh
 demangle_unittest_sh: demangle_unittest
