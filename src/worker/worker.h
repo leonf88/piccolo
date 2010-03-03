@@ -49,6 +49,7 @@ public:
 
 private:
   void Checkpoint(int epoch);
+  void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
 
   RecordFile *checkpoint_delta_;

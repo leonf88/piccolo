@@ -3,13 +3,19 @@
 #include "kernel/kernel-registry.h"
 
 DEFINE_bool(work_stealing, true, "");
+DECLARE_string(checkpoint_dir);
 
 namespace dsm {
 
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
-  epoch_ = 0;
+  restored_checkpoint_epoch_ = 0;
+  restored_kernel_epoch_ = 0;
+  checkpoint_epoch_ = 0;
+  kernel_epoch_ = 0;
+  last_checkpoint_ = Now();
+
   rpc_ = new RPCHelper(&world_);
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(WorkerState(i));
@@ -70,18 +76,62 @@ bool Master::WorkerState::serves(int table, int shard) {
 }
 
 void Master::checkpoint() {
-  epoch_ += 1;
+  if (checkpoint_epoch_ < restored_checkpoint_epoch_) {
+    LOG(INFO) << "Skipping implied checkpoint.";
+    checkpoint_epoch_ += 1;
+    return;
+  }
+
+  checkpoint_epoch_ += 1;
+
   StartCheckpoint req;
-  req.set_epoch(epoch_);
+  req.set_epoch(checkpoint_epoch_);
   rpc_->Broadcast(MTYPE_CHECKPOINT, req);
 
   // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
   // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
   // is complete.
   for (int i = 0; i < config_.num_workers(); ++i) {
-    CheckpointDone resp;
-    LOG(INFO) << "Waiting for checkpoint to finish... " << i << " of " << world_.Get_size();
+    EmptyMessage resp;
+    LOG(INFO) << "Waiting for checkpoint to finish... " << i + 1 << " of " << config_.num_workers();
     rpc_->ReadAny(NULL, MTYPE_CHECKPOINT_DONE, &resp);
+  }
+
+  CheckpointInfo cinfo;
+  cinfo.set_checkpoint_epoch(checkpoint_epoch_);
+  cinfo.set_kernel_epoch(kernel_epoch_);
+
+  LocalFile lf(StringPrintf("%s/checkpoint.%05d.finished", FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_), "w");
+  lf.writeString(cinfo.SerializeAsString());
+
+  checkpoint_epoch_ += 1;
+}
+
+void Master::restore() {
+  vector<string> matches = File::Glob(FLAGS_checkpoint_dir + "/checkpoint.*.finished");
+  if (matches.empty())
+    return;
+
+  // Glob returns results in sorted order, so our last checkpoint will be the last from glob.
+  const char* fname = basename(matches.back().c_str());
+  int epoch = -1;
+  CHECK_EQ(sscanf(fname, "checkpoint.%05d.finished", &epoch), 1);
+
+  CheckpointInfo info;
+  info.ParseFromString(File::Slurp(matches.back()));
+
+  restored_kernel_epoch_ = info.kernel_epoch();
+  restored_checkpoint_epoch_ = info.checkpoint_epoch();
+  LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
+
+  StartRestore req;
+  req.set_epoch(epoch);
+  rpc_->Broadcast(MTYPE_RESTORE, req);
+
+  for (int i = 0; i < config_.num_workers(); ++i) {
+    EmptyMessage resp;
+    LOG(INFO) << "Waiting for checkpoint to finish... " << i + 1 << " of " << config_.num_workers();
+    rpc_->ReadAny(NULL, MTYPE_RESTORE_DONE, &resp);
   }
 }
 
@@ -187,6 +237,13 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
+  if (kernel_epoch_ < restored_kernel_epoch_) {
+    LOG(INFO) << "Skipping kernel: " << r.kernel << ":" << r.method
+              << "; later checkpoint exists.";
+    kernel_epoch_++;
+    return;
+  }
+
   Timer t;
 
   for (int i = 0; i < workers_.size(); ++i) {
@@ -217,6 +274,10 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   int count = 0;
   while (count < shards.size()) {
+    if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
+      checkpoint();
+    }
+
     if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
       int w_id = 0;
       rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
@@ -257,6 +318,8 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
                LOG(INFO) << StringPrintf("Progress (%s): %s left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
     });
   }
+
+  kernel_epoch_++;
 
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
