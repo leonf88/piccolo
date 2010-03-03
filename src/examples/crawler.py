@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
 import json, os, re, socket, sys, time, types
-import urllib, urlparse, cgi, httplib, urllib2
+import urllib, cgi, httplib, urllib2
+
+from urlparse import urlparse, urljoin 
 
 from collections import defaultdict
 
@@ -18,7 +20,8 @@ from threading import Thread, Lock
 from Queue import PriorityQueue, Queue, Empty, Full  
 
 import logging
-logging.basicConfig(filename='logs/crawl.log.%s' % socket.gethostname(), level=logging.INFO)
+logging.basicConfig(filename='logs/crawl.log.%s.%d' % (socket.gethostname(), os.getpid()), 
+                    level=logging.INFO)
 
 console = logging.StreamHandler()
 console.setLevel(logging.WARN)
@@ -34,8 +37,7 @@ def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args, **kwargs)
 def error(fmt, *args, **kwargs): logging.error(str(fmt) % args, **kwargs)
 def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args, **kwargs)
 
-
-CRAWLER_THREADS = 200
+CRAWLER_THREADS = 10
 ROBOTS_REJECT_ALL = '/'
 MAX_ROBOTS_SIZE = 50000
 MAX_PAGE_SIZE = 500000
@@ -102,9 +104,14 @@ class LockedFile(object):
 url_log = LockedFile('/scratch/urls.out')
 data_log = LockedFile('/scratch/pages.out')
 
+def key_from_site(site): return domain_from_site(site) + ' ' + site
+    
+def key_from_url(url): return domain_from_site(url.netloc) + ' ' + url.geturl()
+def url_from_key(key): return urlparse(key[key.find(' ') + 1:])
+
 class Page(object):
     @staticmethod
-    def Create(url):
+    def create(url):
         p = Page()
         p.domain = domain_from_site(url.netloc)
         p.url = url
@@ -112,7 +119,8 @@ class Page(object):
         p.content = None
         p.outlinks = []
         return p
-
+    
+    def key(self): return key_from_url(self.url)
 
 try:
     import crawler_support as cs
@@ -129,11 +137,12 @@ def initialize():
     crawltime_table = cs.kernel().crawl_table(1)
     robots_table = cs.kernel().robots_table(2)
     domain_counts = cs.kernel().crawl_table(3)
-    fetch_table.put("http://www.rjpower.org/gitweb", FetchStatus.SHOULD_FETCH)
+    fetch_table.put(key_from_url(urlparse("http://www.rjpower.org/crawlstart.html")), 
+                    FetchStatus.SHOULD_FETCH)
     return 0
 
 def check_robots(url):
-    disallowed = robots_table.get(url.netloc).split('\n')
+    disallowed = robots_table.get(key_from_site(url.netloc)).split('\n')
     for d in disallowed:
         if not d: continue
         if url.path.startswith(d): return False
@@ -163,7 +172,7 @@ def parse_robots(site, rtxt):
                 if path.endswith('*'): path = path[:-1]
                 if path: disallow[path] = 1
                 
-        robots_table.put(site, '\n'.join(disallow.keys()))
+        robots_table.put(key_from_site(site), '\n'.join(disallow.keys()))
         info('Robots fetch of %s successful.', site)
     except:
         warn('Failed to parse robots file!', exc_info=1)
@@ -174,15 +183,15 @@ def fetch_page(page):
         page.content = crawl_opener.open(page.url_s).read(MAX_PAGE_SIZE)
         url_log.write(page.url_s + '\n')
         data_log.writeRecord(page.content, url=page.url_s, domain=page.domain)
-        fetch_table.put(page.url_s, FetchStatus.FETCH_DONE)
+        fetch_table.put(page.key(), FetchStatus.FETCH_DONE)
     except (urllib2.URLError, socket.timeout):
         warn('Fetch of %s failed.', page.url_s)
         page.content = ''
-        fetch_table.put(page.url_s, FetchStatus.ERROR)
+        fetch_table.put(page.key(), FetchStatus.ERROR)
 
 def join_url(base, l):
     if l.find('#') != -1: l = l[:l.find('#')]    
-    j = urlparse.urljoin(base, l)
+    j = urljoin(base, l)
     if len(j) > 200 or len(j) < 6 or ' ' in j or not j.startswith('http://') or j.count('&') > 2: return None
     return j
 
@@ -203,7 +212,7 @@ def add_links(page):
     for l in page.outlinks:
         debug('Adding link to fetch queue: %s', l)
         if not isinstance(l, types.StringType): info('Garbage link: %s', l)
-        else: fetch_table.put(l, FetchStatus.SHOULD_FETCH)
+        else: fetch_table.put(key_from_url(urlparse(l)), FetchStatus.SHOULD_FETCH)
 
 class CrawlThread(Thread):    
     def __init__(self): 
@@ -242,7 +251,7 @@ class CrawlThread(Thread):
             except Empty: pass
             except:
                 warn('Error when processing page %s', page.url_s, exc_info=1)
-                fetch_table.put(page.url_s, FetchStatus.ERROR)
+                fetch_table.put(page.key(), FetchStatus.ERROR)
 
 class StatusThread(Thread):
     def __init__(self, threadlist):
@@ -262,8 +271,8 @@ class StatusThread(Thread):
                     warn('Fetched [%s]: %s', FetchStatus.as_str[k], v)
                 
                 for t in sorted(self.threads, key=lambda t: t.last_active):
-                    warn('Thread [%s]: %.2f %s', 
-                         ThreadStatus.as_str[t.status], now() - t.last_active, t.url)
+                    if t.status != ThreadStatus.IDLE:
+                        warn('Thread [%s]: %.2f %s', ThreadStatus.as_str[t.status], now() - t.last_active, t.url)
                     
                 it = domain_counts.get_typed_iterator(cs.kernel().current_shard())
                 dcounts = []            
@@ -279,7 +288,7 @@ class StatusThread(Thread):
                 warn('Failed to print status!?', exc_info=1)
                             
             time.sleep(10)
-    
+
 
 def crawl():    
     threads = [CrawlThread() for i in range(CRAWLER_THREADS)]
@@ -289,48 +298,65 @@ def crawl():
     status.start()
     
     warn('Starting crawl!')
+    last_t = time.time()
         
     while 1:
         it = fetch_table.get_typed_iterator(cs.kernel().current_shard())
-        time.sleep(1)        
+        fetch_table.SendUpdates()
+        fetch_table.CheckForUpdates()
         
-        info('Queue thread running...')
+        time.sleep(0.1)
+         
+        if time.time() - last_t > 10:
+            warn('Queue thread running...')
+            last_t = time.time()
+        
         while not it.done():
-            url_s = it.key()
+            url = url_from_key(it.key())
             status = it.value()
             it.Next()
 
             if status != FetchStatus.SHOULD_FETCH:
                 continue            
         
-            url = urlparse.urlparse(url_s)
-            site = url.netloc
-            if not robots_table.contains(site):
-                info('Fetching robots: %s', site)
-                robots_queue.put(site)
-                robots_table.put(site, RobotStatus.FETCHING)
-                continue         
-            
-            if robots_table.get(site) == RobotStatus.FETCHING:
-                debug('Waiting for robot fetch: %s', url_s)
-                continue
-            
-            if not check_robots(url):
-                info('Blocked by robots "%s"', url_s)
-                fetch_table.put(url_s, FetchStatus.ROBOTS_BLACKLIST)
-                info("%s -> %s", url_s, fetch_table.get(url_s))
-                continue
-              
-            last_crawl = 0
-            domain = domain_from_site(site)
-            if crawltime_table.contains(domain):
-                last_crawl = crawltime_table.get(domain)
-            
-            if now() - last_crawl < 60:
-                debug('Waiting for politeness: %s, %d', url_s, now() - last_crawl)
-            else:
-                debug('Queueing: %s', url_s)
-                crawl_queue.put(Page.Create(url))
-                fetch_table.put(url_s, FetchStatus.FETCHING)
-                domain_counts.put(domain, 1)
-                crawltime_table.put(domain, int(now()))
+            check_url(url, status)        
+
+
+def check_url(url, status):
+    url_s = url.geturl()
+    site = url.netloc
+    rkey = key_from_site(site)
+
+    debug('Checking: %s %s', url_s, status)
+        
+    if not robots_table.contains(rkey):
+        info('Fetching robots: %s', site)
+        robots_table.put(rkey, RobotStatus.FETCHING)
+        robots_queue.put(site)
+        if robots_table.get(rkey) != RobotStatus.FETCHING:
+            fatal("WTF????")
+            exit(1)
+        return         
+    
+    if robots_table.get(rkey) == RobotStatus.FETCHING:
+        debug('Waiting for robot fetch: %s', url_s)
+        return
+    
+    if not check_robots(url):
+        info('Blocked by robots "%s"', url_s)
+        fetch_table.put(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST)
+        return
+      
+    last_crawl = 0
+    domain = domain_from_site(site)
+    if crawltime_table.contains(domain):
+        last_crawl = crawltime_table.get(domain)
+    
+    if now() - last_crawl < 60:
+        debug('Waiting for politeness: %s, %d', url_s, now() - last_crawl)
+    else:
+        debug('Queueing: %s', url_s)
+        crawl_queue.put(Page.create(url))
+        fetch_table.put(key_from_url(url), FetchStatus.FETCHING)
+        domain_counts.put(domain, 1)
+        crawltime_table.put(domain, int(now()))

@@ -69,9 +69,10 @@ int main(int argc, const char* argv[]) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_slots(1);
 
-  Registry::create_table<string, int>(0, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
+  // Fetch, crawltime, robots, and counts
+  Registry::create_table<string, int>(0, conf.num_workers(), &DomainSharding, &Accumulator<int>::max);
   Registry::create_table<string, int>(1, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
-  Registry::create_table<string, string>(2, conf.num_workers(), &StringSharding, &Accumulator<string>::replace);
+  Registry::create_table<string, string>(2, conf.num_workers(), &DomainSharding, &Accumulator<string>::replace);
   Registry::create_table<string, int>(3, conf.num_workers(), &StringSharding, &Accumulator<int>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
