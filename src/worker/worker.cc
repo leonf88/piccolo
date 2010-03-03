@@ -257,8 +257,7 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
     delete checkpoint_delta_;
     checkpoint_delta_ = NULL;
 
-    CheckpointDone req;
-    req.set_epoch(epoch_);
+    EmptyMessage req;
     rpc_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
   }
 }
@@ -290,6 +289,20 @@ void Worker::Checkpoint(int epoch) {
   for (int i = 0; i < peers_.size(); ++i) {
     peers_[i]->Send(MTYPE_PUT_REQUEST, epoch_marker);
   }
+}
+
+void Worker::Restore(int epoch) {
+  LOG(INFO) << "Worker restoring state from epoch: " << epoch;
+  epoch_ = epoch;
+
+  Registry::TableMap &t = Registry::get_tables();
+  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+    GlobalTable* t = i->second;
+    t->restore(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
+  }
+
+  EmptyMessage req;
+  rpc_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
 }
 
 void Worker::CheckForWorkerUpdates() {
@@ -373,6 +386,11 @@ void Worker::CheckForMasterUpdates() {
   StartCheckpoint checkpoint_msg;
   while (rpc_->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
     Checkpoint(checkpoint_msg.epoch());
+  }
+
+  StartRestore restore_msg;
+  while (rpc_->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
+    Restore(restore_msg.epoch());
   }
 
   ShardAssignmentRequest shard_req;

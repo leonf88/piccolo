@@ -18,6 +18,7 @@ public:
 
     int table;
     int checkpoint_interval;
+    int epoch;
 
     static RunDescriptor C(const string& k, const string& m, int t, int c_interval=-1) {
       RunDescriptor r = { k, m, t, c_interval };
@@ -38,11 +39,21 @@ public:
   // all active tables in the system will have been committed to disk.
   void checkpoint();
 
+  // Attempt restore from a previous checkpoint for this job.  If none exists,
+  // the process is left in the original state.
+  void restore();
+
 private:
   ConfigData config_;
   RPCHelper *rpc_;
   MPI::Intracomm world_;
-  int epoch_;
+  int restored_checkpoint_epoch_;
+  int restored_kernel_epoch_;
+  int checkpoint_epoch_;
+  int kernel_epoch_;
+
+  // Used for interval checkpointing.
+  double last_checkpoint_;
 
   enum TaskStatus {
     ASSIGNED  = 0,
