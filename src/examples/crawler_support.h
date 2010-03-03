@@ -1,3 +1,6 @@
+#ifndef CRAWLER_SUPPORT_H
+#define CRAWLER_SUPPORT_H
+
 #ifdef SWIG
 %module crawler_support
 
@@ -24,9 +27,24 @@ using namespace std;
 %typemap(out) int& {
   $result = PyInt_FromLong(*$1);
 }
+#endif
 
-DSMKernel* kernel();
+#include "client.h"
 
+using namespace std;
+
+dsm::DSMKernel* kernel();
+
+// Shard based on the domain contained within "in".  This is separated from the
+// full url by a space.
+static int DomainSharding(const string& in, int num_shards) {
+  int d_end = in.find(" ");
+//  LOG(INFO) << "Shard for " << in.substr(0, d_end) << " is "
+//            << SuperFastHash(in.data(), d_end) % num_shards;
+  return SuperFastHash(in.data(), d_end) % num_shards;
+}
+
+#ifdef SWIG
 %template(CrawlTable) dsm::TypedGlobalTable<string, int>;
 %template(CrawlTable_Iterator) dsm::TypedTable_Iterator<string, int>;
 
@@ -37,9 +55,6 @@ DSMKernel* kernel();
   %template(robots_table) get_table<string, string>;
   %template(crawl_table) get_table<string, int>;
 }
+#endif
 
-#else
-#include "client.h"
-using namespace std;
-dsm::DSMKernel* kernel();
 #endif
