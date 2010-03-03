@@ -16,6 +16,7 @@ public:
   virtual bool readLine(string *out) = 0;
   virtual bool eof() = 0;
   virtual void seek(int64_t pos) = 0;
+  virtual uint64_t tell() = 0;
 
   int writeString(const string& buffer) { return write(buffer.data(), buffer.size()); }
 
@@ -30,6 +31,7 @@ public:
   static string Slurp(const string& file);
   static void Dump(const string& file, StringPiece data);
   static void Mkdirs(const string& path);
+  static vector<string> Glob(const string& dir);
 private:
 };
 
@@ -43,6 +45,7 @@ public:
   int read(char *buffer, int len);
   int write(const char* buffer, int len);
   void seek(int64_t pos) { fseek(fp, pos, SEEK_SET); }
+  uint64_t tell() { return ftell(fp); }
 
   void Printf(const char* p, ...);
   virtual FILE* filePointer() { return fp; }
@@ -70,7 +73,10 @@ public:
 
   string *data() { return out_; }
 
-  size_t pos() { return out_->size(); }
+  size_t pos() {
+    if (out_) { return out_->size(); }
+    return out_f_->tell();
+  }
 
 private:
   string *out_;
@@ -123,7 +129,10 @@ public:
     else { return f_src_->eof(); }
   }
 
-  size_t pos() { return pos_; }
+  size_t pos() {
+    if (src_) { return pos_; }
+    return f_src_->tell();
+  }
 
   void seek(int p) {
     if (src_) { pos_ = p; }
