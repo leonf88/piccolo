@@ -3,8 +3,21 @@
 #include "google/protobuf/message.h"
 #include <lzo/lzo1x.h>
 #include <stdio.h>
+#include <glob.h>
 
 namespace dsm {
+
+vector<string> File::Glob(const string& pattern) {
+  glob_t globbuf;
+  globbuf.gl_offs = 0;
+  glob(pattern.c_str(), 0, NULL, &globbuf);
+  vector<string> out;
+  for (int i = 0; i < globbuf.gl_pathc; ++i) {
+    out.push_back(globbuf.gl_pathv[i]);
+  }
+  globfree(&globbuf);
+  return out;
+}
 
 void File::Mkdirs(const string& path) {
   system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str());
