@@ -202,7 +202,7 @@ template <class K, class V>
 V& HashMap<K, V>::get(const K& k) {
   Bucket *b = bucket_for_key(k);
   if (!b) {
-    LOG(FATAL) << "No entry for key: " << k;
+    LOG(FATAL) << "No entry for key.";
   }
 
   return b->value;
