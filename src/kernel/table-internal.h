@@ -94,6 +94,13 @@ public:
 
   void restore(const string& f) {
     data_.restore(f);
+
+    // Replay delta log.
+    RecordFile rf(f + ".delta", "r");
+    HashPut p;
+    while (rf.read(&p)) {
+      ApplyUpdates(p);
+    }
   }
 
 private:
