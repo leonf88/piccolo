@@ -4,7 +4,7 @@ using namespace dsm;
 
 
 DEFINE_int32(table_size, 100000, "");
-DEFINE_int32(shards, 100, "");
+DEFINE_int32(shards, 10, "");
 
 static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
@@ -83,6 +83,7 @@ int main(int argc, char **argv) {
     Master m(conf);
     RUN_ALL(m, TableKernel, TestPut, 0);
     m.checkpoint();
+    m.restore();
     RUN_ALL(m, TableKernel, TestGetLocal, 0);
     m.checkpoint();
     RUN_ALL(m, TableKernel, TestGet, 0);
