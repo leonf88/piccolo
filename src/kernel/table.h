@@ -123,6 +123,8 @@ public:
     return partitions_[shard]->get_iterator();
   }
 
+  // Generic methods against serialized strings.
+  virtual bool contains_str(StringPiece k) = 0;
   virtual int get_shard_str(StringPiece k) = 0;
 
   bool is_local_shard(int shard);
@@ -132,7 +134,9 @@ public:
   int get_owner(int shard);
 
   void get_local(const StringPiece &k, string *v);
-  void get_remote(int shard, const StringPiece &k, string* v);
+
+  // Fetch key k from the node owning it.  Returns true if the key exists.
+  bool get_remote(int shard, const StringPiece &k, string* v);
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();

@@ -99,6 +99,9 @@ public:
   V get(const K &k);
 
   bool contains(const K& k);
+  bool contains_str(StringPiece k) {
+    return contains(data::from_string<K>(k));
+  }
 
   // Store the given key-value pair in this hash, applying the accumulation
   // policy set at construction.  If 'k' has affinity for a remote thread,
@@ -215,11 +218,8 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->contains(k);
   }
 
-  return false;
-
-//  string v_str;
-//  get_remote(shard, Data::to_string<K>(k), &v_str);
-//  return Data::from_string<V>(v_str);
+  string v_str;
+  return get_remote(shard, data::to_string<K>(k), &v_str);
 }
 
 template <class K, class V>

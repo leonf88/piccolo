@@ -43,7 +43,7 @@ int GlobalTable::get_owner(int shard) {
   return partitions_[shard]->owner;
 }
 
-void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
+bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   HashGet req;
   HashPut resp;
 
@@ -58,8 +58,13 @@ void GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   w->Send(peer, MTYPE_GET_REQUEST, req);
   w->Read(peer, MTYPE_GET_RESPONSE, &resp);
 
+  if (resp.missing_key()) {
+    return false;
+  }
+
   HashPutCoder h(&resp);
   v->assign(h.value(0).data, h.value(0).len);
+  return true;
 }
 
 void GlobalTable::checkpoint(const string& f) {

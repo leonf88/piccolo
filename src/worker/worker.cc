@@ -341,12 +341,16 @@ void Worker::CheckForWorkerUpdates() {
     get_resp.set_shard(-1);
     get_resp.set_done(true);
     get_resp.set_epoch(epoch_);
-
     HashPutCoder h(&get_resp);
 
-    string v;
-    Registry::get_table(get_req.table())->get_local(get_req.key(), &v);
-    h.add_pair(get_req.key(), v);
+    GlobalTable* t = Registry::get_table(get_req.table());
+    if (!t->contains_str(get_req.key())) {
+      get_resp.set_missing_key(true);
+    } else {
+      string v;
+      t->get_local(get_req.key(), &v);
+      h.add_pair(get_req.key(), v);
+    }
 
     SendRequest *r = peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
     stats_.set_bytes_out(stats_.bytes_out() + r->payload.size());
