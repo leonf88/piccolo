@@ -26,10 +26,10 @@
 #define HAVE_LIBPTHREAD 1
 
 /* Define to 1 if you have the <libunwind.h> header file. */
-/* #undef HAVE_LIBUNWIND_H */
+#define HAVE_LIBUNWIND_H 1
 
 /* define if you have google gflags library */
-#define HAVE_LIB_GFLAGS 1
+/* #undef HAVE_LIB_GFLAGS */
 
 /* define if you have google gmock library */
 /* #undef HAVE_LIB_GMOCK */
@@ -88,6 +88,9 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
 
+/* Define to 1 if you have the <sys/ucontext.h> header file. */
+#define HAVE_SYS_UCONTEXT_H 1
+
 /* Define to 1 if you have the <sys/utsname.h> header file. */
 #define HAVE_SYS_UTSNAME_H 1
 
@@ -128,14 +131,14 @@
 #define PACKAGE_VERSION "0.3.0"
 
 /* How to access the PC from a struct ucontext */
-#define PC_FROM_UCONTEXT uc_mcontext.gregs[REG_EIP]
+#define PC_FROM_UCONTEXT uc_mcontext.gregs[REG_RIP]
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
 /* #undef PTHREAD_CREATE_JOINABLE */
 
 /* The size of `void *', as computed by sizeof. */
-#define SIZEOF_VOID_P 4
+#define SIZEOF_VOID_P 8
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1

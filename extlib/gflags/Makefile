@@ -36,8 +36,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-build_triplet = i686-pc-linux-gnu
-host_triplet = i686-pc-linux-gnu
+build_triplet = x86_64-unknown-linux-gnu
+host_triplet = x86_64-unknown-linux-gnu
 
 # These are good warnings to turn on by default,
 am__append_1 = -Wall -Wwrite-strings -Woverloaded-virtual -Wno-sign-compare
@@ -178,21 +178,21 @@ DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
 distuninstallcheck_listfiles = find . -type f -print
 distcleancheck_listfiles = find . -type f -print
-ACLOCAL = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run aclocal-1.9
-AMTAR = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run tar
+ACLOCAL = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run aclocal-1.9
+AMTAR = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run tar
 AR = ar
-AUTOCONF = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run automake-1.9
-AWK = mawk
+AUTOCONF = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run autoconf
+AUTOHEADER = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run autoheader
+AUTOMAKE = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run automake-1.9
+AWK = gawk
 CC = gcc
-CCDEPMODE = depmode=gcc3
+CCDEPMODE = depmode=none
 CFLAGS = -g -O2
 CPP = gcc -E
 CPPFLAGS = 
 CXX = g++
 CXXCPP = g++ -E
-CXXDEPMODE = depmode=gcc3
+CXXDEPMODE = depmode=none
 CXXFLAGS = -g -O2
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
@@ -221,7 +221,7 @@ LIBTOOL_DEPS = ./ltmain.sh
 LIPO = @LIPO@
 LN_S = ln -s
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} /home/jinyang/co/upc_hash/extlib/gflags/missing --run makeinfo
+MAKEINFO = ${SHELL} /home/power/w/hashdsm/extlib/gflags/missing --run makeinfo
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = 
@@ -243,10 +243,10 @@ SET_MAKE =
 SHELL = /bin/bash
 STRIP = strip
 VERSION = 1.1
-abs_builddir = /home/jinyang/co/upc_hash/extlib/gflags
-abs_srcdir = /home/jinyang/co/upc_hash/extlib/gflags
-abs_top_builddir = /home/jinyang/co/upc_hash/extlib/gflags
-abs_top_srcdir = /home/jinyang/co/upc_hash/extlib/gflags
+abs_builddir = /home/power/w/hashdsm/extlib/gflags
+abs_srcdir = /home/power/w/hashdsm/extlib/gflags
+abs_top_builddir = /home/power/w/hashdsm/extlib/gflags
+abs_top_srcdir = /home/power/w/hashdsm/extlib/gflags
 ac_ct_CC = gcc
 ac_ct_CXX = g++
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
@@ -266,26 +266,26 @@ am__quote =
 am__tar = ${AMTAR} chof - "$$tardir"
 am__untar = ${AMTAR} xf -
 bindir = ${exec_prefix}/bin
-build = i686-pc-linux-gnu
+build = x86_64-unknown-linux-gnu
 build_alias = 
-build_cpu = i686
+build_cpu = x86_64
 build_os = linux-gnu
-build_vendor = pc
+build_vendor = unknown
 builddir = .
 datadir = ${datarootdir}
 datarootdir = ${prefix}/share
 docdir = $(prefix)/share/doc/$(PACKAGE)-$(VERSION)
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host = i686-pc-linux-gnu
+host = x86_64-unknown-linux-gnu
 host_alias = 
-host_cpu = i686
+host_cpu = x86_64
 host_os = linux-gnu
-host_vendor = pc
+host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = /home/jinyang/co/upc_hash/extlib/gflags/install-sh
+install_sh = /home/power/w/hashdsm/extlib/gflags/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -545,135 +545,135 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-include ./$(DEPDIR)/gflags_unittest-gflags_unittest.Po
-include ./$(DEPDIR)/gflags_unittest-main.Po
-include ./$(DEPDIR)/gflags_unittest.Po
-include ./$(DEPDIR)/gflags_unittest_main.Po
-include ./$(DEPDIR)/libgflags_la-gflags.Plo
-include ./$(DEPDIR)/libgflags_la-gflags_completions.Plo
-include ./$(DEPDIR)/libgflags_la-gflags_reporting.Plo
-include ./$(DEPDIR)/libgflags_nothreads_la-gflags.Plo
-include ./$(DEPDIR)/libgflags_nothreads_la-gflags_completions.Plo
-include ./$(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Plo
+#include ./$(DEPDIR)/gflags_unittest-gflags_unittest.Po
+#include ./$(DEPDIR)/gflags_unittest-main.Po
+#include ./$(DEPDIR)/gflags_unittest.Po
+#include ./$(DEPDIR)/gflags_unittest_main.Po
+#include ./$(DEPDIR)/libgflags_la-gflags.Plo
+#include ./$(DEPDIR)/libgflags_la-gflags_completions.Plo
+#include ./$(DEPDIR)/libgflags_la-gflags_reporting.Plo
+#include ./$(DEPDIR)/libgflags_nothreads_la-gflags.Plo
+#include ./$(DEPDIR)/libgflags_nothreads_la-gflags_completions.Plo
+#include ./$(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Plo
 
 .cc.o:
-	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-#	source='$<' object='$@' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXXCOMPILE) -c -o $@ $<
+#	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+#	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+#	source='$<' object='$@' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXXCOMPILE) -c -o $@ $<
 
 .cc.obj:
-	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-#	source='$<' object='$@' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+#	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+#	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+#	source='$<' object='$@' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
 
 .cc.lo:
-	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
-#	source='$<' object='$@' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LTCXXCOMPILE) -c -o $@ $<
+#	$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+#	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+#	source='$<' object='$@' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LTCXXCOMPILE) -c -o $@ $<
 
 libgflags_la-gflags.lo: src/gflags.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags.Tpo -c -o libgflags_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
-	$(am__mv) $(DEPDIR)/libgflags_la-gflags.Tpo $(DEPDIR)/libgflags_la-gflags.Plo
-#	source='src/gflags.cc' object='libgflags_la-gflags.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags.Tpo -c -o libgflags_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
+#	$(am__mv) $(DEPDIR)/libgflags_la-gflags.Tpo $(DEPDIR)/libgflags_la-gflags.Plo
+#	source='src/gflags.cc' object='libgflags_la-gflags.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
 
 libgflags_la-gflags_reporting.lo: src/gflags_reporting.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags_reporting.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags_reporting.Tpo -c -o libgflags_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
-	$(am__mv) $(DEPDIR)/libgflags_la-gflags_reporting.Tpo $(DEPDIR)/libgflags_la-gflags_reporting.Plo
-#	source='src/gflags_reporting.cc' object='libgflags_la-gflags_reporting.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags_reporting.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags_reporting.Tpo -c -o libgflags_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
+#	$(am__mv) $(DEPDIR)/libgflags_la-gflags_reporting.Tpo $(DEPDIR)/libgflags_la-gflags_reporting.Plo
+#	source='src/gflags_reporting.cc' object='libgflags_la-gflags_reporting.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
 
 libgflags_la-gflags_completions.lo: src/gflags_completions.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags_completions.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags_completions.Tpo -c -o libgflags_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
-	$(am__mv) $(DEPDIR)/libgflags_la-gflags_completions.Tpo $(DEPDIR)/libgflags_la-gflags_completions.Plo
-#	source='src/gflags_completions.cc' object='libgflags_la-gflags_completions.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_la-gflags_completions.lo -MD -MP -MF $(DEPDIR)/libgflags_la-gflags_completions.Tpo -c -o libgflags_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
+#	$(am__mv) $(DEPDIR)/libgflags_la-gflags_completions.Tpo $(DEPDIR)/libgflags_la-gflags_completions.Plo
+#	source='src/gflags_completions.cc' object='libgflags_la-gflags_completions.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
 
 libgflags_nothreads_la-gflags.lo: src/gflags.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags.Tpo -c -o libgflags_nothreads_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
-	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags.Plo
-#	source='src/gflags.cc' object='libgflags_nothreads_la-gflags.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags.Tpo -c -o libgflags_nothreads_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
+#	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags.Plo
+#	source='src/gflags.cc' object='libgflags_nothreads_la-gflags.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags.lo `test -f 'src/gflags.cc' || echo '$(srcdir)/'`src/gflags.cc
 
 libgflags_nothreads_la-gflags_reporting.lo: src/gflags_reporting.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags_reporting.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Tpo -c -o libgflags_nothreads_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
-	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Plo
-#	source='src/gflags_reporting.cc' object='libgflags_nothreads_la-gflags_reporting.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags_reporting.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Tpo -c -o libgflags_nothreads_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
+#	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags_reporting.Plo
+#	source='src/gflags_reporting.cc' object='libgflags_nothreads_la-gflags_reporting.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags_reporting.lo `test -f 'src/gflags_reporting.cc' || echo '$(srcdir)/'`src/gflags_reporting.cc
 
 libgflags_nothreads_la-gflags_completions.lo: src/gflags_completions.cc
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags_completions.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Tpo -c -o libgflags_nothreads_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
-	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Plo
-#	source='src/gflags_completions.cc' object='libgflags_nothreads_la-gflags_completions.lo' libtool=yes \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -MT libgflags_nothreads_la-gflags_completions.lo -MD -MP -MF $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Tpo -c -o libgflags_nothreads_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
+#	$(am__mv) $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Tpo $(DEPDIR)/libgflags_nothreads_la-gflags_completions.Plo
+#	source='src/gflags_completions.cc' object='libgflags_nothreads_la-gflags_completions.lo' libtool=yes 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libgflags_nothreads_la_CXXFLAGS) $(CXXFLAGS) -c -o libgflags_nothreads_la-gflags_completions.lo `test -f 'src/gflags_completions.cc' || echo '$(srcdir)/'`src/gflags_completions.cc
 
 gflags_unittest.o: src/gflags_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest.o -MD -MP -MF $(DEPDIR)/gflags_unittest.Tpo -c -o gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
-	$(am__mv) $(DEPDIR)/gflags_unittest.Tpo $(DEPDIR)/gflags_unittest.Po
-#	source='src/gflags_unittest.cc' object='gflags_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest.o -MD -MP -MF $(DEPDIR)/gflags_unittest.Tpo -c -o gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
+#	$(am__mv) $(DEPDIR)/gflags_unittest.Tpo $(DEPDIR)/gflags_unittest.Po
+#	source='src/gflags_unittest.cc' object='gflags_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
 
 gflags_unittest.obj: src/gflags_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest.obj -MD -MP -MF $(DEPDIR)/gflags_unittest.Tpo -c -o gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
-	$(am__mv) $(DEPDIR)/gflags_unittest.Tpo $(DEPDIR)/gflags_unittest.Po
-#	source='src/gflags_unittest.cc' object='gflags_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest.obj -MD -MP -MF $(DEPDIR)/gflags_unittest.Tpo -c -o gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
+#	$(am__mv) $(DEPDIR)/gflags_unittest.Tpo $(DEPDIR)/gflags_unittest.Po
+#	source='src/gflags_unittest.cc' object='gflags_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
 
 gflags_unittest-gflags_unittest.o: src/gflags_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-gflags_unittest.o -MD -MP -MF $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo -c -o gflags_unittest-gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
-	$(am__mv) $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo $(DEPDIR)/gflags_unittest-gflags_unittest.Po
-#	source='src/gflags_unittest.cc' object='gflags_unittest-gflags_unittest.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-gflags_unittest.o -MD -MP -MF $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo -c -o gflags_unittest-gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
+#	$(am__mv) $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo $(DEPDIR)/gflags_unittest-gflags_unittest.Po
+#	source='src/gflags_unittest.cc' object='gflags_unittest-gflags_unittest.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-gflags_unittest.o `test -f 'src/gflags_unittest.cc' || echo '$(srcdir)/'`src/gflags_unittest.cc
 
 gflags_unittest-gflags_unittest.obj: src/gflags_unittest.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-gflags_unittest.obj -MD -MP -MF $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo -c -o gflags_unittest-gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
-	$(am__mv) $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo $(DEPDIR)/gflags_unittest-gflags_unittest.Po
-#	source='src/gflags_unittest.cc' object='gflags_unittest-gflags_unittest.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-gflags_unittest.obj -MD -MP -MF $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo -c -o gflags_unittest-gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
+#	$(am__mv) $(DEPDIR)/gflags_unittest-gflags_unittest.Tpo $(DEPDIR)/gflags_unittest-gflags_unittest.Po
+#	source='src/gflags_unittest.cc' object='gflags_unittest-gflags_unittest.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(gflags_unittest_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-gflags_unittest.obj `if test -f 'src/gflags_unittest.cc'; then $(CYGPATH_W) 'src/gflags_unittest.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest.cc'; fi`
 
 gflags_unittest-main.o: src/gflags_unittest-main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-main.o -MD -MP -MF $(DEPDIR)/gflags_unittest-main.Tpo -c -o gflags_unittest-main.o `test -f 'src/gflags_unittest-main.cc' || echo '$(srcdir)/'`src/gflags_unittest-main.cc
-	$(am__mv) $(DEPDIR)/gflags_unittest-main.Tpo $(DEPDIR)/gflags_unittest-main.Po
-#	source='src/gflags_unittest-main.cc' object='gflags_unittest-main.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-main.o `test -f 'src/gflags_unittest-main.cc' || echo '$(srcdir)/'`src/gflags_unittest-main.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-main.o -MD -MP -MF $(DEPDIR)/gflags_unittest-main.Tpo -c -o gflags_unittest-main.o `test -f 'src/gflags_unittest-main.cc' || echo '$(srcdir)/'`src/gflags_unittest-main.cc
+#	$(am__mv) $(DEPDIR)/gflags_unittest-main.Tpo $(DEPDIR)/gflags_unittest-main.Po
+#	source='src/gflags_unittest-main.cc' object='gflags_unittest-main.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-main.o `test -f 'src/gflags_unittest-main.cc' || echo '$(srcdir)/'`src/gflags_unittest-main.cc
 
 gflags_unittest-main.obj: src/gflags_unittest-main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-main.obj -MD -MP -MF $(DEPDIR)/gflags_unittest-main.Tpo -c -o gflags_unittest-main.obj `if test -f 'src/gflags_unittest-main.cc'; then $(CYGPATH_W) 'src/gflags_unittest-main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest-main.cc'; fi`
-	$(am__mv) $(DEPDIR)/gflags_unittest-main.Tpo $(DEPDIR)/gflags_unittest-main.Po
-#	source='src/gflags_unittest-main.cc' object='gflags_unittest-main.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-main.obj `if test -f 'src/gflags_unittest-main.cc'; then $(CYGPATH_W) 'src/gflags_unittest-main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest-main.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest-main.obj -MD -MP -MF $(DEPDIR)/gflags_unittest-main.Tpo -c -o gflags_unittest-main.obj `if test -f 'src/gflags_unittest-main.cc'; then $(CYGPATH_W) 'src/gflags_unittest-main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest-main.cc'; fi`
+#	$(am__mv) $(DEPDIR)/gflags_unittest-main.Tpo $(DEPDIR)/gflags_unittest-main.Po
+#	source='src/gflags_unittest-main.cc' object='gflags_unittest-main.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest-main.obj `if test -f 'src/gflags_unittest-main.cc'; then $(CYGPATH_W) 'src/gflags_unittest-main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest-main.cc'; fi`
 
 gflags_unittest_main.o: src/gflags_unittest_main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest_main.o -MD -MP -MF $(DEPDIR)/gflags_unittest_main.Tpo -c -o gflags_unittest_main.o `test -f 'src/gflags_unittest_main.cc' || echo '$(srcdir)/'`src/gflags_unittest_main.cc
-	$(am__mv) $(DEPDIR)/gflags_unittest_main.Tpo $(DEPDIR)/gflags_unittest_main.Po
-#	source='src/gflags_unittest_main.cc' object='gflags_unittest_main.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest_main.o `test -f 'src/gflags_unittest_main.cc' || echo '$(srcdir)/'`src/gflags_unittest_main.cc
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest_main.o -MD -MP -MF $(DEPDIR)/gflags_unittest_main.Tpo -c -o gflags_unittest_main.o `test -f 'src/gflags_unittest_main.cc' || echo '$(srcdir)/'`src/gflags_unittest_main.cc
+#	$(am__mv) $(DEPDIR)/gflags_unittest_main.Tpo $(DEPDIR)/gflags_unittest_main.Po
+#	source='src/gflags_unittest_main.cc' object='gflags_unittest_main.o' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest_main.o `test -f 'src/gflags_unittest_main.cc' || echo '$(srcdir)/'`src/gflags_unittest_main.cc
 
 gflags_unittest_main.obj: src/gflags_unittest_main.cc
-	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest_main.obj -MD -MP -MF $(DEPDIR)/gflags_unittest_main.Tpo -c -o gflags_unittest_main.obj `if test -f 'src/gflags_unittest_main.cc'; then $(CYGPATH_W) 'src/gflags_unittest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest_main.cc'; fi`
-	$(am__mv) $(DEPDIR)/gflags_unittest_main.Tpo $(DEPDIR)/gflags_unittest_main.Po
-#	source='src/gflags_unittest_main.cc' object='gflags_unittest_main.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest_main.obj `if test -f 'src/gflags_unittest_main.cc'; then $(CYGPATH_W) 'src/gflags_unittest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest_main.cc'; fi`
+#	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT gflags_unittest_main.obj -MD -MP -MF $(DEPDIR)/gflags_unittest_main.Tpo -c -o gflags_unittest_main.obj `if test -f 'src/gflags_unittest_main.cc'; then $(CYGPATH_W) 'src/gflags_unittest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest_main.cc'; fi`
+#	$(am__mv) $(DEPDIR)/gflags_unittest_main.Tpo $(DEPDIR)/gflags_unittest_main.Po
+#	source='src/gflags_unittest_main.cc' object='gflags_unittest_main.obj' libtool=no 
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) 
+	$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o gflags_unittest_main.obj `if test -f 'src/gflags_unittest_main.cc'; then $(CYGPATH_W) 'src/gflags_unittest_main.cc'; else $(CYGPATH_W) '$(srcdir)/src/gflags_unittest_main.cc'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
