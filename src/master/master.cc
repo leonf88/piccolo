@@ -76,12 +76,6 @@ bool Master::WorkerState::serves(int table, int shard) {
 }
 
 void Master::checkpoint() {
-  if (checkpoint_epoch_ < restored_checkpoint_epoch_) {
-    LOG(INFO) << "Skipping implied checkpoint.";
-    checkpoint_epoch_ += 1;
-    return;
-  }
-
   checkpoint_epoch_ += 1;
 
   StartCheckpoint req;
@@ -103,8 +97,6 @@ void Master::checkpoint() {
 
   LocalFile lf(StringPrintf("%s/checkpoint.%05d.finished", FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_), "w");
   lf.writeString(cinfo.SerializeAsString());
-
-  checkpoint_epoch_ += 1;
 }
 
 void Master::restore() {
@@ -276,6 +268,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
   while (count < shards.size()) {
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
       checkpoint();
+      last_checkpoint_ = Now();
     }
 
     if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
