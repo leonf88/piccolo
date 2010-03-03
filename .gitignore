@@ -6,23 +6,32 @@
 *.pb.h
 *.pb.cc
 *.pyc
-.project
-.pydevproject
-.cproject
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.ent
+*.log
+
 config.log
 config.status
 libtool
+
+#runtime files
+logs/
+checkpoints/
+testdata/
 profile/
 bin/
 logs/
-testdata/
-.libs/
+
+#dependency generation
 .deps/
-.settings
 Makefile.dep
-paper/dsm.aux
-paper/dsm.bbl
-paper/dsm.blg
-paper/dsm.dvi
-paper/dsm.ent
-paper/dsm.log
+
+#eclipse stuff
+.project
+.pydevproject
+.cproject
+.libs/
+.settings
