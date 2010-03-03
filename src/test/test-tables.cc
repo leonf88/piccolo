@@ -59,12 +59,21 @@ public:
       it->Next();
     }
   }
+
+  void TestClear() {
+    min_hash->clear(current_shard());
+    max_hash->clear(current_shard());
+    sum_hash->clear(current_shard());
+    replace_hash->clear(current_shard());
+    string_hash->clear(current_shard());
+  }
 };
 
 REGISTER_KERNEL(TableKernel);
 REGISTER_METHOD(TableKernel, TestPut);
 REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
+REGISTER_METHOD(TableKernel, TestClear);
 
 int main(int argc, char **argv) {
   Init(argc, argv);
@@ -83,7 +92,11 @@ int main(int argc, char **argv) {
     Master m(conf);
     RUN_ALL(m, TableKernel, TestPut, 0);
     m.checkpoint();
+
+    // wipe all the tables and then restore from the previous checkpoint.
+    RUN_ALL(m, TableKernel, TestClear, 0);
     m.restore();
+
     RUN_ALL(m, TableKernel, TestGetLocal, 0);
     m.checkpoint();
     RUN_ALL(m, TableKernel, TestGet, 0);
