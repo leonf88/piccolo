@@ -239,38 +239,37 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
 
 template <class K, class V>
 void HashMap<K, V>::checkpoint(const string& file) {
-  LocalFile lf(file, "w");
-  Encoder e(&lf);
-  e.write<uint64_t>(buckets_.size());
-
   if (std::tr1::is_pod<K>::value && std::tr1::is_pod<V>::value) {
+    LocalFile lf(file, "w");
+    Encoder e(&lf);
+    e.write<uint64_t>(buckets_.size());
     e.write_bytes((char*)&buckets_[0], buckets_.size() * sizeof(Bucket));
   } else {
-    string b;
+    RecordFile rf(file, "w");
+    Pair p;
     for (iterator i = begin(); i != end(); ++i) {
-      data::marshal(i.key(), &b); e.write_string(b);
-      data::marshal(i.value(), &b); e.write_string(b);
+      data::marshal<K>(i.key(), p.mutable_key());
+      data::marshal<V>(i.value(), p.mutable_value());
+      rf.write(p);
     }
   }
 }
 
 template <class K, class V>
 void HashMap<K, V>::restore(const string& file) {
-  LocalFile lf(file, "r");
-  Decoder d(&lf);
-  uint64_t size;
-  d.read<uint64_t>(&size);
-
   if (std::tr1::is_pod<K>::value && std::tr1::is_pod<V>::value) {
+    LocalFile lf(file, "r");
+    Decoder d(&lf);
+    uint64_t size;
+    d.read<uint64_t>(&size);
     buckets_.resize(size);
     d.read_bytes((char*)&buckets_[0], size * sizeof(Bucket));
   } else {
-    string k, v;
-    rehash((int)(size * 1.5));
-    for (int i = 0; i < size; ++i) {
-      d.read_string(&k);
-      d.read_string(&v);
-      put(data::from_string<K>(k), data::from_string<V>(v));
+    Pair p;
+    RecordFile rf(file, "r");
+
+    while (rf.read(&p)) {
+      put(data::from_string<K>(p.key()), data::from_string<V>(p.value()));
     }
   }
 }
