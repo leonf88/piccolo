@@ -9,9 +9,9 @@ MPI_LIBS := -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma
 
 PY_INC := -I/usr/include/python2.6/
 
-DISTCC :=
+DISTCC := distcc
 CXX := g++
-CDEBUG := -ggdb3
+CDEBUG := -ggdb1
 COPT :=
 #COPT := -O2 -DNDEBUG
 
