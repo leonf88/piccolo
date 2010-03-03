@@ -81,12 +81,13 @@ void GlobalTable::restore(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
-    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
+    if (is_local_shard(i)) {
       t->restore(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+    } else {
+      t->clear();
     }
   }
 }
-
 
 void GlobalTable::SendUpdates() {
   HashPut put;
