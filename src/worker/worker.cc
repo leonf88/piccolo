@@ -73,8 +73,6 @@ struct Worker::Stub {
 Worker::Worker(const ConfigData &c) {
   epoch_ = 0;
 
-  checkpoint_delta_ = NULL;
-
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
@@ -253,9 +251,12 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
   }
 
   if (checkpoint_done) {
-    LOG(INFO) << "All channels up to date; flushing delta.";
-    delete checkpoint_delta_;
-    checkpoint_delta_ = NULL;
+    LOG(INFO) << "All channels up to date; flushing deltas.";
+    Registry::TableMap &t = Registry::get_tables();
+    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+      GlobalTable* t = i->second;
+      t->finish_checkpoint();
+    }
 
     EmptyMessage req;
     rpc_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
@@ -275,10 +276,8 @@ void Worker::Checkpoint(int epoch) {
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalTable* t = i->second;
-    t->checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
+    t->start_checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
   }
-
-  checkpoint_delta_ = new RecordFile(StringPrintf("%s/checkpoint.delta.epoch_%d", FLAGS_checkpoint_dir.c_str(), epoch_), "w");
 
   HashPut epoch_marker;
   epoch_marker.set_source(id());
@@ -321,16 +320,17 @@ void Worker::CheckForWorkerUpdates() {
       continue;
     }
 
-    // Record messages from our peer channel up until they checkpointed.
-    if (put.epoch() < epoch_) {
-      checkpoint_delta_->write(put);
-    }
-
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
     GlobalTable *t = Registry::get_table(put.table());
     t->ApplyUpdates(put);
+
+
+    // Record messages from our peer channel up until they checkpointed.
+    if (put.epoch() < epoch_) {
+      t->write_delta(put);
+    }
 
     if (put.done() && t->tainted(put.shard())) {
       VLOG(1) << "Clearing taint on: " << MP(put.table(), put.shard());

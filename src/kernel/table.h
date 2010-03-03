@@ -32,6 +32,7 @@ struct HashPutCoder {
 };
 
 class Worker;
+class RecordFile;
 
 struct TableInfo {
 public:
@@ -81,7 +82,11 @@ public:
   int shard() const { return info_.shard; }
   int num_shards() const { return info_.num_shards; }
 
-  virtual void checkpoint(const string& f) = 0;
+  // Checkpoint and restoration.
+  virtual void start_checkpoint(const string& f) = 0;
+  virtual void write_delta(const HashPut& put) = 0;
+  virtual void finish_checkpoint() = 0;
+
   virtual void restore(const string& f) = 0;
 
   TableInfo info_;
@@ -90,15 +95,17 @@ public:
 // A local partition of a global table.
 class LocalTable : public Table {
 public:
-  LocalTable(const TableInfo& info) : Table(info), dirty(false), tainted(false), owner(-1) {}
+  LocalTable(const TableInfo& info) :
+    Table(info), dirty(false), tainted(false), owner(-1) {}
+
+  void write_delta(const HashPut& put);
 
   virtual void clear() = 0;
-
-  // Returns a view on the global table containing values only from 'shard'.
-  // 'shard' must be local.
   virtual Table::Iterator* get_iterator() = 0;
+
   void ApplyUpdates(const HashPut& up);
 
+  // Serialize a portion of the given iterator, up to the network batch limit.
   static void SerializePartial(HashPut& r, Table::Iterator *it);
 
 protected:
@@ -106,6 +113,8 @@ protected:
   bool dirty;
   bool tainted;
   int16_t owner;
+
+  RecordFile *delta_file_;
 };
 
 class GlobalTable : public Table {
@@ -133,6 +142,7 @@ public:
   void set_owner(int shard, int worker);
   int get_owner(int shard);
 
+  // Fetch the given key, using only local information.
   void get_local(const StringPiece &k, string *v);
 
   // Fetch key k from the node owning it.  Returns true if the key exists.
@@ -158,7 +168,10 @@ public:
   void clear_tainted(int shard) { partitions_[shard]->tainted = false; }
   bool tainted(int shard) { return partitions_[shard]->tainted; }
 
-  void checkpoint(const string& f);
+  void start_checkpoint(const string& f);
+  void write_delta(const HashPut& d);
+  void finish_checkpoint();
+
   void restore(const string& f);
 
 protected:

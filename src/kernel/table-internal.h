@@ -1,9 +1,11 @@
 #ifndef TABLEINTERNAL_H_
 #define TABLEINTERNAL_H_
 
+#include "util/hashmap.h"
+#include "util/file.h"
+
 #include "kernel/table.h"
 #include "worker/worker.pb.h"
-#include "util/hashmap.h"
 
 namespace dsm {
 
@@ -80,8 +82,19 @@ public:
     remove(data::from_string<K>(k));
   }
 
-  void checkpoint(const string& f) { data_.checkpoint(f); }
-  void restore(const string& f) { data_.restore(f); }
+  void start_checkpoint(const string& f) {
+    data_.checkpoint(f);
+    delta_file_ = new RecordFile(f + ".delta", "w");
+  }
+
+  void finish_checkpoint() {
+    delete delta_file_;
+    delta_file_ = NULL;
+  }
+
+  void restore(const string& f) {
+    data_.restore(f);
+  }
 
 private:
   DataMap data_;
