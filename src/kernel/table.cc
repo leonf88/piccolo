@@ -67,12 +67,26 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   return true;
 }
 
-void GlobalTable::checkpoint(const string& f) {
+void GlobalTable::start_checkpoint(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
     if (is_local_shard(i)) {
-      t->checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+      t->start_checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+    }
+  }
+}
+
+void GlobalTable::write_delta(const HashPut& d) {
+  partitions_[d.shard()]->write_delta(d);
+}
+
+void GlobalTable::finish_checkpoint() {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    LocalTable *t = partitions_[i];
+
+    if (is_local_shard(i)) {
+      t->finish_checkpoint();
     }
   }
 }
@@ -203,6 +217,10 @@ StringPiece HashPutCoder::value(int i) {
 
 int HashPutCoder::size() {
   return h_->key_offset_size() - 1;
+}
+
+void LocalTable::write_delta(const HashPut& req) {
+  delta_file_->write(req);
 }
 
 void LocalTable::ApplyUpdates(const HashPut& req) {

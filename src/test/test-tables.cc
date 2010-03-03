@@ -19,6 +19,7 @@ public:
   void TestPut() {
     Pair p;
     for (int i = 0; i < FLAGS_table_size; ++i) {
+      LOG_EVERY_N(INFO, 100000) << "Writing... " << LOG_OCCURRENCES;
       min_hash->put(i, i);
       max_hash->put(i, i);
       sum_hash->put(i, 1);
@@ -90,16 +91,16 @@ int main(int argc, char **argv) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    RUN_ALL(m, TableKernel, TestPut, 0);
+    m.run_all(Master::RunDescriptor::C("TableKernel", "TestPut", 0, 5));
     m.checkpoint();
 
     // wipe all the tables and then restore from the previous checkpoint.
-    RUN_ALL(m, TableKernel, TestClear, 0);
+    m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
     m.restore();
 
-    RUN_ALL(m, TableKernel, TestGetLocal, 0);
+    m.run_all(Master::RunDescriptor::C("TableKernel", "TestGetLocal", 0, 0));
     m.checkpoint();
-    RUN_ALL(m, TableKernel, TestGet, 0);
+    m.run_all(Master::RunDescriptor::C("TableKernel", "TestGet", 0, 0));
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
