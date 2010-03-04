@@ -78,12 +78,16 @@ all: 	 setup\
 	 bin/k-means\
 	 bin/test-tables\
 	 bin/test-hashmap\
-	 bin/crawler
+	 bin/crawler\
+	 dsm_paper
 #  bin/shortest-path-upc\
 #	 bin/pr-upc\
 
 setup:
-	cd src && find . -type d -exec mkdir -p ../bin/{} \;
+	@cd src && find . -type d -exec mkdir -p ../bin/{} \;
+
+dsm_paper:
+	cd paper && make
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
