@@ -71,6 +71,9 @@ LIBKERNEL_OBJS := bin/kernel/table.o\
 LIBWORKER_OBJS := bin/worker/worker.pb.o bin/worker/worker.o\
 		  bin/master/master.o $(LIBKERNEL_OBJS)
 
+#  bin/shortest-path-upc\
+#	 bin/pr-upc\
+
 all: 	 setup\
          bin/shortest-path\
 	 bin/mpi-test \
@@ -79,15 +82,14 @@ all: 	 setup\
 	 bin/test-tables\
 	 bin/test-hashmap\
 	 bin/crawler\
+	 bin/matmul\
 	 dsm_paper
-#  bin/shortest-path-upc\
-#	 bin/pr-upc\
+
+dsm_paper:
+	cd paper && $(MAKE)
 
 setup:
 	@cd src && find . -type d -exec mkdir -p ../bin/{} \;
-
-dsm_paper:
-	cd paper && make
 
 ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
@@ -122,6 +124,9 @@ bin/pagerank: $(EXAMPLE_LIBS) bin/examples/pagerank.o
 
 bin/k-means: $(EXAMPLE_LIBS) bin/examples/k-means.o 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
+
+bin/matmul: $(EXAMPLE_LIBS) bin/examples/matmul.o
+	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lblas
 	
 bin/crawler: bin/examples/crawler_support_wrap.o bin/examples/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lpython2.6 -lboost_python-mt
