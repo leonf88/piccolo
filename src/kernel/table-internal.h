@@ -38,7 +38,7 @@ public:
     TypedLocalTable<K, V> *t_;
   };
 
-  TypedLocalTable(TableInfo tinfo, int size=10000) :
+  TypedLocalTable(TableInfo tinfo, int size=10) :
     LocalTable(tinfo), data_(size) {
   }
 

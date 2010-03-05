@@ -229,6 +229,10 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
 }
 
 void Master::run_range(const RunDescriptor& r, vector<int> shards) {
+  KernelInfo *k = Registry::get_kernel(r.kernel);
+  CHECK(k != NULL) << "Invalid kernel class " << r.kernel;
+  CHECK(k->has_method(r.method)) << "Invalid method: " << MP(r.kernel, r.method);
+
   if (kernel_epoch_ < restored_kernel_epoch_) {
     LOG(INFO) << "Skipping kernel: " << r.kernel << ":" << r.method
               << "; later checkpoint exists.";

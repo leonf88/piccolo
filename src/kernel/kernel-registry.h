@@ -45,6 +45,7 @@ struct KernelInfo {
 
   virtual DSMKernel* create() = 0;
   virtual void Run(DSMKernel* obj, const string& method_name) = 0;
+  virtual bool has_method(const string& method_name) = 0;
 
   string name_;
 };
@@ -61,6 +62,10 @@ struct KernelInfoT : public KernelInfo {
   void Run(DSMKernel* obj, const string& method_id) {
     boost::function<void (C*)> m(methods_[method_id]);
     m((C*)obj);
+  }
+
+  bool has_method(const string& name) {
+    return methods_.find(name) != methods_.end();
   }
 
   void register_method(const char* mname, Method m) { methods_[mname] = m; }
