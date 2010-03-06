@@ -7,7 +7,6 @@
 
 DEFINE_int32(num_dists, 2, "");
 DEFINE_int32(num_points, 100, "");
-DEFINE_int32(iterations, 50, "");
 DEFINE_bool(dump_results, false, "");
 
 using namespace dsm;
@@ -154,13 +153,7 @@ static Distribution dist_merge(const Distribution& d1, const Distribution& d2) {
   return o;
 }
 
-int main(int argc, char **argv) {
-  Init(argc, argv);
-
-  ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
-  conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
-
+static int KMeans(ConfigData& conf) {
   dists = Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
   points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
   actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
@@ -179,5 +172,7 @@ int main(int argc, char **argv) {
     Worker w(conf);
     w.Run();
   }
-}
 
+  return 0;
+}
+REGISTER_RUNNER(KMeans);
