@@ -71,10 +71,18 @@ struct KernelInfoT : public KernelInfo {
   void register_method(const char* mname, Method m) { methods_[mname] = m; }
 };
 
+class ConfigData;
 namespace Registry {
+  typedef int (*KernelRunner)(ConfigData&);
+
   typedef map<string, KernelInfo*> KernelMap;
+  typedef map<string, KernelRunner> RunnerMap;
+
   KernelMap& get_kernels();
+  RunnerMap& get_runners();
+
   KernelInfo* get_kernel(const string& name);
+  KernelRunner get_runner(const string& name);
 
   template <class C>
   struct KernelRegistrationHelper {
@@ -89,6 +97,12 @@ namespace Registry {
       ((KernelInfoT<C>*)get_kernel(klass))->register_method(mname, m);
     }
   };
+
+  struct RunnerRegistrationHelper {
+    RunnerRegistrationHelper(KernelRunner k, const char* name) {
+      get_runners().insert(MP(name, k));
+    }
+  };
 }
 
 #define REGISTER_KERNEL(klass)\
@@ -97,5 +111,7 @@ namespace Registry {
 #define REGISTER_METHOD(klass, method)\
   static Registry::MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
 
+#define REGISTER_RUNNER(r)\
+  static Registry::RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
 }
 #endif /* KERNELREGISTRY_H_ */

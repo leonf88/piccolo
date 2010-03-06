@@ -4,7 +4,6 @@
 using namespace dsm;
 
 DEFINE_int32(edge_size, 1000, "");
-DEFINE_int32(shards, 10, "");
 
 static const int kBlockSize = 100;
 static int bRows = -1;
@@ -34,8 +33,9 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     int cs = current_shard();
     int ns = matrix_a->num_shards();
 
-    for (int by = cs; by < bRows; by += ns) {
-      for (int bx = cs; bx < bCols; bx += ns) {
+    for (int by = 0; by < bRows; by ++) {
+      for (int bx = 0; bx < bCols; bx ++) {
+        if (by % ns != cs) { continue; }
         LOG(INFO) << "Putting... " << MP(by, bx);
         matrix_a->put(by * bCols + bx, b);
         matrix_b->put(by * bCols + bx, b);
@@ -48,10 +48,11 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     int cs = current_shard();
     int ns = matrix_a->num_shards();
 
-    for (int k = cs; k < bRows; k += ns) {
-      LOG(INFO) << "Multiplying..." << MP(k, bRows);
-      for (int i = cs; i < bRows; i += ns) {
-        for (int j = cs; j < bCols; j += ns) {
+    for (int k = 0; k < bRows; k++) {
+      for (int i = 0; i < bRows; i++) {
+        for (int j = 0; j < bCols; j++) {
+          if (i % ns != cs) { continue; }
+//          LOG(INFO) << "Multiplying..." << i << "," << j << "," << k << "," << cs;
           Block a = matrix_a->get(i * bCols + k);
           Block b = matrix_b->get(k * bCols + j);
           Block c;
@@ -70,12 +71,7 @@ REGISTER_KERNEL(MatrixMultiplicationKernel);
 REGISTER_METHOD(MatrixMultiplicationKernel, Initialize);
 REGISTER_METHOD(MatrixMultiplicationKernel, Multiply);
 
-int main(int argc, char **argv) {
-  Init(argc, argv);
-
-  ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
-
+int MatrixMultiplication(ConfigData& conf) {
   bCols = FLAGS_edge_size / kBlockSize;
   bRows = FLAGS_edge_size / kBlockSize;
 
@@ -96,4 +92,7 @@ int main(int argc, char **argv) {
 
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
+
+  return 0;
 }
+REGISTER_RUNNER(MatrixMultiplication);
