@@ -1,0 +1,22 @@
+package dsm;
+
+message Pair {
+  required bytes key = 1;
+  required bytes value = 2;
+}
+
+message FileAttribute {
+  required bytes key = 1;
+  required bytes value = 2;
+}
+
+enum CompressionFormat {
+  NONE = 0;
+  LZO = 1;
+  ZLIB = 2;
+};
+
+message FileParams {
+  repeated FileAttribute attr = 1;
+  optional int32 compression = 2 [default=0];
+}

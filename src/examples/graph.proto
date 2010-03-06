@@ -1,0 +1,16 @@
+option optimize_for=SPEED;
+package dsm;
+
+//shortest-path.cc
+message PathNode {
+  required int32 id = 1;
+  repeated int32 target = 2;
+  optional int32 distance = 3 [default = 0];
+  optional bool dirty = 4 [default = false];
+}
+
+
+message Page {
+  required int32 id = 1;
+  repeated int32 target = 2;
+}
