@@ -2,6 +2,7 @@
 #define ACCUMULATOR_H
 
 #include "util/common.h"
+#include <boost/thread.hpp>
 
 namespace dsm {
 
@@ -151,7 +152,6 @@ public:
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
   void ApplyUpdates(const HashPut& req);
-  void CheckForUpdates();
 
   int pending_write_bytes();
 
@@ -174,6 +174,8 @@ public:
 
   void restore(const string& f);
 
+  boost::recursive_mutex& mutex() { return m_; }
+
 protected:
   friend class Worker;
   virtual LocalTable* create_local(int shard) = 0;
@@ -181,6 +183,7 @@ protected:
   vector<LocalTable*> partitions_;
 
   volatile int pending_writes_;
+  boost::recursive_mutex m_;
 };
 
 template <class K, class V>

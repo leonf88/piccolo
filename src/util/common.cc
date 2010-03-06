@@ -209,7 +209,7 @@ void Init(int argc, char** argv) {
 
   CHECK_EQ(lzo_init(), 0);
 
-  MPI::Init(argc, argv);
+  MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
 
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);

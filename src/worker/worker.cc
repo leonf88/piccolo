@@ -107,7 +107,9 @@ int Worker::peer_for_shard(int table, int shard) const {
 }
 
 void Worker::Run() {
+  table_thread_ = new boost::thread(&Worker::TableLoop, this);
   KernelLoop();
+  table_thread_->join();
 }
 
 Worker::~Worker() {
@@ -119,15 +121,25 @@ Worker::~Worker() {
 }
 
 void Worker::Send(int peer, int type, const Message& msg) {
-  outgoing_requests_.insert(peers_[peer]->Send(type, msg));
-  CheckForWorkerUpdates();
+  SendRequest *p = peers_[peer]->Send(type, msg);
+  {
+    boost::recursive_mutex::scoped_lock sl(state_lock_);
+    outgoing_requests_.insert(p);
+  }
+
   CheckForMasterUpdates();
 }
 
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
     CheckForMasterUpdates();
-    CheckForWorkerUpdates();
+//    PERIODIC(1, LOG(INFO) << "Waiting for response from " << MP(peer, type));
+  }
+}
+
+void Worker::TableLoop() {
+  while (running_) {
+    if (!CheckForWorkerUpdates()) { Sleep(1e-5); }
   }
 }
 
@@ -137,7 +149,7 @@ void Worker::KernelLoop() {
   while (running_) {
     if (kernel_queue_.empty()) {
       CheckForMasterUpdates();
-      CheckForWorkerUpdates();
+      Sleep(0.01);
       continue;
     }
 
@@ -147,7 +159,8 @@ void Worker::KernelLoop() {
     VLOG(1) << "Received run request for " << k;
 
     if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
-      LOG(FATAL) << "Received a shard I can't work on! : " << k.shard() << " : " << peer_for_shard(k.table(), k.shard());
+      LOG(FATAL) << "Received a shard I can't work on! : " << k.shard()
+                 << " : " << peer_for_shard(k.table(), k.shard());
     }
 
     KernelInfo *helper = Registry::get_kernel(k.kernel());
@@ -174,7 +187,7 @@ void Worker::KernelLoop() {
     }
 
     while (pending_network_bytes()) {
-      CheckForWorkerUpdates();
+      Sleep(0.001);
     }
 
     kernel_done_.push_back(k);
@@ -210,15 +223,17 @@ bool Worker::network_idle() const {
 }
 
 void Worker::CollectPending() {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   unordered_set<SendRequest*>::iterator i = outgoing_requests_.begin();
   while (i != outgoing_requests_.end()) {
     SendRequest *r = (*i);
+    VLOG(2) << "Pending: " << MP(id(), MP(r->target, r->rpc_type));
     if (r->finished()) {
       if (r->failures > 0) {
-        LOG(INFO) << "Request " << MP(id(), r->target) << " of size " << r->payload.size()
+        LOG(INFO) << "Send " << MP(id(), r->target) << " of size " << r->payload.size()
             << " succeeded after " << r->failures << " failures.";
       }
-      VLOG(2) << "Finished request to " << r->target << " of size " << r->payload.size();
+      VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
       delete r;
       i = outgoing_requests_.erase(i);
       continue;
@@ -234,6 +249,7 @@ void Worker::CollectPending() {
 }
 
 void Worker::UpdateEpoch(int peer, int peer_marker) {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   LOG(INFO) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
   if (epoch_ < peer_marker) {
     LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_marker);
@@ -264,6 +280,7 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
 }
 
 void Worker::Checkpoint(int epoch) {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   if (epoch_ >= epoch) {
     LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
     return;
@@ -291,6 +308,7 @@ void Worker::Checkpoint(int epoch) {
 }
 
 void Worker::Restore(int epoch) {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   LOG(INFO) << "Worker restoring state from epoch: " << epoch;
   epoch_ = epoch;
 
@@ -304,12 +322,14 @@ void Worker::Restore(int epoch) {
   rpc_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
 }
 
-void Worker::CheckForWorkerUpdates() {
+bool Worker::CheckForWorkerUpdates() {
   PERIODIC(30,
            LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss()
            << " poll calls " << COUNT);
 
   PERIODIC(5, DumpProfile();)
+
+  bool did_work = false;
 
   CollectPending();
 
@@ -320,10 +340,13 @@ void Worker::CheckForWorkerUpdates() {
       continue;
     }
 
+    did_work = true;
+
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
     GlobalTable *t = Registry::get_table(put.table());
+    boost::recursive_mutex::scoped_lock sl(t->mutex());
     t->ApplyUpdates(put);
 
 
@@ -343,10 +366,12 @@ void Worker::CheckForWorkerUpdates() {
   HashPut get_resp;
   while (rpc_->HasData(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, status)) {
     rpc_->Read(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req);
+//    LOG(INFO) << "Get request: " << get_req;
+
+    did_work = true;
 
     stats_.set_get_in(stats_.get_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
-    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
 
     get_resp.Clear();
     get_resp.set_source(config_.worker_id());
@@ -356,23 +381,34 @@ void Worker::CheckForWorkerUpdates() {
     get_resp.set_epoch(epoch_);
     HashPutCoder h(&get_resp);
 
-    GlobalTable* t = Registry::get_table(get_req.table());
-    if (!t->contains_str(get_req.key())) {
-      get_resp.set_missing_key(true);
-    } else {
-      string v;
-      t->get_local(get_req.key(), &v);
-      h.add_pair(get_req.key(), v);
+    {
+      GlobalTable* t = Registry::get_table(get_req.table());
+      boost::recursive_mutex::scoped_lock sl(t->mutex());
+
+      if (!t->contains_str(get_req.key())) {
+        get_resp.set_missing_key(true);
+      } else {
+        string v;
+        t->get_local(get_req.key(), &v);
+        h.add_pair(get_req.key(), v);
+      }
     }
 
     SendRequest *r = peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
     stats_.set_bytes_out(stats_.bytes_out() + r->payload.size());
     stats_.set_put_out(stats_.put_out() + 1);
+
+    boost::recursive_mutex::scoped_lock sl(state_lock_);
     outgoing_requests_.insert(r);
+
+    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
   }
+
+  return did_work;
 }
 
 void Worker::CheckForMasterUpdates() {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   // Check for shutdown.
   EmptyMessage msg;
   KernelRequest k;

@@ -188,14 +188,14 @@ TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
 
 template <class K, class V>
 void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
+  boost::recursive_mutex::scoped_lock sl(mutex());
+
   int shard = this->get_shard(k);
   static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
 
   if (!is_local_shard(shard)) {
     ++pending_writes_;
   }
-
-  PERIODIC(0.1, { CheckForUpdates(); });
 
   if (pending_writes_ > kWriteFlushCount) {
     SendUpdates();
@@ -210,11 +210,11 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   // If we received a get for this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
   while (tainted(shard)) {
-    CheckForUpdates();
+    sched_yield();
   }
 
   if (is_local_shard(shard)) {
-    PERIODIC(0.1, { CheckForUpdates(); });
+    boost::recursive_mutex::scoped_lock sl(mutex());
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
@@ -225,16 +225,18 @@ V TypedGlobalTable<K, V>::get(const K &k) {
 
 template <class K, class V>
 bool TypedGlobalTable<K, V>::contains(const K &k) {
+  boost::recursive_mutex::scoped_lock sl(mutex());
+
   int shard = this->get_shard(k);
 
-  // If we received a get for this shard; but we haven't received all of the
+  // If we received a requestfor this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
   while (tainted(shard)) {
-    CheckForUpdates();
+    sched_yield();
   }
 
   if (is_local_shard(shard)) {
-    PERIODIC(0.1, { CheckForUpdates(); });
+    boost::recursive_mutex::scoped_lock sl(mutex());
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->contains(k);
   }
 
