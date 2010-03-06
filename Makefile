@@ -11,9 +11,9 @@ PY_INC := -I/usr/include/python2.6/
 
 DISTCC := distcc
 CXX := g++
-CDEBUG := -ggdb1
+CDEBUG := -ggdb2
 COPT :=
-COPT := -O2 -DNDEBUG
+#COPT := -O2 -DNDEBUG
 
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
@@ -75,14 +75,9 @@ LIBWORKER_OBJS := bin/worker/worker.pb.o bin/worker/worker.o\
 #	 bin/pr-upc\
 
 all: 	 setup\
-         bin/shortest-path\
-	 bin/mpi-test \
-	 bin/pagerank\
-	 bin/k-means\
-	 bin/test-tables\
+         bin/example-dsm\
+         bin/crawler\
 	 bin/test-hashmap\
-	 bin/crawler\
-	 bin/matmul\
 	 dsm_paper
 
 dsm_paper:
@@ -95,6 +90,8 @@ ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
 CORE_LIBS := bin/libworker.a bin/libcommon.a bin/librpc.a
 EXAMPLE_LIBS := $(CORE_LIBS) bin/libexample.a
+EXAMPLE_OBJS := bin/examples/example-main.o bin/examples/shortest-path.o bin/examples/pagerank.o \
+		bin/examples/k-means.o bin/examples/matmul.o bin/test/test-tables.o
 
 depend: Makefile.dep
 
@@ -113,19 +110,7 @@ bin/libworker.a :  $(LIBCOMMON_OBJS) $(LIBRPC_OBJS) $(LIBWORKER_OBJS)
 bin/libexample.a : $(LIBEXAMPLE_OBJS)
 	$(LINK_LIB) $^ -o $@
 
-bin/test-tables: $(CORE_LIBS) bin/test/test-tables.o
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
-
-bin/shortest-path: $(EXAMPLE_LIBS) bin/examples/shortest-path.o
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
-
-bin/pagerank: $(EXAMPLE_LIBS) bin/examples/pagerank.o 
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
-
-bin/k-means: $(EXAMPLE_LIBS) bin/examples/k-means.o 
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
-
-bin/matmul: $(EXAMPLE_LIBS) bin/examples/matmul.o
+bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lblas
 	
 bin/crawler: bin/examples/crawler_support_wrap.o bin/examples/crawler_support.o $(EXAMPLE_LIBS)

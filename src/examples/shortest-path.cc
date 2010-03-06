@@ -3,14 +3,13 @@
 
 using namespace dsm;
 DEFINE_int32(num_nodes, 10000, "");
-DEFINE_int32(shards, 10, "");
 
 DEFINE_bool(dump_output, false, "");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance;
 
-void BuildGraph(int shards, int nodes, int density) {
+static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
@@ -83,11 +82,7 @@ REGISTER_METHOD(ShortestPathKernel, Initialize);
 REGISTER_METHOD(ShortestPathKernel, Propagate);
 REGISTER_METHOD(ShortestPathKernel, DumpDistances);
 
-int main(int argc, char **argv) {
-  Init(argc, argv);
-
-  ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+int ShortestPath(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
   distance = Registry::create_table<int, double>(0, FLAGS_shards, &ModSharding, &Accumulator<double>::min);
@@ -111,4 +106,7 @@ int main(int argc, char **argv) {
 
     LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
+
+  return 0;
 }
+REGISTER_RUNNER(ShortestPath);

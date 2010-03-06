@@ -15,9 +15,6 @@ static const double kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
 static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
-DEFINE_int32(shards, 10, "");
-DEFINE_int32(iterations, 10, "");
-
 DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
 
@@ -28,7 +25,7 @@ DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 static int (*sharding)(const int& key, int shards);
 static int BlkModSharding(const int& key, int shards) { return (key/kBlocksize) % shards; }
 
-void BuildGraph(int shards, int nodes, int density) {
+static void BuildGraph(int shards, int nodes, int density) {
   fprintf(stderr, "Building graph: ");
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
@@ -128,11 +125,7 @@ REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
 
-int main(int argc, char **argv) {
-	Init(argc, argv);
-
-  ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+int Pagerank(ConfigData& conf) {
   conf.set_slots(16);
 
   // Cap address space at 2G.
@@ -143,11 +136,11 @@ int main(int argc, char **argv) {
 
   sharding = FLAGS_use_block_sharding ? &BlkModSharding : &ModSharding;
 
-	NUM_WORKERS = conf.num_workers();
-	TOTALRANK = FLAGS_nodes;
+  NUM_WORKERS = conf.num_workers();
+  TOTALRANK = FLAGS_nodes;
 
-	Registry::create_table<int, double>(0, FLAGS_shards, sharding, &Accumulator<double>::sum);
-	Registry::create_table<int, double>(1, FLAGS_shards, sharding, &Accumulator<double>::sum);
+  Registry::create_table<int, double>(0, FLAGS_shards, sharding, &Accumulator<double>::sum);
+  Registry::create_table<int, double>(1, FLAGS_shards, sharding, &Accumulator<double>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     if (FLAGS_build_graph) {
@@ -166,5 +159,7 @@ int main(int argc, char **argv) {
     w.Run();
     LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
   }
-}
 
+  return 0;
+}
+REGISTER_RUNNER(Pagerank);

@@ -11,4 +11,7 @@
 #include "kernel/kernel-registry.h"
 #include "kernel/table-registry.h"
 
+DECLARE_int32(shards);
+DECLARE_int32(iterations);
+
 #endif /* CLIENT_H_ */

@@ -2,9 +2,7 @@
 
 using namespace dsm;
 
-
 DEFINE_int32(table_size, 100000, "");
-DEFINE_int32(shards, 10, "");
 
 static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
@@ -76,11 +74,7 @@ REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
 REGISTER_METHOD(TableKernel, TestClear);
 
-int main(int argc, char **argv) {
-  Init(argc, argv);
-
-  ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+static int TestTables(ConfigData &conf) {
   conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
 
   min_hash = Registry::create_table<int, int>(0, FLAGS_shards, &ModSharding, &Accumulator<int>::min);
@@ -91,15 +85,15 @@ int main(int argc, char **argv) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    m.run_all(Master::RunDescriptor::C("TableKernel", "TestPut", 0, 5));
-    m.checkpoint();
+    m.run_all(Master::RunDescriptor::C("TableKernel", "TestPut", 0, 0));
+    //m.checkpoint();
 
     // wipe all the tables and then restore from the previous checkpoint.
-    m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
-    m.restore();
+    // m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
+    //m.restore();
 
     m.run_all(Master::RunDescriptor::C("TableKernel", "TestGetLocal", 0, 0));
-    m.checkpoint();
+    //m.checkpoint();
     m.run_all(Master::RunDescriptor::C("TableKernel", "TestGet", 0, 0));
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -107,6 +101,6 @@ int main(int argc, char **argv) {
     w.Run();
   }
 
-  LOG(INFO) << "Exiting.";
+  return 0;
 }
-
+REGISTER_RUNNER(TestTables);
