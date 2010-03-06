@@ -63,9 +63,10 @@ int RPCHelper::Read(int target, int method, Message *msg) {
   r_size = probe_result.Get_count(MPI::BYTE);
   scratch.resize(r_size);
 
-  VLOG(2) << "Reading message of size: " << r_size << " :: " << &scratch[0];
-
   mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, target, method, status);
+
+  VLOG(2) << "Read message: " << MP(target, method);
+
   msg->ParseFromString(scratch);
   return r_size;
 }

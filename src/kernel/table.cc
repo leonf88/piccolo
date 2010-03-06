@@ -137,14 +137,6 @@ void GlobalTable::SendUpdates() {
   pending_writes_ = 0;
 }
 
-void GlobalTable::CheckForUpdates() {
-  do {
-    info().worker->CheckForWorkerUpdates();
-  } while (info().worker->pending_network_bytes() > kMaxNetworkPending);
-
-  info().worker->CheckForMasterUpdates();
-}
-
 int GlobalTable::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {

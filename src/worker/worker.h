@@ -23,6 +23,7 @@ public:
   void Run();
 
   void KernelLoop();
+  void TableLoop();
 
   Stats get_stats() {
     return stats_;
@@ -33,7 +34,9 @@ public:
   void Read(int peer, int type, Message* msg);
 
   void CheckForMasterUpdates();
-  void CheckForWorkerUpdates();
+
+  // Returns true if any non-trivial operations were performed.
+  bool CheckForWorkerUpdates();
   void CollectPending();
 
   void release_shard(GlobalTable *t, int shard);
@@ -60,7 +63,8 @@ private:
   deque<KernelRequest> kernel_done_;
   unordered_set<SendRequest*> outgoing_requests_;
 
-  boost::recursive_mutex kernel_lock_;
+  boost::recursive_mutex state_lock_;
+  boost::thread *table_thread_;
 
   MPI::Intracomm world_;
   RPCHelper *rpc_;
