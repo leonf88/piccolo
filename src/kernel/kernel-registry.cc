@@ -17,11 +17,12 @@ Table* DSMKernel::get_table(int id) {
 }
 
 namespace Registry {
-static map<string, KernelInfo*> *kernels = NULL;
+static KernelMap *kernels = NULL;
+static RunnerMap *runners = NULL;
 
-map<string, KernelInfo*>& get_kernels() {
+KernelMap& get_kernels() {
   if (kernels == NULL) {
-    kernels = new map<string, KernelInfo*>;
+    kernels = new KernelMap;
   }
   return *kernels;
 }
@@ -29,6 +30,18 @@ map<string, KernelInfo*>& get_kernels() {
 KernelInfo* get_kernel(const string& name) {
   return get_kernels()[name];
 }
+
+RunnerMap& get_runners() {
+  if (runners == NULL) {
+    runners = new RunnerMap;
+  }
+  return *runners;
+}
+
+KernelRunner get_runner(const string& name) {
+  return get_runners()[name];
+}
+
 }
 
 }
