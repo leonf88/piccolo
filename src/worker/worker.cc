@@ -121,6 +121,7 @@ Worker::~Worker() {
 }
 
 void Worker::Send(int peer, int type, const Message& msg) {
+//  LOG(INFO) << "Sending to peer: " << peer;
   SendRequest *p = peers_[peer]->Send(type, msg);
   {
     boost::recursive_mutex::scoped_lock sl(state_lock_);
@@ -132,7 +133,7 @@ void Worker::Send(int peer, int type, const Message& msg) {
 
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
-    CheckForMasterUpdates();
+    PERIODIC(0.1, CheckForMasterUpdates());
 //    PERIODIC(1, LOG(INFO) << "Waiting for response from " << MP(peer, type));
   }
 }
@@ -198,6 +199,7 @@ void Worker::KernelLoop() {
 }
 
 int64_t Worker::pending_network_bytes() const {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
   int64_t t = 0;
 
   for (unordered_set<SendRequest*>::const_iterator i = outgoing_requests_.begin(); i != outgoing_requests_.end(); ++i) {

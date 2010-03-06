@@ -63,7 +63,7 @@ private:
   deque<KernelRequest> kernel_done_;
   unordered_set<SendRequest*> outgoing_requests_;
 
-  boost::recursive_mutex state_lock_;
+  mutable boost::recursive_mutex state_lock_;
   boost::thread *table_thread_;
 
   MPI::Intracomm world_;

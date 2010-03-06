@@ -44,6 +44,10 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     }
   }
 
+  bool is_local(int k) {
+    return k % matrix_a->num_shards() == current_shard();
+  }
+
   void Multiply() {
     int cs = current_shard();
     int ns = matrix_a->num_shards();
@@ -51,8 +55,9 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     for (int k = 0; k < bRows; k++) {
       for (int i = 0; i < bRows; i++) {
         for (int j = 0; j < bCols; j++) {
-          if (i % ns != cs) { continue; }
-//          LOG(INFO) << "Multiplying..." << i << "," << j << "," << k << "," << cs;
+          if (!is_local(i * bCols + k)) { continue; }
+          PERIODIC(5,
+                   LOG(INFO) << "Multiplying..." << i << "," << j << "," << k << "," << bRows);
           Block a = matrix_a->get(i * bCols + k);
           Block b = matrix_b->get(k * bCols + j);
           Block c;
@@ -83,7 +88,7 @@ int MatrixMultiplication(ConfigData& conf) {
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
 
-    m.run_one(Master::RunDescriptor::C("MatrixMultiplicationKernel", "Initialize", 0));
+    m.run_all(Master::RunDescriptor::C("MatrixMultiplicationKernel", "Initialize", 0));
     m.run_all(Master::RunDescriptor::C("MatrixMultiplicationKernel", "Multiply", 0));
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);

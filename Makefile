@@ -13,7 +13,7 @@ DISTCC := distcc
 CXX := g++
 CDEBUG := -ggdb2
 COPT :=
-#COPT := -O2 -DNDEBUG
+COPT := -O2 -DNDEBUG
 
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
