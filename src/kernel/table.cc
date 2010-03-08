@@ -133,7 +133,6 @@ void GlobalTable::SendUpdates() {
   }
 
   VLOG(1) << "Sent " << pending_writes_ << " updates.";
-
   pending_writes_ = 0;
 }
 

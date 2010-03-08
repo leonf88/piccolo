@@ -134,13 +134,16 @@ void Worker::Send(int peer, int type, const Message& msg) {
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
     PERIODIC(0.1, CheckForMasterUpdates());
-//    PERIODIC(1, LOG(INFO) << "Waiting for response from " << MP(peer, type));
   }
 }
 
 void Worker::TableLoop() {
   while (running_) {
-    if (!CheckForWorkerUpdates()) { Sleep(1e-3); }
+    if (!HandleGetRequests()) {
+      Sleep(1e-3);
+    }
+
+    CollectPending();
   }
 }
 
@@ -149,6 +152,7 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
+      HandlePutRequests();
       CheckForMasterUpdates();
       Sleep(0.01);
       continue;
@@ -188,6 +192,7 @@ void Worker::KernelLoop() {
     }
 
     while (pending_network_bytes()) {
+      HandlePutRequests();
       Sleep(0.001);
     }
 
@@ -225,6 +230,9 @@ bool Worker::network_idle() const {
 }
 
 void Worker::CollectPending() {
+  if (outgoing_requests_.empty())
+    return;
+
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   unordered_set<SendRequest*>::iterator i = outgoing_requests_.begin();
   while (i != outgoing_requests_.end()) {
@@ -324,25 +332,13 @@ void Worker::Restore(int epoch) {
   rpc_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
 }
 
-bool Worker::CheckForWorkerUpdates() {
-  PERIODIC(30,
-           LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss()
-           << " poll calls " << COUNT);
-
-  PERIODIC(5, DumpProfile();)
-
-  bool did_work = false;
-
-  CollectPending();
-
+void Worker::HandlePutRequests() {
   HashPut put;
   while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     if (put.marker() != -1) {
       UpdateEpoch(put.source(), put.marker());
       continue;
     }
-
-    did_work = true;
 
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
@@ -362,6 +358,15 @@ bool Worker::CheckForWorkerUpdates() {
       t->clear_tainted(put.shard());
     }
   }
+}
+
+bool Worker::HandleGetRequests() {
+  PERIODIC(10, {
+             LOG(INFO) << "Pending network: " << pending_network_bytes() << " rss: " << get_memory_rss();
+             DumpProfile();
+  });
+
+  bool did_work = false;
 
   MPI::Status status;
   HashGet get_req;
