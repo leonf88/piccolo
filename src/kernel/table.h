@@ -10,6 +10,7 @@ class HashPut;
 
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
 static int ModSharding(const int& key, int shards) { return key % shards; }
+static int UintModSharding(const uint32_t& key, int shards) { return key % shards; }
 
 template <class V>
 struct Accumulator {

@@ -38,7 +38,7 @@ public:
     TypedLocalTable<K, V> *t_;
   };
 
-  TypedLocalTable(TableInfo tinfo, int size=10) :
+  TypedLocalTable(TableInfo tinfo, int size=10000) :
     LocalTable(tinfo), data_(size) {
   }
 
@@ -191,6 +191,9 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
   int shard = this->get_shard(k);
+  DCHECK_GE(shard, 0);
+  DCHECK_LT(shard, num_shards());
+
   static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
 
   if (!is_local_shard(shard)) {
