@@ -62,7 +62,7 @@ LIBCOMMON_OBJS := bin/util/common.pb.o \
 LIBRPC_OBJS := bin/util/rpc.o
 
 LIBEXAMPLE_OBJS := bin/examples/upc/file-helper.o \
-		   bin/examples/graph.pb.o
+								   bin/examples/examples.pb.o
 
 LIBKERNEL_OBJS := bin/kernel/table.o\
 		  bin/kernel/table-registry.o \

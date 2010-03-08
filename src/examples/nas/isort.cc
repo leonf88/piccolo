@@ -1,5 +1,5 @@
 #include "client.h"
-#include "examples/graph.pb.h"
+#include "examples/examples.pb.h"
 #include <algorithm>
 
 using namespace dsm;
