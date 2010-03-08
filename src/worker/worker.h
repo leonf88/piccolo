@@ -36,7 +36,8 @@ public:
   void CheckForMasterUpdates();
 
   // Returns true if any non-trivial operations were performed.
-  bool CheckForWorkerUpdates();
+  bool HandleGetRequests();
+  void HandlePutRequests();
   void CollectPending();
 
   void release_shard(GlobalTable *t, int shard);
