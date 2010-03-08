@@ -5,7 +5,7 @@ using namespace dsm;
 
 DEFINE_int32(edge_size, 1000, "");
 
-static const int kBlockSize = 100;
+static const int kBlockSize = 500;
 static int bRows = -1;
 static int bCols = -1;
 
@@ -24,18 +24,23 @@ static Block block_sum(const Block &a, const Block& b) {
 }
 
 struct MatrixMultiplicationKernel : public DSMKernel {
+  int num_shards, my_shard;
+  bool is_local(int y, int x) {
+    return (y * bCols + x) % num_shards == my_shard;
+  }
+
   void Initialize() {
+    num_shards = matrix_a->num_shards();
+    my_shard = current_shard();
+
     LOG(INFO) << "Initializing...";
     Block b, z;
     memset(b.d, 2, kBlockSize * kBlockSize * sizeof(double));
     memset(z.d, 0, kBlockSize * kBlockSize * sizeof(double));
 
-    int cs = current_shard();
-    int ns = matrix_a->num_shards();
-
     for (int by = 0; by < bRows; by ++) {
       for (int bx = 0; bx < bCols; bx ++) {
-        if (by % ns != cs) { continue; }
+        if (!is_local(by, bx)) { continue; }
         LOG(INFO) << "Putting... " << MP(by, bx);
         matrix_a->put(by * bCols + bx, b);
         matrix_b->put(by * bCols + bx, b);
@@ -44,18 +49,11 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     }
   }
 
-  bool is_local(int k) {
-    return k % matrix_a->num_shards() == current_shard();
-  }
-
   void Multiply() {
-    int cs = current_shard();
-    int ns = matrix_a->num_shards();
-
     for (int k = 0; k < bRows; k++) {
       for (int i = 0; i < bRows; i++) {
         for (int j = 0; j < bCols; j++) {
-          if (!is_local(i * bCols + k)) { continue; }
+          if (!is_local(i, k)) { continue; }
           PERIODIC(5,
                    LOG(INFO) << "Multiplying..." << i << "," << j << "," << k << "," << bRows);
           Block a = matrix_a->get(i * bCols + k);

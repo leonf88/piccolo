@@ -90,8 +90,13 @@ ALL_SOURCES := $(shell find src -name '*.h' -o -name '*.cc' -o -name '*.proto')
 
 CORE_LIBS := bin/libworker.a bin/libcommon.a bin/librpc.a
 EXAMPLE_LIBS := $(CORE_LIBS) bin/libexample.a
-EXAMPLE_OBJS := bin/examples/example-main.o bin/examples/shortest-path.o bin/examples/pagerank.o \
-		bin/examples/k-means.o bin/examples/matmul.o bin/test/test-tables.o
+EXAMPLE_OBJS := bin/examples/example-main.o \
+		bin/examples/shortest-path.o \
+		bin/examples/pagerank.o \
+		bin/examples/k-means.o \
+		bin/examples/matmul.o \
+		bin/examples/nas/isort.o \
+		bin/test/test-tables.o
 
 depend: Makefile.dep
 
