@@ -1,5 +1,5 @@
 #include "client.h"
-#include "examples/graph.pb.h"
+#include "examples/examples.pb.h"
 
 using namespace dsm;
 DEFINE_int32(num_nodes, 10000, "");

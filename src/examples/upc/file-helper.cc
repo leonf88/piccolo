@@ -1,5 +1,5 @@
 #include "util/file.h"
-#include "examples/graph.pb.h"
+#include "examples/examples.pb.h"
 #include "file-helper.h"
 
 using namespace dsm;
