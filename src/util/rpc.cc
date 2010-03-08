@@ -6,7 +6,7 @@ DEFINE_bool(rpc_log, false, "");
 namespace dsm {
 
 #define rpc_log(logmsg, src, target, method) VLOG_IF(2, FLAGS_rpc_log) << StringPrintf("source %d target: %d rpc: %d %s", src, target, method, string((logmsg)).c_str());
-#define rpc_lock
+#define rpc_lock boost::recursive_mutex::scoped_lock sl(mpi_lock_);
 
 bool RPCHelper::HasData(int target, int method) {
   rpc_lock;

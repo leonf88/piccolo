@@ -10,7 +10,7 @@ namespace dsm {
 
 typedef google::protobuf::Message Message;
 
-class RPCHelper {
+class RPCHelper : private boost::noncopyable {
 public:
   RPCHelper(MPI::Comm *mpi) :
     mpi_world_(mpi), my_rank_(mpi->Get_rank()) {
