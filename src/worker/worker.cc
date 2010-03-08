@@ -10,7 +10,7 @@ DEFINE_double(sleep_hack, 0.0, "");
 DEFINE_string(checkpoint_dir, "checkpoints", "");
 
 namespace dsm {
-static const double kNetworkTimeout = 10.0;
+static const double kNetworkTimeout = 60.0;
 
 // Represents an active RPC to a remote peer.
 struct Worker::SendRequest {
@@ -140,7 +140,7 @@ void Worker::Read(int peer, int type, Message* msg) {
 
 void Worker::TableLoop() {
   while (running_) {
-    if (!CheckForWorkerUpdates()) { Sleep(1e-5); }
+    if (!CheckForWorkerUpdates()) { Sleep(1e-3); }
   }
 }
 
