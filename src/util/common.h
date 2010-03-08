@@ -52,6 +52,8 @@ uint64_t get_memory_total();
 void Sleep(double t);
 void DumpProfile();
 
+double get_processor_frequency();
+
 static uint64_t rdtsc() {
   uint32_t hi, lo;
   __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
@@ -238,11 +240,12 @@ namespace data {
 }
 
 #define PERIODIC(interval, operation)\
-{ static double last = 0;\
+{ static int64_t last = 0;\
+  static int64_t cycles = (int64_t)(interval * get_processor_frequency());\
   static int COUNT = 0; \
   ++COUNT; \
-  double now = dsm::Now();\
-  if (now - last > interval) {\
+  int64_t now = rdtsc(); \
+  if (now - last > cycles) {\
     last = now;\
     operation;\
     COUNT = 0;\
