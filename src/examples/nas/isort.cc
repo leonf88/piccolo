@@ -31,8 +31,6 @@ namespace dsm { namespace data {
 
 } }
 
-static const int kNumBuckets = 8 * 256;
-
 static vector<int> src;
 static TypedGlobalTable<KeyType, ValueType> *dst = NULL;
 
@@ -58,7 +56,7 @@ public:
     Bucket b;
     b.mutable_value()->Add(0);
     for (int i = 0; i < src.size(); ++i) {
-      LOG_EVERY_N(INFO, 10000000) << "Partitioning...." << i;
+      PERIODIC(1.0, LOG(INFO) << "Partitioning...." << 100. * i / src.size());
       b.set_value(0, src[i]);
       dst->put(src[i] & 0x0fff, b);
     }
@@ -81,7 +79,6 @@ REGISTER_METHOD(SortKernel, Partition);
 REGISTER_METHOD(SortKernel, Sort);
 
 int IntegerSort(ConfigData& conf) {
-//  conf.set_slots(1 + kNumBuckets / conf.num_workers());
   dst = Registry::create_table<KeyType, ValueType>(0, conf.num_workers(), &UintModSharding, &BucketMerge);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
