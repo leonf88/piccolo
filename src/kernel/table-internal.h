@@ -42,10 +42,6 @@ public:
     LocalTable(tinfo), data_(size) {
   }
 
-  V accumulate(const V& a, const V& b) {
-    return ((typename TypedTable<K, V>::AccumFunction)info_.accum_function)(a, b);
-  }
-
   bool contains(const K &k) { return data_.contains(k); }
   bool empty() { return data_.empty(); }
   int64_t size() { return data_.size(); }
@@ -145,7 +141,10 @@ public:
 
   int get_shard(const K& k) {
     ShardingFunction sf = (ShardingFunction)info().sharding_function;
-    return sf(k, info().num_shards);
+    int shard = sf(k, info().num_shards);
+    DCHECK_GE(shard, 0);
+    DCHECK_LT(shard, num_shards());
+    return shard;
   }
 
   int get_shard_str(StringPiece k) {
@@ -188,12 +187,9 @@ TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
 
 template <class K, class V>
 void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
-  boost::recursive_mutex::scoped_lock sl(mutex());
-
   int shard = this->get_shard(k);
-  DCHECK_GE(shard, 0);
-  DCHECK_LT(shard, num_shards());
 
+  boost::recursive_mutex::scoped_lock sl(mutex());
   static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
 
   if (!is_local_shard(shard)) {
@@ -203,6 +199,8 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   if (pending_writes_ > kWriteFlushCount) {
     SendUpdates();
   }
+
+  PERIODIC(0.1, info().worker->HandlePutRequests());
 }
 
 
@@ -215,6 +213,8 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   while (tainted(shard)) {
     sched_yield();
   }
+
+  PERIODIC(0.1, info().worker->HandlePutRequests());
 
   if (is_local_shard(shard)) {
     boost::recursive_mutex::scoped_lock sl(mutex());

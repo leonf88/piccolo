@@ -146,11 +146,11 @@ REGISTER_METHOD(KMeansKernel, compute_expectation);
 REGISTER_METHOD(KMeansKernel, compute_maximization);
 REGISTER_METHOD(KMeansKernel, print_results);
 
-static Distribution dist_merge(const Distribution& d1, const Distribution& d2) {
+static void dist_merge(Distribution* d1, const Distribution& d2) {
   Distribution o;
-  o.x = d1.x + d2.x;
-  o.y = d1.y + d2.y;
-  return o;
+  o.x = d1->x + d2.x;
+  o.y = d1->y + d2.y;
+  *d1 = o;
 }
 
 static int KMeans(ConfigData& conf) {

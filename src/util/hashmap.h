@@ -33,8 +33,12 @@ template <class K, class V>
 class HashMap {
 public:
   struct iterator;
-  typedef V (*AccumFunction)(const V& v1, const V& v2);
+  typedef void (*AccumFunction)(V* v1, const V& v2);
+  typedef void (*KMarshal)(const K& t, string *out);
+  typedef void (*VMarshal)(const V& t, string *out);
 
+  KMarshal key_marshaller;
+  VMarshal value_marshaller;
 private:
   struct Bucket {
     bool in_use;
@@ -142,6 +146,8 @@ HashMap<K, V>::HashMap(int size) : buckets_(0), entries_(0), size_(0) {
   end_->pos = size_;
 
   rehash(size);
+  key_marshaller = &data::marshal<K>;
+  value_marshaller = &data::marshal<V>;
 }
 
 static int log2(int s) {
@@ -187,7 +193,7 @@ template <class K, class V>
 void HashMap<K, V>::accumulate(const K& k, const V& v, AccumFunction f) {
   Bucket *b = bucket_for_key(k);
   if (b) {
-    b->value = f(b->value, v);
+    f(&b->value, v);
   } else {
     put(k, v);
   }
@@ -248,8 +254,8 @@ void HashMap<K, V>::checkpoint(const string& file) {
     RecordFile rf(file, "w");
     Pair p;
     for (iterator i = begin(); i != end(); ++i) {
-      data::marshal<K>(i.key(), p.mutable_key());
-      data::marshal<V>(i.value(), p.mutable_value());
+      key_marshaller(i.key(), p.mutable_key());
+      value_marshaller(i.value(), p.mutable_value());
       rf.write(p);
     }
   }
