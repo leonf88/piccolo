@@ -14,10 +14,10 @@ static int UintModSharding(const uint32_t& key, int shards) { return key % shard
 
 template <class V>
 struct Accumulator {
-  static V min(const V& a, const V& b) { return std::min(a, b); }
-  static V max(const V& a, const V& b) { return std::max(a, b); }
-  static V sum(const V& a, const V& b) { return a + b; }
-  static V replace(const V& a, const V& b) { return b; }
+  static void min(V* a, const V& b) { *a = std::min(*a, b); }
+  static void max(V* a, const V& b) { *a = std::max(*a, b); }
+  static void sum(V* a, const V& b) { *a = *a + b; }
+  static void replace(V* a, const V& b) { *a = b; }
 };
 
 struct HashPutCoder {
@@ -199,7 +199,7 @@ public:
   typedef TypedTable_Iterator<K, V> Iterator;
 
   // Functions for locating and accumulating data.
-  typedef V (*AccumFunction)(const V& a, const V& b);
+  typedef void (*AccumFunction)(V* a, const V& b);
   typedef int (*ShardingFunction)(const K& k, int num_shards);
 };
 

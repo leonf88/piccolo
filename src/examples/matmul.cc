@@ -15,12 +15,10 @@ static TypedGlobalTable<int, Block>* matrix_a = NULL;
 static TypedGlobalTable<int, Block>* matrix_b = NULL;
 static TypedGlobalTable<int, Block>* matrix_c = NULL;
 
-static Block block_sum(const Block &a, const Block& b) {
-  Block c;
+static void block_sum(Block *a, const Block& b) {
   for (int i = 0; i < kBlockSize * kBlockSize; ++i) {
-    c.d[i] = a.d[i] + b.d[i];
+    a->d[i] += b.d[i];
   }
-  return c;
 }
 
 struct MatrixMultiplicationKernel : public DSMKernel {
