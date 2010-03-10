@@ -12,6 +12,7 @@
 *.dvi
 *.ent
 *.log
+.svn
 
 config.log
 config.status
