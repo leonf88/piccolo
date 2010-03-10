@@ -1,20 +1,20 @@
+$(shell mkdir -p bin/)
+
 .PRECIOUS : %.pb.cc %.pb.h %_wrap.cc
 
-VPATH := src/
-
 MPI_INC :=  -I/home/power/share/include
-MPI_LINK := /home/power/share/bin/mpic++
-MPI_LIBDIR := -L/home/power/share/lib/ 
-MPI_LIBS := -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma 
+MPI_LIBS := -pthread -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma -Wl,--whole-archive -libverbs -lmthca -Wl,--no-whole-archive
+MPI_LINK := g++ 
+
+VPATH := src/
 
 PY_INC := -I/usr/include/python2.6/
 
 DISTCC := distcc
 CXX := g++
-CDEBUG := -ggdb2
+CDEBUG := -ggdb1
 COPT :=
-COPT := -O3 -DNDEBUG
-
+#COPT := -O3 -DNDEBUG
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
@@ -44,16 +44,16 @@ UPC_LIBDIR := -L/home/power/share/upc/opt/lib
 UPC_THREADS := -T 20
 #UPC_THREADS :=
 
-DYNAMIC_LIBS := -ldl -lutil -lpthread -lrt -lprotobuf -lnuma  $(PROF_LIBS)
-STATIC_LIBS := -lglog -lgflags -lboost_thread-mt -llzo2 
+DYNAMIC_LIBS :=  $(PROF_LIBS)
+STATIC_LIBS :=   $(MPI_LIBS) -lblas -lprotobuf -lnuma -lglog -lgflags -lboost_thread-mt -llzo2 -ldl -lutil -lpthread -lrt
 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
-LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(MPI_LIBDIR) $(UPC_LIBDIR)
+LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(UPC_LIBDIR)
 
 LINK_LIB := ld -r 
-LINK_BIN := $(MPI_LINK) 
-LINK_BIN_FLAGS := $(LDDIRS) -Wl,-Bstatic $(STATIC_LIBS) -Wl,-Bdynamic $(DYNAMIC_LIBS) 
+LINK_BIN := $(MPI_LINK) $(LDDIRS)
+LINK_BIN_FLAGS := $(DYNAMIC_LIBS) $(STATIC_LIBS) 
 
 LIBCOMMON_OBJS := bin/util/common.pb.o \
 		  bin/util/file.o \
@@ -61,24 +61,26 @@ LIBCOMMON_OBJS := bin/util/common.pb.o \
 
 LIBRPC_OBJS := bin/util/rpc.o
 
-LIBEXAMPLE_OBJS := bin/examples/upc/file-helper.o \
-								   bin/examples/examples.pb.o
+LIBEXAMPLE_OBJS := bin/examples/examples.pb.o \
+                   bin/examples/upc/file-helper.o
+                   
 
 LIBKERNEL_OBJS := bin/kernel/table.o\
 		  bin/kernel/table-registry.o \
 		  bin/kernel/kernel-registry.o
 
-LIBWORKER_OBJS := bin/worker/worker.pb.o bin/worker/worker.o\
+LIBWORKER_OBJS := bin/worker/worker.pb.o\
+                  bin/worker/worker.o\
 		  bin/master/master.o $(LIBKERNEL_OBJS)
 
 #  bin/shortest-path-upc\
 #	 bin/pr-upc\
 
-all: 	 setup\
-         bin/example-dsm\
-         bin/crawler\
-	 bin/test-hashmap\
-	 dsm_paper
+all:   setup\
+       bin/example-dsm\
+       bin/crawler\
+       bin/test-hashmap\
+       dsm_paper
 
 dsm_paper:
 	cd paper && $(MAKE)
@@ -116,19 +118,19 @@ bin/libexample.a : $(LIBEXAMPLE_OBJS)
 	$(LINK_LIB) $^ -o $@
 
 bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lblas
+	$(LINK_BIN) -static $^ -o $@ $(LINK_BIN_FLAGS) 
 	
 bin/crawler: bin/examples/crawler/crawler_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 
 
 bin/test-hashmap: $(EXAMPLE_LIBS) bin/test/test-hashmap.o
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
+	$(LINK_BIN) $^ -o $@  $(LINK_BIN_FLAGS)
 
 bin/mpi-test: bin/test/mpi-test.o bin/libcommon.a
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)
+	$(LINK_BIN) $^ -o $@  $(LINK_BIN_FLAGS)
 
 bin/shortest-path-upc: bin/libexample.a bin/libcommon.a src/examples/upc/shortest-path.upc	 
-	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(MPI_LIBS)  $(LINK_BIN_FLAGS)
+	$(UPCC) $(UPCFLAGS) $(LDDIRS)  $^ -o $@ $(MPI_LIBS) $(LINK_BIN_FLAGS)
 
 bin/pagerank-upc: bin/libexample.a bin/libcommon.a src/examples/upc/pagerank.upc
 	$(UPCC) $(UPC_THREADS) $(UPCFLAGS) $(LDDIRS) $^ -o $@ $(MPI_LIBS) $(LINK_BIN_FLAGS)
@@ -140,7 +142,7 @@ clean:
 	find src -name '*_wrap.cc' -exec rm {} \;
 
 %.pb.cc %.pb.h : %.proto
-	protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
+	/home/power/share/bin/protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
 
 %_wrap.cc : %.h
 	swig -O -c++ -python $(CPPFLAGS) -o $@ $< 
@@ -150,6 +152,4 @@ clean:
 bin/%.o: src/%.cc
 	$(DISTCC) $(CXX) $(CXXFLAGS) $(TARGET_ARCH) -c $< -o $@
 
-
-$(shell mkdir -p bin/)
 -include Makefile.dep
