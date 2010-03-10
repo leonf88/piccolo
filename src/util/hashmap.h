@@ -15,8 +15,10 @@
 
 namespace dsm {
 
+
+namespace data {
 template <class K>
-static int simple_hash(K k) {
+static int hash(K k) {
   k = (k ^ 61) ^ (k >> 16);
   k = k + (k << 3);
   k = k ^ (k >> 4);
@@ -25,8 +27,9 @@ static int simple_hash(K k) {
 }
 
 template<>
-int simple_hash(string s) {
+int hash(string s) {
   return SuperFastHash(s.data(), s.size());
+}
 }
 
 template <class K, class V>
@@ -50,7 +53,7 @@ private:
   static const double kLoadFactor = 0.7;
 
   int bucket_idx(K k) {
-    return simple_hash<K>(k) & (size_ - 1);
+    return dsm::data::hash<K>(k) & (size_ - 1);
   }
 
   Bucket* bucket_for_key(const K& k) {
