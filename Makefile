@@ -98,6 +98,7 @@ EXAMPLE_OBJS := bin/examples/example-main.o \
 		bin/examples/k-means.o \
 		bin/examples/matmul.o \
 		bin/examples/nas/isort.o \
+		bin/examples/nas/n-body.o \
 		bin/test/test-tables.o
 
 depend: Makefile.dep
