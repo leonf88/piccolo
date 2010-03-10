@@ -1,5 +1,5 @@
 #include "client.h"
-#include "examples/examples.pb.h"
+#include "examples/examples.h"
 #include <algorithm>
 
 using namespace dsm;
@@ -18,30 +18,10 @@ struct KeyGen {
   uint64_t a_;
 };
 
-namespace dsm { namespace data {
-  template <>
-  void marshal(const Bucket& t, string *out) {
-    t.SerializePartialToString(out);
-  }
-
-  template <>
-  void unmarshal(const StringPiece& s, Bucket* t) {
-    t->ParseFromArray(s.data, s.len);
-  }
-
-} }
-
 static vector<int> src;
 static TypedGlobalTable<KeyType, ValueType> *dst = NULL;
 
 DEFINE_int64(sort_size, 1000000, "");
-
-static void BucketMerge(ValueType *l, const ValueType &r) {
-  l->MergeFrom(r);
-
-//  uint32_t* data = l->mutable_value()->mutable_data();
-//  std::inplace_merge(data, data + le, data + l->value_size());
-}
 
 class SortKernel : public DSMKernel {
 public:
