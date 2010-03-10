@@ -118,8 +118,8 @@ bin/libexample.a : $(LIBEXAMPLE_OBJS)
 bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lblas
 	
-bin/crawler: bin/examples/crawler_support_wrap.o bin/examples/crawler_support.o $(EXAMPLE_LIBS)
-	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS) -lpython2.6 -lboost_python-mt
+bin/crawler: bin/examples/crawler/crawler_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
+	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 
 
 bin/test-hashmap: $(EXAMPLE_LIBS) bin/test/test-hashmap.o
 	$(LINK_BIN) $(LDDIRS) $^ -o $@  $(LINK_BIN_FLAGS)

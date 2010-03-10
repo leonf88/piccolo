@@ -1,5 +1,5 @@
 #include "client.h"
-#include "examples/crawler_support.h"
+#include "crawler_support.h"
 #include "python2.6/Python.h"
 
 #include <boost/python.hpp>
@@ -15,7 +15,7 @@ public:
     try {
       object sys_module = import("sys");
       object sys_ns = sys_module.attr("__dict__");
-      exec("path += ['src/examples']", sys_ns, sys_ns);
+      exec("path += ['src/examples/crawler']", sys_ns, sys_ns);
       exec("print path", sys_ns, sys_ns);
 
       crawl_module_ = import("crawler");
