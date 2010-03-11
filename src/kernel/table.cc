@@ -54,6 +54,9 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   Worker *w = info().worker;
   int peer = w->peer_for_shard(info().table_id, shard);
 
+  DCHECK_GE(peer, 0);
+  DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
+
   VLOG(2) << "Sending get request to: " << MP(peer, shard);
   w->Send(peer, MTYPE_GET_REQUEST, req);
   w->Read(peer, MTYPE_GET_RESPONSE, &resp);

@@ -243,6 +243,14 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   Timer t;
 
+  // Assign workers for all table shards, to ensure every shard has an owner.
+  Registry::TableMap &tables = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+    for (int j = 0; j < i->second->num_shards(); ++j) {
+      assign_worker(i->first, j);
+    }
+  }
+
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = workers_[i];
 
@@ -250,11 +258,8 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     w.pending.clear();
   }
 
-  Registry::TableMap &tables = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
-    for (int j = 0; j < i->second->num_shards(); ++j) {
-      assign_worker(i->first, j);
-    }
+  for (int i = 0; i < shards.size(); ++i) {
+    assign_worker(r.table, shards[i]);
   }
 
   send_assignments();

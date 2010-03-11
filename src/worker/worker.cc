@@ -7,6 +7,7 @@
 #include "kernel/table-registry.h"
 
 DEFINE_double(sleep_hack, 0.0, "");
+DEFINE_double(sleep_time, 0.001, "");
 DEFINE_string(checkpoint_dir, "checkpoints", "");
 
 namespace dsm {
@@ -126,6 +127,9 @@ void Worker::Send(int peer, int type, const Message& msg) {
   {
     boost::recursive_mutex::scoped_lock sl(state_lock_);
     outgoing_requests_.insert(p);
+
+    stats_.set_bytes_out(stats_.bytes_out() + p->payload.size());
+    stats_.set_put_out(stats_.put_out() + 1);
   }
 
   CheckForMasterUpdates();
@@ -134,16 +138,18 @@ void Worker::Send(int peer, int type, const Message& msg) {
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
     PERIODIC(0.1, CheckForMasterUpdates());
+    Sleep(FLAGS_sleep_time);
   }
 }
 
 void Worker::TableLoop() {
+  int miss = 0;
   while (running_) {
-    if (!HandleGetRequests()) {
-      Sleep(1e-3);
+    if (!HandleGetRequests()) { ++miss; }
+    if (miss > 1000) {
+      Sleep(FLAGS_sleep_time);
+      miss = 0;
     }
-
-    CollectPending();
   }
 }
 
@@ -154,7 +160,7 @@ void Worker::KernelLoop() {
     if (kernel_queue_.empty()) {
       HandlePutRequests();
       CheckForMasterUpdates();
-      Sleep(0.01);
+      Sleep(FLAGS_sleep_time);
       continue;
     }
 
@@ -193,7 +199,7 @@ void Worker::KernelLoop() {
 
     while (pending_network_bytes()) {
       HandlePutRequests();
-      Sleep(0.001);
+      Sleep(FLAGS_sleep_time);
     }
 
     kernel_done_.push_back(k);
@@ -248,7 +254,6 @@ void Worker::CollectPending() {
       i = outgoing_requests_.erase(i);
       continue;
     }
-
     if (r->timed_out()) {
       LOG_EVERY_N(WARNING, 1000)  << "Send of " << r->payload.size() << " to " << r->target << " timed out.";
       r->Cancel();
@@ -333,6 +338,8 @@ void Worker::Restore(int epoch) {
 }
 
 void Worker::HandlePutRequests() {
+  CollectPending();
+
   HashPut put;
   while (rpc_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     if (put.marker() != -1) {
@@ -402,8 +409,6 @@ bool Worker::HandleGetRequests() {
     }
 
     SendRequest *r = peers_[status.Get_source() - 1]->Send(MTYPE_GET_RESPONSE, get_resp);
-    stats_.set_bytes_out(stats_.bytes_out() + r->payload.size());
-    stats_.set_put_out(stats_.put_out() + 1);
 
     boost::recursive_mutex::scoped_lock sl(state_lock_);
     outgoing_requests_.insert(r);
@@ -444,6 +449,7 @@ void Worker::CheckForMasterUpdates() {
       GlobalTable *t = Registry::get_table(a.table());
       int old_owner = t->get_owner(a.shard());
       t->set_owner(a.shard(), a.new_worker());
+      VLOG(1) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
         VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
