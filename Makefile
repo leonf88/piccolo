@@ -3,7 +3,8 @@ $(shell mkdir -p bin/)
 .PRECIOUS : %.pb.cc %.pb.h %_wrap.cc
 
 MPI_INC :=  -I/home/power/share/include
-MPI_LIBS := -pthread -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma -Wl,--whole-archive -libverbs -lmthca -Wl,--no-whole-archive
+MPI_LIBS := -pthread -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma 
+#-Wl,--whole-archive -libverbs -lmthca -Wl,--no-whole-archive
 MPI_LINK := g++ 
 
 VPATH := src/
@@ -12,9 +13,9 @@ PY_INC := -I/usr/include/python2.6/
 
 DISTCC := distcc
 CXX := g++
-CDEBUG := -ggdb1
+CDEBUG := -ggdb2
 COPT :=
-#COPT := -O3 -DNDEBUG
+COPT := -O3 -DNDEBUG
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
@@ -45,7 +46,7 @@ UPC_THREADS := -T 20
 #UPC_THREADS :=
 
 DYNAMIC_LIBS :=  $(PROF_LIBS)
-STATIC_LIBS :=   $(MPI_LIBS) -lblas -lprotobuf -lnuma -lglog -lgflags -lboost_thread-mt -llzo2 -ldl -lutil -lpthread -lrt
+STATIC_LIBS :=   $(MPI_LIBS) -lblas -lprotobuf -lglog -lgflags -lboost_thread-mt -llzo2 -Wl,-Bdynamic -ldl -lutil -lpthread -lrt
 
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
@@ -119,7 +120,7 @@ bin/libexample.a : $(LIBEXAMPLE_OBJS)
 	$(LINK_LIB) $^ -o $@
 
 bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
-	$(LINK_BIN) -static $^ -o $@ $(LINK_BIN_FLAGS) 
+	$(LINK_BIN) $^ -o $@ $(LINK_BIN_FLAGS) 
 	
 bin/crawler: bin/examples/crawler/crawler_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 

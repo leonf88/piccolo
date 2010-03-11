@@ -38,7 +38,7 @@ public:
     for (int i = 0; i < src.size(); ++i) {
       PERIODIC(1.0, LOG(INFO) << "Partitioning...." << 100. * i / src.size());
       b.set_value(0, src[i]);
-      dst->put(src[i] & 0x0fff, b);
+      dst->put(src[i] & 0xffff, b);
     }
   }
 
@@ -69,6 +69,8 @@ int IntegerSort(ConfigData& conf) {
   } else {
     Worker w(conf);
     w.Run();
+
+    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
 
   return 0;

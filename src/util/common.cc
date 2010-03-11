@@ -242,7 +242,7 @@ void Init(int argc, char** argv) {
     mkdir("profile/", 0755);
     char buf[100];
     gethostname(buf, 100);
-    ProfilerStart(StringPrintf("profile/cpu.%s.%d",  buf, getpid()).c_str());
+    ProfilerStart(StringPrintf("profile/worker.%d", world->Get_rank()).c_str());
   }
 #endif
 }
