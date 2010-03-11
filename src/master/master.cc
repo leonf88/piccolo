@@ -61,10 +61,11 @@ bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
 }
 
 void Master::WorkerState::set_serves(int shard, bool should_service) {
-  for (int i = 0; i < Registry::get_tables().size(); ++i) {
-    Taskid t = MP(i, shard);
+  Registry::TableMap &tables = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+    Taskid t = MP(i->first, shard);
     if (should_service) {
-      shards[MP(i, shard)] = ShardInfo();
+      shards[MP(i->first, shard)] = ShardInfo();
     } else {
       shards.erase(shards.find(t));
     }
@@ -249,8 +250,11 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     w.pending.clear();
   }
 
-  for (int i = 0; i < shards.size(); ++i) {
-    assign_worker(r.table, i);
+  Registry::TableMap &tables = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+    for (int j = 0; j < i->second->num_shards(); ++j) {
+      assign_worker(i->first, j);
+    }
   }
 
   send_assignments();
