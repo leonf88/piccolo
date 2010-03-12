@@ -193,7 +193,7 @@ template <class K, class V>
 void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
-  boost::recursive_mutex::scoped_lock sl(mutex());
+//  boost::recursive_mutex::scoped_lock sl(mutex());
   static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
 
   if (!is_local_shard(shard)) {
@@ -221,7 +221,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   PERIODIC(0.1, info().worker->HandlePutRequests());
 
   if (is_local_shard(shard)) {
-    boost::recursive_mutex::scoped_lock sl(mutex());
+//    boost::recursive_mutex::scoped_lock sl(mutex());
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
   }
 
@@ -232,9 +232,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
 
 template <class K, class V>
 bool TypedGlobalTable<K, V>::contains(const K &k) {
-  boost::recursive_mutex::scoped_lock sl(mutex());
-
-  int shard = this->get_shard(k);
+    int shard = this->get_shard(k);
 
   // If we received a requestfor this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
@@ -243,7 +241,7 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   }
 
   if (is_local_shard(shard)) {
-    boost::recursive_mutex::scoped_lock sl(mutex());
+//    boost::recursive_mutex::scoped_lock sl(mutex());
     return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->contains(k);
   }
 

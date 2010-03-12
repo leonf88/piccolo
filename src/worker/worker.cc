@@ -146,6 +146,8 @@ public:
       }
 
       CollectActive();
+
+      PERIODIC(10., { DumpProfile(); });
     }
   }
 
