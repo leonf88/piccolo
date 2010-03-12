@@ -34,9 +34,10 @@ public:
   void Read(int peer, int type, Message* msg);
 
   void CheckForMasterUpdates();
+  void CheckNetwork();
 
   // Returns true if any non-trivial operations were performed.
-  bool HandleGetRequests();
+  void HandleGetRequests();
   void HandlePutRequests();
   void CollectPending();
 
@@ -51,6 +52,8 @@ public:
   int64_t pending_kernel_bytes() const;
   bool network_idle() const;
 
+  bool has_incoming_data() const;
+
 private:
   void Checkpoint(int epoch);
   void Restore(int epoch);
@@ -58,17 +61,13 @@ private:
 
   RecordFile *checkpoint_delta_;
 
-  struct SendRequest;
-
   deque<KernelRequest> kernel_queue_;
   deque<KernelRequest> kernel_done_;
-  unordered_set<SendRequest*> outgoing_requests_;
 
   mutable boost::recursive_mutex state_lock_;
-  boost::thread *table_thread_;
+  boost::thread *table_thread_, *kernel_thread_;
 
   MPI::Intracomm world_;
-  RPCHelper *rpc_;
 
   // The current epoch this worker is running within.
   int epoch_;

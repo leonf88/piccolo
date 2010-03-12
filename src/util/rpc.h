@@ -35,6 +35,7 @@ public:
   void Broadcast(int method, const Message &msg);
   void SyncBroadcast(int method, const Message &msg);
 
+  MPI::Comm *world() { return mpi_world_; }
 private:
   boost::recursive_mutex mpi_lock_;
 
