@@ -14,7 +14,7 @@ PY_INC := -I/usr/include/python2.6/
 DISTCC := distcc
 CXX := g++
 CDEBUG := -ggdb2
-COPT :=
+#COPT :=
 COPT := -O3 -DNDEBUG
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
@@ -23,8 +23,8 @@ USE_TCMALLOC :=
 USE_OPROFILE :=
 
 ifneq ($(USE_CPU_PROFILE),)
-	PROF_LIBS := -lprofiler -lunwind
-	CPPFLAGS := $(CPPFLAGS) -DCPUPROF=1 
+	PROF_LIBS := -Lextlib/gperftools/.libs/ -lprofiler -lunwind
+	CPPFLAGS := $(CPPFLAGS) -Iextlib/gperftools/src/ -DCPUPROF=1 
 endif
 
 ifneq ($(USE_TCMALLOC),)
@@ -43,14 +43,12 @@ UPCC := /home/power/share/bupc/bin/upcc
 UPCFLAGS := $(CPPFLAGS) --network=udp -O
 UPC_LIBDIR := -L/home/power/share/upc/opt/lib
 UPC_THREADS := -T 20
-#UPC_THREADS :=
-
-DYNAMIC_LIBS :=  $(PROF_LIBS)
-STATIC_LIBS :=   $(MPI_LIBS) -lblas -lprotobuf -lglog -lgflags -lboost_thread-mt -llzo2 -Wl,-Bdynamic -ldl -lutil -lpthread -lrt
-
 UPC_LIBS := -lgasnet-mpi-par -lupcr-mpi-par -lumalloc -lammpi
 
 LDDIRS := $(LDDIRS) -Lextlib/glog/.libs/ -Lextlib/gflags/.libs/ $(UPC_LIBDIR)
+
+DYNAMIC_LIBS :=  $(PROF_LIBS)
+STATIC_LIBS :=   $(MPI_LIBS) -lblas -lprotobuf -lglog -lgflags -lboost_thread-mt -llzo2 -Wl,-Bdynamic -ldl -lutil -lpthread -lrt
 
 LINK_LIB := ld -r 
 LINK_BIN := $(MPI_LINK) $(LDDIRS)
