@@ -32,9 +32,13 @@ double rand_double() {
 class KMeansKernel : public DSMKernel {
 public:
   void initialize_world() {
+    points->resize(FLAGS_num_points * 2);
+
     srand(time(NULL));
     int c = 0;
     for (int i = 0; i < FLAGS_num_dists; ++i) {
+      if (i % points->num_shards() != current_shard()) { continue; }
+
       double dx = 0.5 - rand_double();
       double dy = 0.5 - rand_double();
 
@@ -45,6 +49,8 @@ public:
         Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
         points->put(c++, p);
       }
+
+      LOG(INFO) << "Initializing distributions..." << i;
     }
 
     for (int i = 0; i < FLAGS_num_dists; ++i) {
@@ -66,10 +72,15 @@ public:
   // Iterate over all distributions, and for each local point, compute the
   // distribution with maximum likelihood.
   void compute_expectation() {
+    vector<Distribution> local;
     for (int i = 0; i < FLAGS_num_dists; ++i) {
-      Distribution d = dists->get(i);
-      TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
-      for (; !it->done(); it->Next()) {
+      local.push_back(dists->get(i));
+    }
+
+    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
+    for (; !it->done(); it->Next()) {
+      for (int i = 0; i < FLAGS_num_dists; ++i) {
+        Distribution& d = local[i];
         Point &p = it->value();
         double dist = pow(p.x - d.x, 2) + pow(p.y - d.y, 2);
         if (dist < p.min_dist) {
@@ -84,7 +95,7 @@ public:
     TypedTable<int, Distribution>::Iterator *it = dists->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       Distribution &d = it->value();
-      LOG(INFO) << "Distribution" << ":: " << it->key() << " :: "<< d.x << " : " << d.y;
+//      LOG(INFO) << "Distribution" << ":: " << it->key() << " :: "<< d.x << " : " << d.y;
 
       if (d.x == 0 && d.y == 0) {
         Point p = points->get(random() % FLAGS_num_points);
@@ -112,12 +123,17 @@ public:
   }
 
   void print_results() {
+    vector<Distribution> local;
+    for (int i = 0; i < FLAGS_num_dists; ++i) {
+      local.push_back(actual->get(i));
+    }
+
     for (int i = 0; i < FLAGS_num_dists; ++i) {
       Distribution d = dists->get(i);
       double best_diff = 1000;
       Distribution best = d;
       for (int j = 0; j < FLAGS_num_dists; ++j) {
-        Distribution a = actual->get(j);
+        Distribution a = local[j];
         double diff = fabs(d.x - a.x) + fabs(d.y - a.y);
         if (diff < best_diff) {
           best_diff = diff;
@@ -160,7 +176,7 @@ static int KMeans(ConfigData& conf) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    RUN_ONE(m, KMeansKernel, initialize_world, 0);
+    RUN_ALL(m, KMeansKernel, initialize_world, 0);
     for (int i = 0; i < FLAGS_iterations; i++) {
       RUN_ALL(m, KMeansKernel, initialize_expectation, 1);
       RUN_ALL(m, KMeansKernel, compute_expectation, 1);
