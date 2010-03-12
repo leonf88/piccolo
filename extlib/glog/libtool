@@ -50,19 +50,19 @@ available_tags=" CXX"
 SHELL="/bin/bash"
 
 # Whether or not to build shared libraries.
-build_libtool_libs=yes
+build_libtool_libs=no
 
 # Whether or not to build static libraries.
 build_old_libs=yes
 
 # Whether or not to add -lc for building shared libraries.
-build_libtool_need_lc=no
+build_libtool_need_lc=yes
 
 # Whether or not to disallow shared libs when runtime libs are static
 allow_libtool_libs_with_static_runtimes=no
 
 # Whether or not to optimize for fast installation.
-fast_install=yes
+fast_install=needless
 
 # The host system.
 host_alias=
@@ -82,13 +82,13 @@ AR="ar"
 AR_FLAGS="cru"
 
 # A C compiler.
-LTCC="gcc"
+LTCC="distcc gcc"
 
 # LTCC compiler flags.
 LTCFLAGS="-g -O2"
 
 # A language-specific compiler.
-CC="gcc"
+CC="distcc gcc"
 
 # Is the compiler the GNU C compiler?
 with_gcc=yes
@@ -7326,7 +7326,7 @@ disable_libs=static
 SHELL="/bin/bash"
 
 # Whether or not to build shared libraries.
-build_libtool_libs=yes
+build_libtool_libs=no
 
 # Whether or not to build static libraries.
 build_old_libs=yes
@@ -7338,7 +7338,7 @@ build_libtool_need_lc=no
 allow_libtool_libs_with_static_runtimes=no
 
 # Whether or not to optimize for fast installation.
-fast_install=yes
+fast_install=needless
 
 # The host system.
 host_alias=
@@ -7358,13 +7358,13 @@ AR="ar"
 AR_FLAGS="cru"
 
 # A C compiler.
-LTCC="gcc"
+LTCC="distcc gcc"
 
 # LTCC compiler flags.
 LTCFLAGS="-g -O2"
 
 # A language-specific compiler.
-CC="g++"
+CC="distcc g++"
 
 # Is the compiler the GNU C compiler?
 with_gcc=yes
