@@ -71,6 +71,8 @@ public:
   }
 
   void Initialize() {
+    next_pr_hash->resize(FLAGS_nodes * 2);
+    curr_pr_hash->resize(FLAGS_nodes * 2);
     for (int i = current_shard(); i < FLAGS_nodes; i += get_table(0)->num_shards()) {
       next_pr_hash->put(i, random_restart_seed());
     }
