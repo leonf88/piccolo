@@ -108,9 +108,9 @@ int Worker::peer_for_shard(int table, int shard) const {
 }
 
 void Worker::Run() {
-  table_thread_ = new boost::thread(&Worker::TableLoop, this);
+//  table_thread_ = new boost::thread(&Worker::TableLoop, this);
   KernelLoop();
-  table_thread_->join();
+//  table_thread_->join();
 }
 
 Worker::~Worker() {
@@ -132,14 +132,17 @@ void Worker::Send(int peer, int type, const Message& msg) {
     stats_.set_put_out(stats_.put_out() + 1);
   }
 
-  CheckForMasterUpdates();
+  PERIODIC(0.1, CheckForMasterUpdates());
 }
 
 void Worker::Read(int peer, int type, Message* msg) {
   while (!peers_[peer]->TryRead(type, msg)) {
-    PERIODIC(0.1, CheckForMasterUpdates());
+    PERIODIC(0.01, HandlePutRequests());
+    HandleGetRequests();
     Sleep(FLAGS_sleep_time);
   }
+
+  PERIODIC(0.1, CheckForMasterUpdates());
 }
 
 void Worker::TableLoop() {
@@ -158,8 +161,12 @@ void Worker::KernelLoop() {
 
   while (running_) {
     if (kernel_queue_.empty()) {
-      HandlePutRequests();
-      CheckForMasterUpdates();
+      HandleGetRequests();
+      PERIODIC(0.01, {
+          CheckForMasterUpdates();
+          HandlePutRequests();
+      });
+
       Sleep(FLAGS_sleep_time);
       continue;
     }
@@ -198,7 +205,11 @@ void Worker::KernelLoop() {
     }
 
     while (pending_network_bytes()) {
-      HandlePutRequests();
+      PERIODIC(0.01, {
+          CheckForMasterUpdates();
+          HandlePutRequests();
+      });
+      HandleGetRequests();
       Sleep(FLAGS_sleep_time);
     }
 
