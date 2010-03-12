@@ -126,7 +126,7 @@ REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
 
 int Pagerank(ConfigData& conf) {
-  conf.set_slots(16);
+  conf.set_slots(128);
 
   // Cap address space at 2G.
   struct rlimit rl;
