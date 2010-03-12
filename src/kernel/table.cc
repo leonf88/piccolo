@@ -27,6 +27,14 @@ bool GlobalTable::empty() {
   return true;
 }
 
+void GlobalTable::resize(int64_t new_size) {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    if (is_local_shard(i)) {
+      partitions_[i]->resize(new_size / partitions_.size());
+    }
+  }
+}
+
 bool GlobalTable::is_local_shard(int shard) {
   return partitions_[shard]->owner == info_.worker->id();
 }

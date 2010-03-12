@@ -88,8 +88,9 @@ public:
   virtual void start_checkpoint(const string& f) = 0;
   virtual void write_delta(const HashPut& put) = 0;
   virtual void finish_checkpoint() = 0;
-
   virtual void restore(const string& f) = 0;
+
+  virtual void resize(int64_t new_size) = 0;
 
   TableInfo info_;
 };
@@ -129,14 +130,13 @@ public:
     }
   }
 
-  LocalTable *get_partition(int shard) { return partitions_[shard]; }
+  LocalTable *get_partition(int shard) {
+    return partitions_[shard];
+  }
+
   Table::Iterator* get_iterator(int shard) {
     return partitions_[shard]->get_iterator();
   }
-
-  // Generic methods against serialized strings.
-  virtual bool contains_str(StringPiece k) = 0;
-  virtual int get_shard_str(StringPiece k) = 0;
 
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
@@ -162,6 +162,21 @@ public:
   bool empty();
   int64_t size() { return 1; }
 
+  void resize(int64_t new_size);
+
+protected:
+  friend class Worker;
+  virtual LocalTable* create_local(int shard) = 0;
+  boost::recursive_mutex& mutex() { return m_; }
+  vector<LocalTable*> partitions_;
+
+  volatile int pending_writes_;
+  boost::recursive_mutex m_;
+
+  // Generic methods against serialized strings.
+  virtual bool contains_str(StringPiece k) = 0;
+  virtual int get_shard_str(StringPiece k) = 0;
+
   void set_dirty(int shard) { partitions_[shard]->dirty = true; }
   bool dirty(int shard) { return partitions_[shard]->dirty || !partitions_[shard]->empty(); }
 
@@ -172,19 +187,7 @@ public:
   void start_checkpoint(const string& f);
   void write_delta(const HashPut& d);
   void finish_checkpoint();
-
   void restore(const string& f);
-
-  boost::recursive_mutex& mutex() { return m_; }
-
-protected:
-  friend class Worker;
-  virtual LocalTable* create_local(int shard) = 0;
-
-  vector<LocalTable*> partitions_;
-
-  volatile int pending_writes_;
-  boost::recursive_mutex m_;
 };
 
 template <class K, class V>
