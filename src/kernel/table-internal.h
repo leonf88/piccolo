@@ -9,7 +9,7 @@
 
 namespace dsm {
 
-static const int kWriteFlushCount = 10000000;
+static const int kWriteFlushCount = 100000;
 
 // A local accumulated hash table.
 template <class K, class V>
@@ -65,6 +65,10 @@ public:
     return data::to_string<V>(get(data::from_string<K>(k)));
   }
 
+  void resize(int64_t new_size) {
+    data_.rehash(new_size);
+  }
+
   void put_str(const StringPiece &k, const StringPiece &v) {
     const K& kt = data::from_string<K>(k);
     const V& vt = data::from_string<V>(v);
@@ -108,6 +112,12 @@ class TypedGlobalTable : public GlobalTable {
 private:
   static const int32_t kMaxPeers = 8192;
   typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
+protected:
+  LocalTable* create_local(int shard) {
+    TableInfo linfo = ((Table*)this)->info();
+    linfo.shard = shard;
+    return new TypedLocalTable<K, V>(linfo);
+  }
 public:
   TypedGlobalTable(TableInfo tinfo);
 
@@ -132,12 +142,6 @@ public:
   TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
   const TableInfo& info() { return this->info_; }
-
-  LocalTable* create_local(int shard) {
-    TableInfo linfo = ((Table*)this)->info();
-    linfo.shard = shard;
-    return new TypedLocalTable<K, V>(linfo);
-  }
 
   int get_shard(const K& k) {
     ShardingFunction sf = (ShardingFunction)info().sharding_function;
@@ -200,6 +204,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
     SendUpdates();
   }
 
+  PERIODIC(0.001, info().worker->HandleGetRequests())
   PERIODIC(0.1, info().worker->HandlePutRequests());
 }
 
@@ -214,6 +219,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
     sched_yield();
   }
 
+  PERIODIC(0.001, info().worker->HandleGetRequests());
   PERIODIC(0.1, info().worker->HandlePutRequests());
 
   if (is_local_shard(shard)) {
