@@ -28,6 +28,8 @@ enum MessageTypes {
   
   MTYPE_RESTORE = 12;
   MTYPE_RESTORE_DONE = 13;
+  
+  MTYPE_MAX = 16;
 };
 
 message RegisterWorkerRequest {

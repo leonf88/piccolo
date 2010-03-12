@@ -38,7 +38,7 @@ public:
     TypedLocalTable<K, V> *t_;
   };
 
-  TypedLocalTable(TableInfo tinfo, int size=10000) :
+  TypedLocalTable(TableInfo tinfo, int size=5) :
     LocalTable(tinfo), data_(size) {
   }
 
@@ -204,8 +204,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
     SendUpdates();
   }
 
-  PERIODIC(0.001, info().worker->HandleGetRequests())
-  PERIODIC(0.1, info().worker->HandlePutRequests());
+  PERIODIC(0.1, { info().worker->HandlePutRequests(); });
 }
 
 
@@ -219,7 +218,6 @@ V TypedGlobalTable<K, V>::get(const K &k) {
     sched_yield();
   }
 
-  PERIODIC(0.001, info().worker->HandleGetRequests());
   PERIODIC(0.1, info().worker->HandlePutRequests());
 
   if (is_local_shard(shard)) {
