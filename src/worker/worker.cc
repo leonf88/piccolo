@@ -60,7 +60,7 @@ struct Worker::Stub : private boost::noncopyable {
 
 class NetworkThread {
 private:
-  typedef vector<string> Queue;
+  typedef deque<string> Queue;
 
   vector<SendRequest*> pending_sends_;
   unordered_set<SendRequest*> active_sends_;
@@ -69,9 +69,10 @@ private:
 
   RPCHelper *rpc_;
   MPI::Comm *world_;
+  mutable boost::recursive_mutex send_lock;
+  mutable boost::recursive_mutex q_lock[MTYPE_MAX];
 public:
   bool running;
-  mutable boost::recursive_mutex m;
 
   NetworkThread(RPCHelper* rpc) {
     rpc_ = rpc;
@@ -80,7 +81,7 @@ public:
   }
 
   int64_t pending_bytes() const {
-    boost::recursive_mutex::scoped_lock sl(m);
+    boost::recursive_mutex::scoped_lock sl(send_lock);
     int64_t t = 0;
 
     for (unordered_set<SendRequest*>::const_iterator i = active_sends_.begin(); i != active_sends_.end(); ++i) {
@@ -98,6 +99,7 @@ public:
     if (active_sends_.empty())
       return;
 
+    boost::recursive_mutex::scoped_lock sl(send_lock);
     unordered_set<SendRequest*>::iterator i = active_sends_.begin();
     while (i != active_sends_.end()) {
       SendRequest *r = (*i);
@@ -128,13 +130,15 @@ public:
         data.resize(bytes);
 
         world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
+
+        boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
         incoming[tag][source].push_back(data);
       } else {
         Sleep(FLAGS_sleep_time);
       }
 
       while (!pending_sends_.empty()) {
-        boost::recursive_mutex::scoped_lock sl(m);
+        boost::recursive_mutex::scoped_lock sl(send_lock);
         SendRequest* s = pending_sends_.back();
         pending_sends_.pop_back();
         s->Send(rpc_);
@@ -146,11 +150,11 @@ public:
   }
 
   bool check_queue(int src, int type, Message* data) {
+    boost::recursive_mutex::scoped_lock sl(q_lock[type]);
     Queue& q = incoming[type][src];
-    boost::recursive_mutex::scoped_lock sl(m);
     if (!q.empty()) {
-      data->ParseFromString(q.back());
-      q.pop_back();
+      data->ParseFromString(q.front());
+      q.pop_front();
       return true;
     }
     return false;
@@ -164,7 +168,6 @@ public:
   }
 
   bool TryRead(int src, int type, Message* data, int *source=NULL) {
-//    LOG(INFO) << "Checking: " << MP(src, type);
     if (src == MPI::ANY_SOURCE) {
       for (int i = 0; i < world_->Get_size(); ++i) {
         if (TryRead(i, type, data, source)) {
@@ -174,7 +177,6 @@ public:
     } else {
       if (check_queue(src, type, data)) {
         if (source) { *source = src; }
-//        LOG(INFO) << "Found!" << MP(src, type);
         return true;
       }
     }
@@ -184,7 +186,7 @@ public:
 
   // Enqueue the given request for transmission.
   void Send(SendRequest *req) {
-    boost::recursive_mutex::scoped_lock sl(m);
+    boost::recursive_mutex::scoped_lock sl(send_lock);
 //    LOG(INFO) << "Sending... " << MP(req->target, req->rpc_type);
     pending_sends_.push_back(req);
   }
