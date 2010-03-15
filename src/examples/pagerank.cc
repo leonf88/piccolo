@@ -17,16 +17,11 @@ static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
 DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
-
-DEFINE_bool(use_block_sharding, true, "");
-
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 
-static int (*sharding)(const int& key, int shards);
-static int BlkModSharding(const int& key, int shards) { return (key/kBlocksize) % shards; }
+typedef pair<uint32_t, uint32_t> PageId;
 
 static void BuildGraph(int shards, int nodes, int density) {
-  fprintf(stderr, "Building graph: ");
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
@@ -34,19 +29,27 @@ static void BuildGraph(int shards, int nodes, int density) {
                                          kTestPrefix, i, shards, nodes), "w");
   }
 
-  Page n;
-  for (int i = 0; i < nodes; i++) {
-    n.Clear();
-    n.set_id(i);
-
-    for (int j = 0; j < density; j++) { n.add_target((i + j * 1000) % nodes); }
-    for (int j = 0; j < density; j++) { n.add_target(j); }
-
-    out[sharding(i,shards)]->write(n);
-    EVERY_N(max(1, (nodes / 50)), fprintf(stderr, "."));
+  vector<int> site_sizes;
+  for (int n = 0; n < FLAGS_nodes; ) {
+    int c = random() % 10000;
+    site_sizes.push_back(c);
+    n += c;
   }
 
-  fprintf(stderr, " done.\n");
+  Page n;
+  for (int i = 0; i < site_sizes.size(); ++i) {
+    for (int j = 0; j < site_sizes[i]; ++i) {
+      n.Clear();
+      n.set_id(j);
+      n.set_site(i);
+      for (int k = 0; k < density; k++) { 
+        int target_site = (random() % 10 != 0) ? i : random() % site_sizes;
+        n.add_target_site(target_site);
+        n.add_target_id(random() % site_sizes[target_size]);
+      }
+      out[i % shards]->write(n);
+    }
+  }
 
   for (int i = 0; i < shards; ++i) {
     delete out[i];
@@ -61,12 +64,12 @@ class PRKernel : public DSMKernel {
 public:
   int iter;
   vector<Page> nodes;
-  TypedGlobalTable<int, double>* curr_pr_hash;
-  TypedGlobalTable<int, double>* next_pr_hash;
+  TypedGlobalTable<PageId, double>* curr_pr_hash;
+  TypedGlobalTable<PageId, double>* next_pr_hash;
 
   void KernelInit() {
-    curr_pr_hash = this->get_table<int, double>(0);
-    next_pr_hash = this->get_table<int, double>(1);
+    curr_pr_hash = this->get_table<PageId, double>(0);
+    next_pr_hash = this->get_table<PageId, double>(1);
     iter = 0;
   }
 
@@ -114,7 +117,7 @@ public:
     swap(curr_pr_hash, next_pr_hash);
     next_pr_hash->clear(current_shard());
 
-    TypedTable<int, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
+    TypedTable<PageId, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
     while (!it->done()) {
       next_pr_hash->put(it->key(), random_restart_seed());
       it->Next();
@@ -136,13 +139,11 @@ int Pagerank(ConfigData& conf) {
   rl.rlim_max = 1l << 31;
   setrlimit(RLIMIT_AS, &rl);
 
-  sharding = FLAGS_use_block_sharding ? &BlkModSharding : &ModSharding;
-
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  Registry::create_table<int, double>(0, FLAGS_shards, sharding, &Accumulator<double>::sum);
-  Registry::create_table<int, double>(1, FLAGS_shards, sharding, &Accumulator<double>::sum);
+  Registry::create_table<PageId, double>(0, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
+  Registry::create_table<PageId, double>(1, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     if (FLAGS_build_graph) {
