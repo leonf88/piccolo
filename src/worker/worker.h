@@ -39,16 +39,11 @@ public:
   // Returns true if any non-trivial operations were performed.
   void HandleGetRequests();
   void HandlePutRequests();
-  void CollectPending();
-
-  void release_shard(GlobalTable *t, int shard);
-  void acquire_shard(GlobalTable *t, int shard);
 
   int peer_for_shard(int table_id, int shard) const;
   int id() const { return config_.worker_id(); };
   int epoch() const { return epoch_; }
 
-  int64_t pending_network_bytes() const;
   int64_t pending_kernel_bytes() const;
   bool network_idle() const;
 

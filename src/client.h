@@ -11,7 +11,9 @@
 #include "kernel/kernel-registry.h"
 #include "kernel/table-registry.h"
 
+#ifndef SWIG
 DECLARE_int32(shards);
 DECLARE_int32(iterations);
+#endif
 
 #endif /* CLIENT_H_ */
