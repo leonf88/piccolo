@@ -21,34 +21,47 @@ DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 
 typedef pair<uint32_t, uint32_t> PageId;
 
+namespace dsm { namespace data {
+template<>
+int hash(PageId p) {
+  return hash(p.first) ^ hash(p.second);
+}
+} }
+
+static int SiteSharding(const PageId& p, int nshards) {
+  return p.first % nshards;
+}
+
 static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
     out[i] = new RecordFile(StringPrintf("%s-%05d-of-%05d-N%05d",
-                                         kTestPrefix, i, shards, nodes), "w");
+                                         FLAGS_graph_prefix.c_str(), i, shards, nodes), "w");
   }
 
   vector<int> site_sizes;
   for (int n = 0; n < FLAGS_nodes; ) {
-    int c = random() % 10000;
+    int c = 50 + random() % 10000;
     site_sizes.push_back(c);
     n += c;
   }
 
   Page n;
   for (int i = 0; i < site_sizes.size(); ++i) {
-    for (int j = 0; j < site_sizes[i]; ++i) {
+    for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
-      n.set_id(j);
       n.set_site(i);
+      n.set_id(j);
       for (int k = 0; k < density; k++) { 
-        int target_site = (random() % 10 != 0) ? i : random() % site_sizes;
+        int target_site = (random() % 10 != 0) ? i : (random() % site_sizes.size());
         n.add_target_site(target_site);
-        n.add_target_id(random() % site_sizes[target_size]);
+        n.add_target_id(random() % site_sizes[target_site]);
       }
       out[i % shards]->write(n);
     }
+
+    PERIODIC(1, LOG(INFO) << "working... " << MP(i, site_sizes.size()));
   }
 
   for (int i = 0; i < shards; ++i) {
@@ -73,38 +86,46 @@ public:
     iter = 0;
   }
 
+  RecordFile* get_reader() {
+    RecordFile * r = new RecordFile (
+      popen(StringPrintf("lzop -d -c %s-%05d-of-%05d-N%05d.lzo", 
+                         FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes).c_str(), "r"));
+
+    return r;
+  }
+
   void Initialize() {
     next_pr_hash->resize(FLAGS_nodes * 2);
     curr_pr_hash->resize(FLAGS_nodes * 2);
-    for (int i = current_shard(); i < FLAGS_nodes; i += get_table(0)->num_shards()) {
-      next_pr_hash->put(i, random_restart_seed());
+    Page n;
+    RecordFile *r = get_reader();
+    while (r->read(&n)) {
+      curr_pr_hash->put(MP(n.site(), n.id()), random_restart_seed());
     }
+    pclose(r->fp.filePointer());
+    delete r;
   }
 
   void WriteStatus() {
     fprintf(stderr, "Iteration %d, PR:: ", iter);
-    for (int i = 0; i < 30; ++i) {
-      fprintf(stderr, "%.2f ", curr_pr_hash->get(i));
-    }
-    fprintf(stderr, "\n");
+    fprintf(stderr, "%.2f\n", curr_pr_hash->get(MP(0, 0)));
   }
 
   void PageRankIter() {
     ++iter;
 
-    RecordFile r(StringPrintf(FLAGS_graph_prefix + "-%05d-of-%05d-N%05d",
-                              current_shard(), FLAGS_shards, FLAGS_nodes), "r");
+    RecordFile *r = get_reader();
     Page n;
     Timer t;
-    while (r.read(&n)) {
-      double v = curr_pr_hash->get_local(n.id());
-      double contribution = kPropagationFactor * v / n.target_size();
-      for (int i = 0; i < n.target_size(); ++i) {
-//        LOG_EVERY_N(INFO, 1000) << "Adding: " <<  MP(n.id(), n.target(i))
-//                             << " : " << MP(n.target(i), next_pr_hash->get(n.target(i)), contribution);
-        next_pr_hash->put(n.target(i), contribution);
+    while (r->read(&n)) {
+      double v = curr_pr_hash->get_local(MP(n.site(), n.id()));
+      double contribution = kPropagationFactor * v / n.target_site_size();
+      for (int i = 0; i < n.target_site_size(); ++i) {
+        next_pr_hash->put(MP(n.target_site(i), n.target_id(i)), contribution);
       }
     }
+    pclose(r->fp.filePointer());
+    delete r;
 
     char host[1024];
     gethostname(host, 1024);

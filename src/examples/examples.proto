@@ -11,8 +11,10 @@ message PathNode {
 
 
 message Page {
-  required int32 id = 1;
-  repeated int32 target = 2;
+  required fixed32 id = 1;
+  required fixed32 site = 2;
+  repeated fixed32 target_site = 3;
+  repeated fixed32 target_id = 4;
 }
 
 message Bucket {
