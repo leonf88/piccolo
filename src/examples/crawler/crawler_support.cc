@@ -1,9 +1,8 @@
-#include "client.h"
-#include "crawler_support.h"
-#include "python2.6/Python.h"
-
+#include <python2.6/Python.h>
 #include <boost/python.hpp>
 
+#include "client.h"
+#include "examples/python_support.h"
 using namespace dsm;
 using namespace boost::python;
 
@@ -58,12 +57,12 @@ DSMKernel* kernel() {
   return the_kernel;
 }
 
-extern "C" void init_crawler_support();
+extern "C" void init_python_support();
 int main(int argc, const char* argv[]) {
   Init(argc, (char**)argv);
 
   Py_Initialize();
-  init_crawler_support();
+  init_python_support();
 
   ConfigData conf;
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
