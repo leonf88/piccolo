@@ -23,10 +23,11 @@ typedef pair<uint32_t, uint32_t> PageId;
 
 namespace dsm { namespace data {
 template<>
-int hash(PageId p) {
-  return hash(p.first) ^ hash(p.second);
+  uint32_t hash(PageId p) {
+    return hash(p.first) ^ hash(p.second);
+  }
 }
-} }
+}
 
 static int SiteSharding(const PageId& p, int nshards) {
   return p.first % nshards;
@@ -36,8 +37,8 @@ static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("%s-%05d-of-%05d-N%05d",
-                                         FLAGS_graph_prefix.c_str(), i, shards, nodes), "w");
+    out[i] = new RecordFile(
+      popen(StringPrintf("lzop -1 -o %s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), i, shards, nodes).c_str(), "w"), "w");
   }
 
   vector<int> site_sizes;
@@ -87,18 +88,25 @@ public:
   }
 
   RecordFile* get_reader() {
-    RecordFile * r = new RecordFile (
-      popen(StringPrintf("lzop -d -c %s-%05d-of-%05d-N%05d.lzo", 
-                         FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes).c_str(), "r"));
+    string cmd = StringPrintf("lzop -d -c %s-%05d-of-%05d-N%05d.lzo",
+        FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
+    FILE* stream = popen(cmd.c_str(), "r");
+    if (stream == NULL) {
+      PLOG(INFO) << "Wtf???";
+    }
+    CHECK(stream != NULL) << "failed to open shard: " << current_shard();
+    RecordFile * r = new RecordFile(stream, "r");
 
     return r;
   }
 
   void Initialize() {
-    next_pr_hash->resize(FLAGS_nodes * 2);
-    curr_pr_hash->resize(FLAGS_nodes * 2);
     Page n;
     RecordFile *r = get_reader();
+
+    next_pr_hash->resize((int)(FLAGS_nodes * 1.5));
+    curr_pr_hash->resize((int)(FLAGS_nodes * 1.5));
+
     while (r->read(&n)) {
       curr_pr_hash->put(MP(n.site(), n.id()), random_restart_seed());
     }
@@ -117,6 +125,7 @@ public:
     RecordFile *r = get_reader();
     Page n;
     Timer t;
+
     while (r->read(&n)) {
       double v = curr_pr_hash->get_local(MP(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();

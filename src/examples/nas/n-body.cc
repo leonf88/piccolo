@@ -21,7 +21,7 @@ static bool operator==(const pos& a, const pos& b) {
 
 namespace dsm { namespace data {
   template <>
-  int hash(pos p) {
+  uint32_t hash(pos p) {
     return hash(p.x | (p.y << 10) | (p.z << 20));
   }
 } }
