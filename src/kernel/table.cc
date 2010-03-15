@@ -30,7 +30,7 @@ bool GlobalTable::empty() {
 void GlobalTable::resize(int64_t new_size) {
   for (int i = 0; i < partitions_.size(); ++i) {
     if (is_local_shard(i)) {
-      partitions_[i]->resize(new_size / partitions_.size());
+      partitions_[i]->resize(new_size / info().num_shards);
     }
   }
 }
