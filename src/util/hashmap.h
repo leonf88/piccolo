@@ -57,11 +57,7 @@ private:
   }
 
   Bucket* bucket_for_key(const K& k) {
-    //Timer timer;
-//    static int misses = 0;
     int b = bucket_idx(k);
-
-//    LOG_EVERY_N(INFO, 1000000) << "calls: " << LOG_OCCURRENCES << "; misses: " << double(100 * misses) / LOG_OCCURRENCES;
 
     while(1) {
       if (buckets_[b].in_use) {
@@ -72,10 +68,8 @@ private:
         return NULL;
       }
 
-//      ++misses;
       b = (b + 1) & (size_ - 1);
     }
-
 
     return NULL;
   }
@@ -167,9 +161,6 @@ void HashMap<K, V>::rehash(int size) {
     size = 1 << (log2(size) + 1);
   }
 
-//  if (entries_ > 0) {
-//    LOG(INFO) << "Rehashing... " << size << " : " << entries_;
-//  }
   vector<Bucket> old_buckets = buckets_;
 
   buckets_.resize(size);
