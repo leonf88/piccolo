@@ -150,7 +150,7 @@ public:
 class RecordFile {
 public:
   RecordFile(const string& path, const string& mode, int compression=NONE);
-  RecordFile(FILE* fp);
+  RecordFile(FILE* fp, const string& mode);
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.

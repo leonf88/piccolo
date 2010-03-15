@@ -77,6 +77,7 @@ bool LocalFile::eof() {
 }
 
 LocalFile::LocalFile(FILE* stream) {
+  CHECK(stream != NULL);
   fp = stream;
   path = "<EXTERNAL FILE>";
   close_on_delete = false;
@@ -122,8 +123,8 @@ void Encoder::write_bytes(const char* a, int len) {
   else { out_f_->write(a, len); }
 }
 
-RecordFile::RecordFile(FILE *stream) : fp(stream), firstWrite(true) {
-  Init("r");
+RecordFile::RecordFile(FILE *stream, const string& mode) : fp(stream), firstWrite(true) {
+  Init(mode);
 }
 
 RecordFile::RecordFile(const string& path, const string& mode, int compression)
