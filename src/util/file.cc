@@ -76,9 +76,16 @@ bool LocalFile::eof() {
   return feof(fp);
 }
 
+LocalFile::LocalFile(FILE* stream) {
+  fp = stream;
+  path = "<EXTERNAL FILE>";
+  close_on_delete = false;
+}
+
 LocalFile::LocalFile(const string &name, const string& mode) {
   fp = fopen(name.c_str(), mode.c_str());
   path = name;
+  close_on_delete = true;
   if (!fp) {
     LOG(FATAL) << StringPrintf("Failed to open file! %s with mode %s.", name.c_str(), mode.c_str());
   }
@@ -115,9 +122,17 @@ void Encoder::write_bytes(const char* a, int len) {
   else { out_f_->write(a, len); }
 }
 
-RecordFile::RecordFile(const string& path,
-                       const string& mode,
-                       int compression) : fp(path, mode), firstWrite(true) {
+RecordFile::RecordFile(FILE *stream) : fp(stream), firstWrite(true) {
+  Init("r");
+}
+
+RecordFile::RecordFile(const string& path, const string& mode, int compression)
+: fp(path, mode), firstWrite(true) {
+  Init(mode);
+  params_.set_compression(compression);
+}
+
+void RecordFile::Init(const string& mode) {
   if (strstr(mode.c_str(), "r")) {
     params_.ParseFromString(readChunk());
 
@@ -125,7 +140,6 @@ RecordFile::RecordFile(const string& path,
       attributes[params_.attr(i).key()] = params_.attr(i).value();
     }
   }
-  params_.set_compression(compression);
 }
 
 void RecordFile::writeHeader() {

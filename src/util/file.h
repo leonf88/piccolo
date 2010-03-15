@@ -37,9 +37,14 @@ private:
 
 class LocalFile : public File {
 public:
+  LocalFile(FILE* fp);
   LocalFile(const string& path, const string& mode);
-  ~LocalFile() { fflush(fp); fclose(fp); }
-
+  ~LocalFile() {
+    if (close_on_delete) { 
+      fflush(fp);
+      fclose(fp); 
+    }
+  }
 
   bool readLine(string *out);
   int read(char *buffer, int len);
@@ -57,6 +62,7 @@ public:
 private:
   FILE* fp;
   string path;
+  bool close_on_delete;
 };
 
 class Encoder {
@@ -143,11 +149,8 @@ public:
 
 class RecordFile {
 public:
-  RecordFile(const string& path, const string& mode,
-             int compression=NONE);
-  ~RecordFile() {
-    fflush(fp.filePointer());
-  }
+  RecordFile(const string& path, const string& mode, int compression=NONE);
+  RecordFile(FILE* fp);
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
@@ -160,13 +163,14 @@ public:
 
   bool eof() { return fp.eof(); }
 
+  LocalFile fp;
 private:
+  void Init(const string& mode);
   void writeChunk(const string &s);
   string readChunk();
 
   void writeHeader();
   string temp;
-  LocalFile fp;
   bool firstWrite;
   FileParams params_;
 };
