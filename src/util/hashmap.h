@@ -30,6 +30,12 @@ template<>
 int hash(string s) {
   return SuperFastHash(s.data(), s.size());
 }
+
+template<class K, class V>
+int hash(pair<K, V> p) {
+  return hash(p.first) ^ hash(p.second);
+}
+
 }
 
 template <class K, class V>
