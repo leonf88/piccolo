@@ -1,6 +1,6 @@
 $(shell mkdir -p bin/)
 
-.PRECIOUS : %.pb.cc %.pb.h %_wrap.cc
+.PRECIOUS : %.pb.cc %.pb.h
 
 MPI_INC :=  -I/home/power/share/include
 MPI_LIBS := -pthread -L/home/power/share/lib -lmpi_cxx -lmpi -lopen-rte -lopen-pal -lnuma 
@@ -119,8 +119,11 @@ bin/libexample.a : $(LIBEXAMPLE_OBJS)
 
 bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
 	$(LINK_BIN) $^ -o $@ $(LINK_BIN_FLAGS) 
+
+bin/py-shell: bin/examples/python_support_wrap.o bin/examples/py-shell.o $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
+	$(LINK_BIN) $^ -o $@ $(LINK_BIN_FLAGS) 
 	
-bin/crawler: bin/examples/crawler/crawler_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
+bin/crawler: bin/examples/python_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 
 
 bin/test-hashmap: $(EXAMPLE_LIBS) bin/test/test-hashmap.o
@@ -145,7 +148,7 @@ clean:
 	/home/power/share/bin/protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
 
 %_wrap.cc : %.h
-	swig -O -c++ -python $(CPPFLAGS) -o $@ $< 
+	swig -ignoremissing -O -c++ -python $(CPPFLAGS) -o $@ $< 
 
 %.upc.o: %.upc	 
 
