@@ -66,15 +66,12 @@ public:
   }
 
   void resize(int64_t new_size) {
-    data_.rehash(new_size);
+    data_.resize(new_size);
   }
 
   void put_str(const StringPiece &k, const StringPiece &v) {
     const K& kt = data::from_string<K>(k);
     const V& vt = data::from_string<V>(v);
-
-//    LOG(INFO) << MP(kt, vt);
-
     put(kt, vt);
   }
 
