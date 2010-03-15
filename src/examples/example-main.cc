@@ -18,4 +18,6 @@ int main(int argc, char** argv) {
   CHECK_NE(FLAGS_runner, "");
   Registry::get_runner(FLAGS_runner)(conf);
   LOG(INFO) << "Exiting.";
+
+  MPI::Finalize();
 }
