@@ -1,0 +1,107 @@
+package dsm;
+
+option optimize_for = SPEED;
+
+message ConfigData {
+  required int32 num_workers = 1;
+  required int32 worker_id = 2;
+  required int32 master_id = 3;
+  optional int32 slots = 4 [default = 10];
+}
+
+enum MessageTypes {
+  MTYPE_RUN_KERNEL = 1;
+  MTYPE_STOP_KERNEL = 9;
+  MTYPE_KERNEL_DONE = 2;
+  
+  MTYPE_PUT_REQUEST = 4;  
+  MTYPE_GET_REQUEST = 5;
+  MTYPE_GET_RESPONSE = 6;   
+  
+  MTYPE_SHARD_ASSIGNMENT = 7;
+  
+  MTYPE_WORKER_SHUTDOWN = 8;
+  MTYPE_REGISTER_WORKER = 9;
+  
+  MTYPE_CHECKPOINT = 10;
+  MTYPE_CHECKPOINT_DONE = 11;
+  
+  MTYPE_RESTORE = 12;
+  MTYPE_RESTORE_DONE = 13;
+  
+  MTYPE_MAX = 16;
+};
+
+message RegisterWorkerRequest {
+  required int32 id = 1;
+  required int32 slots = 2;
+}
+
+message Stats {
+  optional int64 bytes_out = 1;
+  optional int64 bytes_in = 2;
+	
+  optional int64 put_out = 3;
+  optional int64 put_in = 4;
+	
+  optional int64 get_out = 5;
+  optional int64 get_in = 6;
+}
+
+message ShardAssignment {
+  required int32 table = 1;
+  required int32 shard = 2;
+//  required int32 old_worker = 3;
+  required int32 new_worker = 4;
+}
+
+message ShardAssignmentRequest {
+  repeated ShardAssignment assign = 1;
+}
+
+message KernelRequest {
+  required string kernel = 1;
+  required string method = 2;
+  optional int32 table = 3;
+  optional int32 shard = 4;
+}
+
+message HashGet {
+  required uint32 table = 1;
+  required uint32 shard = 2;
+  required bytes key = 3;
+}
+
+message HashPut {
+  required uint32 source = 1;
+  required uint32 table = 2;
+  required uint32 shard = 3;
+  required bool done = 4;
+
+  repeated fixed32 key_offset = 5;
+  repeated fixed32 value_offset = 6;
+
+  optional bytes key_data = 9;
+  optional bytes value_data = 10;
+  
+  optional int32 epoch = 11;
+  optional int32 marker = 12 [default = -1];
+  
+  
+  optional bool missing_key = 13;
+}
+
+message EmptyMessage {}
+
+message StartCheckpoint {
+  required int32 epoch = 1;
+}
+
+message StartRestore {
+  required int32 epoch = 1;
+}
+
+message CheckpointInfo {
+  required int32 checkpoint_epoch = 1;
+  required int32 kernel_epoch = 2;
+}
