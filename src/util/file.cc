@@ -129,18 +129,20 @@ RecordFile::RecordFile(FILE *stream, const string& mode) : fp(stream), firstWrit
 
 RecordFile::RecordFile(const string& path, const string& mode, int compression)
 : fp(path, mode), firstWrite(true) {
-  Init(mode);
   params_.set_compression(compression);
+  Init(mode);
 }
 
 void RecordFile::Init(const string& mode) {
   if (strstr(mode.c_str(), "r")) {
-    params_.ParseFromString(readChunk());
+    params_.ParseFromString(readChunkRaw());
 
     for (int i = 0; i < params_.attr_size(); ++i) {
       attributes[params_.attr(i).key()] = params_.attr(i).value();
     }
   }
+
+  decomp_scratch_.resize(LZO1X_1_15_MEM_COMPRESS);
 }
 
 void RecordFile::writeHeader() {
@@ -150,7 +152,7 @@ void RecordFile::writeHeader() {
     p->set_value(i->second);
   }
 
-  writeChunk(params_.SerializeAsString());
+  writeChunk(params_.SerializeAsString(), true);
 }
 
 void RecordFile::write(const google::protobuf::Message & m) {
@@ -164,23 +166,50 @@ void RecordFile::write(const google::protobuf::Message & m) {
   //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp.filePointer());
 }
 
-void RecordFile::writeChunk(const string& data) {
-  int len = data.size();
-  fp.write((char*)&len, sizeof(len));
-  fp.write(data.data(), data.size());
+void RecordFile::writeChunk(const string& data, bool raw) {
+  if (params_.compression() == 1 && !raw) {
+    int comp_size = data.size() * 10;
+    buf_.resize(comp_size);
+    int res = lzo1x_1_15_compress((unsigned char*)&data[0], data.size(),
+                                  (unsigned char*)&buf_[0], (lzo_uint*)&comp_size,
+                                  (unsigned char*)&decomp_scratch_[0]);
+    //LOG(INFO) << "comp: " << res;
+    fp.write((char*)&comp_size, sizeof(int));
+    fp.write(buf_.data(), comp_size);
+  } else {
+    int len = data.size();
+    fp.write((char*)&len, sizeof(int));
+    fp.write(data.data(), data.size());
+  }
 }
 
-string RecordFile::readChunk() {
+const string& RecordFile::readChunkRaw() {
   int len;
   int bytes_read = fp.read((char*)&len, sizeof(len));
 
-  if (bytes_read < sizeof(int)) { return ""; }
+  buf_.clear();
+  if (bytes_read < sizeof(int)) { return buf_; }
 
-  string buf;
-  buf.resize(len);
-  fp.read(&buf[0], len);
+  buf_.resize(len);
+  fp.read(&buf_[0], len);
+  return buf_;
+}
 
-  return buf;
+
+const string& RecordFile::readChunk() {
+  readChunkRaw();
+  if (params_.compression() == 0) {
+    return buf_;
+  }
+
+  decomp_buf_.resize(buf_.size() * 10);
+  lzo_uint decomp_size = decomp_buf_.size();
+  int err = lzo1x_decompress_safe((unsigned char*)&buf_[0], buf_.size(),
+                                  (unsigned char*)&decomp_buf_[0], &decomp_size,
+                                  (unsigned char*)&decomp_scratch_[0]);
+
+  //LOG(INFO) << "Results: " << err;
+  return decomp_buf_;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
