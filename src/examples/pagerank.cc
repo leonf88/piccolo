@@ -38,8 +38,6 @@ static vector<int> site_sizes;
 static void BuildGraph(int shard, int nshards, int nodes, int density) {
   char* d = strdup(FLAGS_graph_prefix.c_str());
   File::Mkdirs(dirname(d));
-  RecordFile out(StringPrintf("%s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), shard, nshards, nodes), "w", 1);
-
   if (site_sizes.empty()) {
     for (int n = 0; n < FLAGS_nodes; ) {
       int c = 50 + random() % 10000;
@@ -49,16 +47,13 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   }
 
   Page n;
-  for (int i = 0; i < site_sizes.size(); ++i) {
-    if (i % nshards != shard) {
-      continue;
-    }
-
+  RecordFile out(StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes), "w", 0);
+  for (int i = shard; i < site_sizes.size(); i += nshards) {
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
       n.set_site(i);
       n.set_id(j);
-      for (int k = 0; k < density; k++) { 
+      for (int k = 0; k < density; k++) {
         int target_site = (random() % 10 != 0) ? i : (random() % site_sizes.size());
         n.add_target_site(target_site);
         n.add_target_id(random() % site_sizes[target_site]);
@@ -91,19 +86,18 @@ public:
   }
 
   RecordFile* get_reader() {
-    string file = StringPrintf("%s-%05d-of-%05d-N%05d.lzo",
+    string file = StringPrintf("%s-%05d-of-%05d-N%05d",
         FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
     RecordFile * r = new RecordFile(file, "r");
     return r;
   }
 
   void Initialize() {
-    Page n;
-    RecordFile *r = get_reader();
-
     next_pr_hash->resize((int)(FLAGS_nodes * 1.5));
     curr_pr_hash->resize((int)(FLAGS_nodes * 1.5));
 
+    Page n;
+    RecordFile *r = get_reader();
     while (r->read(&n)) {
       curr_pr_hash->put(MP(n.site(), n.id()), random_restart_seed());
     }
@@ -118,10 +112,10 @@ public:
   void PageRankIter() {
     ++iter;
 
-    RecordFile *r = get_reader();
     Page n;
     Timer t;
 
+    RecordFile *r = get_reader();
     while (r->read(&n)) {
       double v = curr_pr_hash->get_local(MP(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();
@@ -156,6 +150,7 @@ REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
 
+DECLARE_bool(work_stealing);
 int Pagerank(ConfigData& conf) {
   conf.set_slots(128);
 
@@ -167,6 +162,7 @@ int Pagerank(ConfigData& conf) {
 
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
+  FLAGS_work_stealing = false;
 
   Registry::create_table<PageId, double>(0, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
   Registry::create_table<PageId, double>(1, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
