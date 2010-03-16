@@ -166,13 +166,16 @@ public:
   LocalFile fp;
 private:
   void Init(const string& mode);
-  void writeChunk(const string &s);
-  string readChunk();
+  void writeChunk(const string &s, bool raw=0);
+  const string& readChunk();
+  const string& readChunkRaw();
 
   void writeHeader();
-  string temp;
   bool firstWrite;
   FileParams params_;
+  string buf_;
+  string decomp_buf_;
+  string decomp_scratch_;
 };
 }
 
