@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <algorithm>
+#include <libgen.h>
 
 using namespace dsm;
 using namespace std;
@@ -33,23 +34,26 @@ static int SiteSharding(const PageId& p, int nshards) {
   return p.first % nshards;
 }
 
-static void BuildGraph(int shards, int nodes, int density) {
-  vector<RecordFile*> out(shards);
-  File::Mkdirs("testdata/");
-  for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(
-      StringPrintf("%s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), i, shards, nodes), "w", 1);
-  }
+static vector<int> site_sizes;
+static void BuildGraph(int shard, int nshards, int nodes, int density) {
+  char* d = strdup(FLAGS_graph_prefix.c_str());
+  File::Mkdirs(dirname(d));
+  RecordFile out(StringPrintf("%s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), shard, nshards, nodes), "w", 1);
 
-  vector<int> site_sizes;
-  for (int n = 0; n < FLAGS_nodes; ) {
-    int c = 50 + random() % 10000;
-    site_sizes.push_back(c);
-    n += c;
+  if (site_sizes.empty()) {
+    for (int n = 0; n < FLAGS_nodes; ) {
+      int c = 50 + random() % 10000;
+      site_sizes.push_back(c);
+      n += c;
+    }
   }
 
   Page n;
   for (int i = 0; i < site_sizes.size(); ++i) {
+    if (i % nshards != shard) {
+      continue;
+    }
+
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
       n.set_site(i);
@@ -59,14 +63,8 @@ static void BuildGraph(int shards, int nodes, int density) {
         n.add_target_site(target_site);
         n.add_target_id(random() % site_sizes[target_site]);
       }
-      out[i % shards]->write(n);
+      out.write(n);
     }
-
-    PERIODIC(1, LOG(INFO) << "working... " << MP(i, site_sizes.size()));
-  }
-
-  for (int i = 0; i < shards; ++i) {
-    delete out[i];
   }
 }
 
@@ -85,6 +83,11 @@ public:
     curr_pr_hash = this->get_table<PageId, double>(0);
     next_pr_hash = this->get_table<PageId, double>(1);
     iter = 0;
+  }
+
+  void BuildGraph() {
+    srand(0);
+    ::BuildGraph(current_shard(), FLAGS_shards, FLAGS_nodes, 15);
   }
 
   RecordFile* get_reader() {
@@ -147,6 +150,7 @@ public:
   }
 };
 REGISTER_KERNEL(PRKernel);
+REGISTER_METHOD(PRKernel, BuildGraph);
 REGISTER_METHOD(PRKernel, Initialize);
 REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
@@ -168,11 +172,11 @@ int Pagerank(ConfigData& conf) {
   Registry::create_table<PageId, double>(1, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
+    Master m(conf);
     if (FLAGS_build_graph) {
-      BuildGraph(FLAGS_shards, FLAGS_nodes, 10);
+      RUN_ALL(m, PRKernel, BuildGraph, 0);
     }
 
-    Master m(conf);
     RUN_ALL(m, PRKernel, Initialize, 0);
 		for (int i = 0; i < FLAGS_iterations; i++) {
 			RUN_ALL(m, PRKernel, PageRankIter, 0);
