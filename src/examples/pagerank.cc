@@ -38,7 +38,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
     out[i] = new RecordFile(
-      popen(StringPrintf("lzop -1 -o %s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), i, shards, nodes).c_str(), "w"), "w");
+      StringPrintf("%s-%05d-of-%05d-N%05d.lzo", FLAGS_graph_prefix.c_str(), i, shards, nodes), "w", 1);
   }
 
   vector<int> site_sizes;
@@ -88,15 +88,9 @@ public:
   }
 
   RecordFile* get_reader() {
-    string cmd = StringPrintf("lzop -d -c %s-%05d-of-%05d-N%05d.lzo",
+    string file = StringPrintf("%s-%05d-of-%05d-N%05d.lzo",
         FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
-    FILE* stream = popen(cmd.c_str(), "r");
-    if (stream == NULL) {
-      PLOG(INFO) << "Wtf???";
-    }
-    CHECK(stream != NULL) << "failed to open shard: " << current_shard();
-    RecordFile * r = new RecordFile(stream, "r");
-
+    RecordFile * r = new RecordFile(file, "r");
     return r;
   }
 
@@ -110,7 +104,6 @@ public:
     while (r->read(&n)) {
       curr_pr_hash->put(MP(n.site(), n.id()), random_restart_seed());
     }
-    pclose(r->fp.filePointer());
     delete r;
   }
 
@@ -133,7 +126,6 @@ public:
         next_pr_hash->put(MP(n.target_site(i), n.target_id(i)), contribution);
       }
     }
-    pclose(r->fp.filePointer());
     delete r;
 
     char host[1024];
