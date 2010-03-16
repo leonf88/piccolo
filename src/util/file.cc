@@ -170,9 +170,9 @@ void RecordFile::writeChunk(const string& data, bool raw) {
   if (params_.compression() == 1 && !raw) {
     int comp_size = data.size() * 10;
     buf_.resize(comp_size);
-    int res = lzo1x_1_15_compress((unsigned char*)&data[0], data.size(),
-                                  (unsigned char*)&buf_[0], (lzo_uint*)&comp_size,
-                                  (unsigned char*)&decomp_scratch_[0]);
+    CHECK_EQ(0, lzo1x_1_15_compress((unsigned char*)&data[0], data.size(),
+                                    (unsigned char*)&buf_[0], (lzo_uint*)&comp_size,
+                                    (unsigned char*)&decomp_scratch_[0]));
     //LOG(INFO) << "comp: " << res;
     fp.write((char*)&comp_size, sizeof(int));
     fp.write(buf_.data(), comp_size);
@@ -184,10 +184,11 @@ void RecordFile::writeChunk(const string& data, bool raw) {
 }
 
 const string& RecordFile::readChunkRaw() {
+  buf_.clear();
+
   int len;
   int bytes_read = fp.read((char*)&len, sizeof(len));
 
-  buf_.clear();
   if (bytes_read < sizeof(int)) { return buf_; }
 
   buf_.resize(len);
@@ -197,25 +198,27 @@ const string& RecordFile::readChunkRaw() {
 
 
 const string& RecordFile::readChunk() {
-  readChunkRaw();
   if (params_.compression() == 0) {
-    return buf_;
+    return readChunkRaw();
   }
 
+  readChunkRaw();
   decomp_buf_.resize(buf_.size() * 10);
   lzo_uint decomp_size = decomp_buf_.size();
-  int err = lzo1x_decompress_safe((unsigned char*)&buf_[0], buf_.size(),
-                                  (unsigned char*)&decomp_buf_[0], &decomp_size,
-                                  (unsigned char*)&decomp_scratch_[0]);
+  CHECK_EQ(0, lzo1x_decompress_safe((unsigned char*)&buf_[0], buf_.size(),
+                                    (unsigned char*)&decomp_buf_[0], &decomp_size,
+                                    (unsigned char*)&decomp_scratch_[0]));
 
   //LOG(INFO) << "Results: " << err;
   return decomp_buf_;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
-  string s = readChunk();
-  if (s.empty()) { return false; }
-  m->ParseFromString(s);
+  buf_ = readChunk();
+  if (buf_.empty()) { 
+    return false; 
+  }
+  CHECK(m->ParseFromString(buf_));
   return true;
 }
 }

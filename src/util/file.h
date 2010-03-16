@@ -39,7 +39,7 @@ class LocalFile : public File {
 public:
   LocalFile(FILE* fp);
   LocalFile(const string& path, const string& mode);
-  ~LocalFile() {
+  virtual ~LocalFile() {
     if (close_on_delete) { 
       fflush(fp);
       fclose(fp); 
