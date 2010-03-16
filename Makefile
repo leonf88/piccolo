@@ -15,7 +15,7 @@ DISTCC := distcc
 CXX := g++
 CDEBUG := -ggdb2
 #COPT :=
-COPT := -O3 -DNDEBUG
+COPT := -O2 -DNDEBUG
 CPPFLAGS := $(CPPFLAGS) -Isrc -Ibin -Iextlib/glog/src/ -Iextlib/gflags/src/ $(MPI_INC) $(PY_INC)
 
 USE_CPU_PROFILE := 1
@@ -78,6 +78,7 @@ LIBWORKER_OBJS := bin/worker/worker.pb.o\
 all:   setup\
        bin/example-dsm\
        bin/crawler\
+       bin/py-shell\
        bin/test-hashmap\
        dsm_paper
 
@@ -120,8 +121,8 @@ bin/libexample.a : $(LIBEXAMPLE_OBJS)
 bin/example-dsm: $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
 	$(LINK_BIN) $^ -o $@ $(LINK_BIN_FLAGS) 
 
-bin/py-shell: bin/examples/python_support_wrap.o bin/examples/py-shell.o $(EXAMPLE_LIBS) $(EXAMPLE_OBJS) 
-	$(LINK_BIN) $^ -o $@ $(LINK_BIN_FLAGS) 
+bin/py-shell: bin/examples/python_support_wrap.o bin/examples/py-shell.o $(EXAMPLE_LIBS)
+	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 
 	
 bin/crawler: bin/examples/python_support_wrap.o bin/examples/crawler/crawler_support.o $(EXAMPLE_LIBS)
 	$(LINK_BIN) $^ -o $@ -lpython2.6 -lboost_python-mt $(LINK_BIN_FLAGS) 
