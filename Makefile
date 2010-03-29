@@ -146,7 +146,7 @@ clean:
 	find src -name '*_wrap.cc' -exec rm {} \;
 
 %.pb.cc %.pb.h : %.proto
-	/home/power/share/bin/protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
+	protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
 
 %_wrap.cc : %.h
 	swig -ignoremissing -O -c++ -python $(CPPFLAGS) -o $@ $< 
