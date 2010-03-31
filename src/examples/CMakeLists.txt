@@ -12,9 +12,7 @@ add_executable(example-dsm example-main.cc
 			   ${EXAMPLE_PB_SRC})
 
 # we need to resolve static initializers, so glob all the symbols in
-FOREACH(lib common worker kernel master)
-  TARGET_LINK_LIBRARIES(example-dsm -Wl,--whole-archive ${lib} -Wl,--no-whole-archive )
-ENDFOREACH()
+TARGET_LINK_LIBRARIES(example-dsm -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
 
 # link statically if we can
 TARGET_LINK_LIBRARIES(example-dsm -Wl,-Bstatic gflags glog blas -Wl,-Bdynamic )
