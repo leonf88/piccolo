@@ -3,7 +3,6 @@
 
 #include "util/common.h"
 #include "kernel/table.h"
-#include "kernel/table-internal.h"
 
 namespace dsm {
 

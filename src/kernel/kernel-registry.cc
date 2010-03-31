@@ -12,7 +12,7 @@ void DSMKernel::Init(Worker* w, int table_id, int shard) {
   shard_ = shard;
 }
 
-Table* DSMKernel::get_table(int id) {
+GlobalTable* DSMKernel::get_table(int id) {
   return Registry::get_table(id);
 }
 

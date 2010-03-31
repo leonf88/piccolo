@@ -471,19 +471,12 @@ void Worker::HandleGetRequests() {
     get_resp.set_shard(-1);
     get_resp.set_done(true);
     get_resp.set_epoch(epoch_);
-    HashPutCoder h(&get_resp);
 
     {
       GlobalTable* t = Registry::get_table(get_req.table());
       boost::recursive_mutex::scoped_lock sl(t->mutex());
 
-      if (!t->contains_str(get_req.key())) {
-        get_resp.set_missing_key(true);
-      } else {
-        string v;
-        t->get_local(get_req.key(), &v);
-        h.add_pair(get_req.key(), v);
-      }
+      t->handle_get(get_req.key(), &get_resp);
     }
 
     SendRequest *r = peers_[source - 1]->CreateRequest(MTYPE_GET_RESPONSE, get_resp);
