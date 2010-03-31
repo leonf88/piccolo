@@ -1,7 +1,7 @@
 #ifndef PYTHON_SUPPORT_H
 #define PYTHON_SUPPORT_H
 
-#include <google/protobuf/message_lite.h>
+#include <google/protobuf/message.h>
 #include "util/common.pb.h"
 #include "examples.h"
 #include "client.h"
@@ -34,7 +34,7 @@ typedef google::protobuf::int32_t int32_t;
 
 %include "std_string.i"
 
-%include "google/protobuf/message.h"
+%include "google/protobuf/message_lite.h"
 
 %include "util/common.pb.h"
 %include "examples.pb.h"
@@ -43,7 +43,6 @@ typedef google::protobuf::int32_t int32_t;
 %include "util/file.h"
 %include "python_support.h"
 %include "kernel/table.h"
-%include "kernel/table-internal.h"
 %include "kernel/kernel-registry.h"
 
 using namespace dsm;

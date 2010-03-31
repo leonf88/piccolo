@@ -1,6 +1,7 @@
 #ifndef KERNELREGISTRY_H_
 #define KERNELREGISTRY_H_
 
+#include "kernel/table.h"
 #include "util/common.h"
 #include <boost/function.hpp>
 
@@ -18,7 +19,7 @@ public:
   int current_shard() const { return shard_; }
   int table_id() const { return table_id_; }
 
-  Table* get_table(int id);
+  GlobalTable* get_table(int id);
 
   template <class K, class V>
   TypedGlobalTable<K, V>* get_table(int id) {

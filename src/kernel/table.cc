@@ -6,6 +6,20 @@ static const int kMaxNetworkPending = 1 << 26;
 
 namespace dsm {
 
+struct HashPutCoder {
+  HashPutCoder(HashPut *h);
+  HashPutCoder(const HashPut& h);
+
+  void add_pair(const string& k, const string& v);
+  StringPiece key(int idx);
+  StringPiece value(int idx);
+
+  int size();
+
+  HashPut *h_;
+};
+
+
 GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
 }
@@ -80,7 +94,7 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
 
 void GlobalTable::start_checkpoint(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable *t = partitions_[i];
+    TableShard *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->start_checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
@@ -94,7 +108,7 @@ void GlobalTable::write_delta(const HashPut& d) {
 
 void GlobalTable::finish_checkpoint() {
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable *t = partitions_[i];
+    TableShard *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->finish_checkpoint();
@@ -104,7 +118,7 @@ void GlobalTable::finish_checkpoint() {
 
 void GlobalTable::restore(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable *t = partitions_[i];
+    TableShard *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->restore(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
@@ -114,10 +128,21 @@ void GlobalTable::restore(const string& f) {
   }
 }
 
+void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
+  HashPutCoder h(get_resp);
+  if (!contains_str(key)) {
+    get_resp->set_missing_key(true);
+  } else {
+    string v;
+    get_local(key, &v);
+    h.add_pair(key.AsString(), v);
+  }
+}
+
 void GlobalTable::SendUpdates() {
   HashPut put;
   for (int i = 0; i < partitions_.size(); ++i) {
-    LocalTable *t = partitions_[i];
+    TableShard *t = partitions_[i];
 
     if (!is_local_shard(i) && (t->dirty || !t->empty())) {
       VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << get_owner(i);
@@ -133,7 +158,7 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(info().worker->epoch());
 
-        LocalTable::SerializePartial(put, it);
+        TableShard::SerializePartial(put, it);
         info().worker->Send(get_owner(i), MTYPE_PUT_REQUEST, put);
       } while(!it->done());
       delete it;
@@ -150,7 +175,7 @@ void GlobalTable::SendUpdates() {
 int GlobalTable::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
-    Table *t = partitions_[i];
+    TableShard *t = partitions_[i];
     if (!is_local_shard(i)) {
       s += t->size();
     }
@@ -173,10 +198,7 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
 
-  Table *h = partitions_[shard];
-
-//  VLOG(1) << "Returning local result : " <<  h->get(Data::from_string<K>(k))
-//          << " : " << Data::from_string<V>(h->get_str(k));
+  TableShard *h = partitions_[shard];
 
   v->assign(h->get_str(k));
 }
@@ -221,11 +243,11 @@ int HashPutCoder::size() {
   return h_->key_offset_size() - 1;
 }
 
-void LocalTable::write_delta(const HashPut& req) {
+void TableShard::write_delta(const HashPut& req) {
   delta_file_->write(req);
 }
 
-void LocalTable::ApplyUpdates(const HashPut& req) {
+void TableShard::ApplyUpdates(const HashPut& req) {
   CHECK_EQ(req.key_offset_size(), req.value_offset_size());
   HashPutCoder h(req);
 
@@ -234,7 +256,7 @@ void LocalTable::ApplyUpdates(const HashPut& req) {
   }
 }
 
-void LocalTable::SerializePartial(HashPut& r, Table::Iterator *it) {
+void TableShard::SerializePartial(HashPut& r, Table::Iterator *it) {
   int bytes_used = 0;
   HashPutCoder h(&r);
   string k, v;

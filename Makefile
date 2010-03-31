@@ -149,7 +149,7 @@ clean:
 	protoc -Isrc/ --cpp_out=$(CURDIR)/src/ $<
 
 %_wrap.cc : %.h
-	swig -ignoremissing -O -c++ -python $(CPPFLAGS) -o $@ $< 
+	swig -ignoremissing -O -c++ -python -I/usr/include $(CPPFLAGS) -o $@ $< 
 
 %.upc.o: %.upc	 
 
