@@ -1,13 +1,20 @@
 cmake_minimum_required (VERSION 2.6) 
+set(CMAKE_CXX_COMPILER "distcc g++")
 project (PICCOLO) 
 
-set(CMAKE_BINARY_DIR "bin/")
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
-set(CMAKE_CXX_FLAGS "-ggdb2")
 
 find_package(ProtoBuf REQUIRED)
+find_package(SWIG REQUIRED)
+find_package(PythonLibs REQUIRED)
+
+include(${SWIG_USE_FILE})
+ 
+set(CMAKE_CXX_FLAGS "-ggdb2")
+set(CMAKE_SWIG_FLAGS "-ignoremissing -O -c++ -python")
 
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
+include_directories( ${PYTHON_INCLUDE_PATH} )
 include_directories( .
                      ${PICCOLO_SOURCE_DIR}/../extlib/glog/src 
                      ${PICCOLO_SOURCE_DIR}/../extlib/gflags/src 
