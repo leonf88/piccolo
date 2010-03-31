@@ -64,9 +64,13 @@ public:
   int num_shards() const { return info_.num_shards; }
 
   // Generic routines to fetch and set entries as serialized strings.
+
+  // Put replaces the current value (if any) with the new value specified.  Update
+  // applies the accumulation function for this table to merge the existing and
+  // new value.
   virtual string get_str(const StringPiece &k) = 0;
   virtual void put_str(const StringPiece &k, const StringPiece& v) = 0;
-  virtual void update_str(const StringPiece &k, const StringPiece& v) {}
+  virtual void update_str(const StringPiece &k, const StringPiece& v) = 0;
 
   virtual bool empty() = 0;
   virtual int64_t size() = 0;
@@ -205,27 +209,6 @@ class TypedTableShard : public TableShard {
 public:
   typedef HashMap<K, V> DataMap;
 
-  struct Iterator : public TypedTable<K, V>::Iterator {
-    Iterator(TypedTableShard<K, V> *t) : it_(t->data_.begin()) {
-      t_ = t;
-    }
-
-    void key_str(string *out) { data::marshal<K>(key(), out); }
-    void value_str(string *out) { data::marshal<V>(value(), out); }
-
-    bool done() { return  it_ == t_->data_.end(); }
-    void Next() { ++it_; }
-
-    const K& key() { return it_.key(); }
-    V& value() { return it_.value(); }
-
-    TableShard* owner() { return t_; }
-
-  private:
-    typename DataMap::iterator it_;
-    TypedTableShard<K, V> *t_;
-  };
-
   TypedTableShard(TableInfo tinfo, int size=5) :
     TableShard(tinfo), data_(size) {
   }
@@ -240,6 +223,10 @@ public:
   V get(const K &k) { return data_[k]; }
 
   void put(const K &k, const V &v) {
+    data_.put(k, v);
+  }
+
+  void update(const K &k, const V &v) {
     data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
   }
 
@@ -261,6 +248,12 @@ public:
     const K& kt = data::from_string<K>(k);
     const V& vt = data::from_string<V>(v);
     put(kt, vt);
+  }
+
+  void update_str(const StringPiece &k, const StringPiece &v) {
+    const K& kt = data::from_string<K>(k);
+    const V& vt = data::from_string<V>(v);
+    update(kt, vt);
   }
 
   void remove_str(const StringPiece &k) {
@@ -288,6 +281,26 @@ public:
     }
   }
 
+  struct Iterator : public TypedTable<K, V>::Iterator {
+    Iterator(TypedTableShard<K, V> *t) : it_(t->data_.begin()) {
+      t_ = t;
+    }
+
+    void key_str(string *out) { data::marshal<K>(key(), out); }
+    void value_str(string *out) { data::marshal<V>(value(), out); }
+
+    bool done() { return  it_ == t_->data_.end(); }
+    void Next() { ++it_; }
+
+    const K& key() { return it_.key(); }
+    V& value() { return it_.value(); }
+
+    TableShard* owner() { return t_; }
+
+  private:
+    typename DataMap::iterator it_;
+    TypedTableShard<K, V> *t_;
+  };
 private:
   DataMap data_;
 };
@@ -314,16 +327,16 @@ public:
     return contains(data::from_string<K>(k));
   }
 
-  // Store the given key-value pair in this hash, applying the accumulation
-  // policy set at construction.  If 'k' has affinity for a remote thread,
-  // the application occurs immediately on the local host, and the update is
-  // queued for transmission to the owning thread.
+  // Store the given key-value pair in this hash. If 'k' has affinity for a
+  // remote thread, the application occurs immediately on the local host,
+  // and the update is queued for transmission to the owner.
   void put(const K &k, const V &v);
+  void update(const K &k, const V &v);
 
   // Remove this entry from the local and master table.
   void remove(const K &k);
 
-  Table_Iterator* get_iterator(int shard);
+  Table::Iterator* get_iterator(int shard);
   TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
   const TableInfo& info() { return this->info_; }
@@ -354,6 +367,12 @@ public:
     remove(data::from_string<K>(k));
   }
 
+  void update_str(const StringPiece &k, const StringPiece &v) {
+    const K& kt = data::from_string<K>(k);
+    const V& vt = data::from_string<V>(v);
+    update(kt, vt);
+  }
+
   V get_local(const K& k) {
     int shard = this->get_shard(k);
 
@@ -376,6 +395,7 @@ TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
 
 template <class K, class V>
 void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
+  LOG(FATAL) << "Need to implement.";
   int shard = this->get_shard(k);
 
 //  boost::recursive_mutex::scoped_lock sl(mutex());
@@ -392,6 +412,23 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   PERIODIC(0.1, { info().worker->HandlePutRequests(); });
 }
 
+template <class K, class V>
+void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
+  int shard = this->get_shard(k);
+
+//  boost::recursive_mutex::scoped_lock sl(mutex());
+  static_cast<TypedTableShard<K, V>*>(partitions_[shard])->update(k, v);
+
+  if (!is_local_shard(shard)) {
+    ++pending_writes_;
+  }
+
+  if (pending_writes_ > kWriteFlushCount) {
+    SendUpdates();
+  }
+
+  PERIODIC(0.1, { info().worker->HandlePutRequests(); });
+}
 
 template <class K, class V>
 V TypedGlobalTable<K, V>::get(const K &k) {
