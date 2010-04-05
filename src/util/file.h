@@ -32,6 +32,7 @@ public:
   static void Dump(const string& file, StringPiece data);
   static void Mkdirs(const string& path);
   static vector<string> Glob(const string& dir);
+  static bool Exists(const string& path);
 private:
 };
 
@@ -151,6 +152,7 @@ class RecordFile {
 public:
   RecordFile(const string& path, const string& mode, int compression=NONE);
   RecordFile(FILE* fp, const string& mode);
+  ~RecordFile() {}
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
