@@ -5,7 +5,7 @@ using namespace dsm;
 
 DEFINE_int32(edge_size, 1000, "");
 
-static const int kBlockSize = 500;
+static const int kBlockSize = 250;
 static int bRows = -1;
 static int bCols = -1;
 
@@ -40,9 +40,9 @@ struct MatrixMultiplicationKernel : public DSMKernel {
       for (int bx = 0; bx < bCols; bx ++) {
         if (!is_local(by, bx)) { continue; }
         LOG(INFO) << "Putting... " << MP(by, bx);
-        matrix_a->put(by * bCols + bx, b);
-        matrix_b->put(by * bCols + bx, b);
-        matrix_c->put(by * bCols + bx, z);
+        matrix_a->update(by * bCols + bx, b);
+        matrix_b->update(by * bCols + bx, b);
+        matrix_c->update(by * bCols + bx, z);
       }
     }
   }
@@ -61,7 +61,7 @@ struct MatrixMultiplicationKernel : public DSMKernel {
                       kBlockSize, kBlockSize, kBlockSize, 1,
                       a.d, kBlockSize, b.d, kBlockSize, 1, c.d, kBlockSize);
 
-          matrix_c->put(i * bCols + j, c);
+          matrix_c->update(i * bCols + j, c);
         }
       }
     }

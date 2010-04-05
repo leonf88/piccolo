@@ -6,6 +6,10 @@ using namespace dsm;
 typedef uint32_t KeyType;
 typedef Bucket ValueType;
 
+static void BucketMerge(Bucket *l, const Bucket &r) {
+  l->MergeFrom(r);
+}
+
 struct KeyGen {
   KeyGen() : x_(314159625), a_(1220703125) {}
   KeyType next() {

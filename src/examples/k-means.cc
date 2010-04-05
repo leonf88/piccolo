@@ -43,22 +43,19 @@ public:
       double dy = 0.5 - rand_double();
 
       Distribution d = { dx, dy };
-      actual->put(i, d);
+      actual->update(i, d);
 
       for (int j = 0; j < FLAGS_num_points / FLAGS_num_dists; ++j) {
         Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
-        points->put(c++, p);
+        points->update(c++, p);
       }
-
-      LOG(INFO) << "Initializing distributions..." << i;
     }
 
     for (int i = 0; i < FLAGS_num_dists; ++i) {
       // Initialize a guess for center point of the distributions
       Point p = points->get(random() % FLAGS_num_points);
       Distribution d = { p.x, p.y };
-      dists->put(i, d);
-      LOG(INFO) << "Initial guess from " << d.x << " : " << d.y;
+      dists->update(i, d);
     }
   }
 
@@ -118,7 +115,7 @@ public:
       const Point &p = it->value();
       d.x = p.x * FLAGS_num_dists / FLAGS_num_points;
       d.y = p.y * FLAGS_num_dists / FLAGS_num_points;
-      dists->put(p.source, d);
+      dists->update(p.source, d);
     }
   }
 
@@ -183,7 +180,7 @@ static int KMeans(ConfigData& conf) {
       RUN_ALL(m, KMeansKernel, initialize_maximization, 0);
       RUN_ALL(m, KMeansKernel, compute_maximization, 0);
     }
-    RUN_ONE(m, KMeansKernel, print_results, 0);
+//    RUN_ONE(m, KMeansKernel, print_results, 0);
   } else {
     Worker w(conf);
     w.Run();
