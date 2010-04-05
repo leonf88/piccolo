@@ -36,3 +36,5 @@ Makefile.dep
 .cproject
 .libs/
 .settings
+
+extlib/*/*test*
