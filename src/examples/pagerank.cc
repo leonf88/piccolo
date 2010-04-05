@@ -34,8 +34,13 @@ static int SiteSharding(const PageId& p, int nshards) {
   return p.first % nshards;
 }
 
+
+static boost::recursive_mutex file_lock;
+
 static vector<int> site_sizes;
 static void BuildGraph(int shard, int nshards, int nodes, int density) {
+  boost::recursive_mutex::scoped_lock sl(file_lock);
+
   char* d = strdup(FLAGS_graph_prefix.c_str());
   File::Mkdirs(dirname(d));
   if (site_sizes.empty()) {
@@ -46,8 +51,14 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
     }
   }
 
+  string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
+
+  if (File::Exists(target)) {
+    return;
+  }
+
   Page n;
-  RecordFile out(StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes), "w", 0);
+  RecordFile out(target, "w", 0);
   for (int i = shard; i < site_sizes.size(); i += nshards) {
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
@@ -82,7 +93,9 @@ public:
 
   void BuildGraph() {
     srand(0);
-    ::BuildGraph(current_shard(), FLAGS_shards, FLAGS_nodes, 15);
+    for (int i = 0; i < FLAGS_shards; ++i) {
+      ::BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
+    }
   }
 
   RecordFile* get_reader() {
@@ -93,13 +106,14 @@ public:
   }
 
   void Initialize() {
-    next_pr_hash->resize((int)(FLAGS_nodes * 1.5));
-    curr_pr_hash->resize((int)(FLAGS_nodes * 1.5));
+    LOG(INFO) << "Resizing to: " << FLAGS_nodes;
+    next_pr_hash->resize(FLAGS_nodes);
+    curr_pr_hash->resize(FLAGS_nodes);
 
     Page n;
     RecordFile *r = get_reader();
     while (r->read(&n)) {
-      curr_pr_hash->put(MP(n.site(), n.id()), random_restart_seed());
+      curr_pr_hash->update(MP(n.site(), n.id()), random_restart_seed());
     }
     delete r;
   }
@@ -120,7 +134,7 @@ public:
       double v = curr_pr_hash->get_local(MP(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
-        next_pr_hash->put(MP(n.target_site(i), n.target_id(i)), contribution);
+        next_pr_hash->update(MP(n.target_site(i), n.target_id(i)), contribution);
       }
     }
     delete r;
@@ -138,7 +152,7 @@ public:
 
     TypedTable<PageId, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
     while (!it->done()) {
-      next_pr_hash->put(it->key(), random_restart_seed());
+      next_pr_hash->update(it->key(), random_restart_seed());
       it->Next();
     }
   }
@@ -152,13 +166,7 @@ REGISTER_METHOD(PRKernel, ResetTable);
 
 DECLARE_bool(work_stealing);
 int Pagerank(ConfigData& conf) {
-  conf.set_slots(128);
-
-  // Cap address space at 2G.
-  struct rlimit rl;
-  rl.rlim_cur = 1l << 31;
-  rl.rlim_max = 1l << 31;
-  setrlimit(RLIMIT_AS, &rl);
+  conf.set_slots(256);
 
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
@@ -174,11 +182,11 @@ int Pagerank(ConfigData& conf) {
     }
 
     RUN_ALL(m, PRKernel, Initialize, 0);
-		for (int i = 0; i < FLAGS_iterations; i++) {
-			RUN_ALL(m, PRKernel, PageRankIter, 0);
-			RUN_ALL(m, PRKernel, ResetTable, 0);
-			RUN_ONE(m, PRKernel, WriteStatus, 0);
-		}
+    for (int i = 0; i < FLAGS_iterations; i++) {
+      RUN_ALL(m, PRKernel, PageRankIter, 0);
+      RUN_ALL(m, PRKernel, ResetTable, 0);
+      RUN_ONE(m, PRKernel, WriteStatus, 0);
+    }
   } else {
     Worker w(conf);
     w.Run();

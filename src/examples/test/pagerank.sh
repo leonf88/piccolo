@@ -1,14 +1,8 @@
 #!/bin/bash
 
-set -x
-set -e
+source $(dirname $0)/run_util.sh
 
-rm -f matmul.n*
-
-for n in 1 2 4 8 16; do 
-  for j in 0; do
-    echo $n $j
-    /usr/bin/time ~/share/bin/mpirun -hostfile mpi_hostfile -bynode  -tag-output -n $((n + 1)) \
-      bash -c 'LD_LIBRARY_PATH=/home/power/share/lib bin/example-dsm --runner=Pagerank --nodes=10000000 --shards=64' &> pagerank.n$n.j$j
-  done
-done
+~/share/bin/mpirun -hostfile mpi_hostfile -bynode -tag-output -n 16 \
+        bash -c "LD_LIBRARY_PATH=/home/power/share/lib bin/examples/example-dsm --runner=Pagerank --build_graph --nodes=100000000 --shards=64 --graph_prefix=/scratch/100M/testgraph"
+        
+#run_command 'Pagerank' '--nodes=50000000 --shards=64 --graph_prefix=/scratch/100M/testgraph'
