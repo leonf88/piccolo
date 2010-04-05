@@ -13,11 +13,11 @@ add_executable(dsm-crawler crawler/crawler_support.cc)
 target_link_libraries(example-dsm -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
 
 # link statically if we can
-target_link_libraries(example-dsm -Wl,-Bstatic gflags glog blas -Wl,-Bdynamic )
+target_link_libraries(example-dsm -Wl,-Bstatic gflags glog profiler blas unwind -Wl,-Bdynamic )
 target_link_libraries(example-dsm ${LIBS})		      
 
 swig_add_module(python_support python python_support.h python_support.cc)
 target_link_libraries(dsm-crawler -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
-target_link_libraries(dsm-crawler -Wl,-Bstatic gflags glog blas -Wl,-Bdynamic )
+target_link_libraries(dsm-crawler -Wl,-Bstatic gflags glog profiler blas -Wl,-Bdynamic )
 target_link_libraries(dsm-crawler ${LIBS})
 target_link_libraries(dsm-crawler boost_python-mt python2.6)
