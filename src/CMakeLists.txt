@@ -1,16 +1,15 @@
 cmake_minimum_required (VERSION 2.6) 
-set(CMAKE_CXX_COMPILER "distcc g++")
 project (PICCOLO) 
 
+set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
-
 find_package(ProtoBuf REQUIRED)
 find_package(SWIG REQUIRED)
 find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
  
-set(CMAKE_CXX_FLAGS "-ggdb2")
+set(CMAKE_CXX_FLAGS "-ggdb2 -DCPUPROF")
 set(CMAKE_SWIG_FLAGS "-ignoremissing -O -c++ -python")
 
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
@@ -23,8 +22,8 @@ include_directories( .
 
 link_directories( ${PICCOLO_SOURCE_DIR}/../extlib/glog/.libs/
                   ${PICCOLO_SOURCE_DIR}/../extlib/gflags/.libs/
-		  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/
-		  /home/power/share/lib )
+            		  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/.libs/
+		              /home/power/share/lib )
 
 add_subdirectory (util)
 add_subdirectory (worker)
