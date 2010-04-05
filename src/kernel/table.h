@@ -35,11 +35,8 @@ public:
   // We use void* to pass around the various accumulation and sharding
   // functions; they are cast to the appropriate type at the time of use.
   void *accum_function;
-  void *sharding_function;
-
-  // Used for remote sends, and to trigger polling when needed.
-  Worker *worker;
-};
+  void *sharding_function;}
+;
 
 struct Table_Iterator {
   virtual void key_str(string *out) = 0;
@@ -129,9 +126,14 @@ public:
   Table_Iterator* get_iterator(int shard) {
     return partitions_[shard]->get_iterator();
   }
+  
+  bool is_local_shard(int shard) {
+    return partitions_[shard]->owner == worker_id_;
+  }
 
-  bool is_local_shard(int shard);
-  bool is_local_key(const StringPiece &k);
+  bool is_local_key(const StringPiece &k) {
+    return is_local_shard(get_shard_str(k));
+  } 
 
   void set_owner(int shard, int worker);
   int get_owner(int shard);
@@ -160,13 +162,19 @@ public:
   void resize(int64_t new_size);
 
 protected:
-  friend class Worker;
   virtual TableShard* create_local(int shard) = 0;
   boost::recursive_mutex& mutex() { return m_; }
   vector<TableShard*> partitions_;
 
   volatile int pending_writes_;
   boost::recursive_mutex m_;
+ 
+  friend class Worker;
+  Worker *w_;
+  int worker_id_;
+
+  void set_worker(Worker *w);
+  void HandlePutRequests();
 
   // Generic methods against serialized strings.
   virtual bool contains_str(StringPiece k) = 0;
@@ -409,7 +417,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
     SendUpdates();
   }
 
-  PERIODIC(0.1, { info().worker->HandlePutRequests(); });
+  PERIODIC(0.1, { this->HandlePutRequests(); });
 }
 
 template <class K, class V>
@@ -427,7 +435,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
     SendUpdates();
   }
 
-  PERIODIC(0.1, { info().worker->HandlePutRequests(); });
+  PERIODIC(0.1, { this->HandlePutRequests(); });
 }
 
 template <class K, class V>
@@ -440,7 +448,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
     sched_yield();
   }
 
-  PERIODIC(0.1, info().worker->HandlePutRequests());
+  PERIODIC(0.1, this->HandlePutRequests());
 
   if (is_local_shard(shard)) {
 //    boost::recursive_mutex::scoped_lock sl(mutex());

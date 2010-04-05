@@ -24,6 +24,11 @@ GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
   partitions_.resize(info.num_shards);
 }
 
+void GlobalTable::set_worker(Worker *w) {
+  w_ = w;
+  worker_id_ = w->id();
+}
+
 void GlobalTable::clear(int shard) {
   if (is_local_shard(shard)) {
     partitions_[shard]->clear();
@@ -49,14 +54,6 @@ void GlobalTable::resize(int64_t new_size) {
   }
 }
 
-bool GlobalTable::is_local_shard(int shard) {
-  return partitions_[shard]->owner == info_.worker->id();
-}
-
-bool GlobalTable::is_local_key(const StringPiece &k) {
-  return is_local_shard(get_shard_str(k));
-}
-
 void GlobalTable::set_owner(int shard, int w) {
   partitions_[shard]->owner = w;
 }
@@ -73,15 +70,14 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   req.set_table(info().table_id);
   req.set_shard(shard);
 
-  Worker *w = info().worker;
-  int peer = w->peer_for_shard(info().table_id, shard);
+  int peer = w_->peer_for_shard(info().table_id, shard);
 
   DCHECK_GE(peer, 0);
   DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
 
   VLOG(2) << "Sending get request to: " << MP(peer, shard);
-  w->Send(peer, MTYPE_GET_REQUEST, req);
-  w->Read(peer, MTYPE_GET_RESPONSE, &resp);
+  w_->Send(peer, MTYPE_GET_REQUEST, req);
+  w_->Read(peer, MTYPE_GET_RESPONSE, &resp);
 
   if (resp.missing_key()) {
     return false;
@@ -139,6 +135,10 @@ void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
   }
 }
 
+void GlobalTable::HandlePutRequests() {
+  w_->HandlePutRequests();
+}
+
 void GlobalTable::SendUpdates() {
   HashPut put;
   for (int i = 0; i < partitions_.size(); ++i) {
@@ -154,12 +154,12 @@ void GlobalTable::SendUpdates() {
       do {
         put.Clear();
         put.set_shard(i);
-        put.set_source(info().worker->id());
+        put.set_source(w_->id());
         put.set_table(id());
-        put.set_epoch(info().worker->epoch());
+        put.set_epoch(w_->epoch());
 
         TableShard::SerializePartial(put, it);
-        info().worker->Send(get_owner(i), MTYPE_PUT_REQUEST, put);
+        w_->Send(get_owner(i), MTYPE_PUT_REQUEST, put);
       } while(!it->done());
       delete it;
 

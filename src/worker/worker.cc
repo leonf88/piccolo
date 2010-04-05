@@ -222,7 +222,7 @@ Worker::Worker(const ConfigData &c) {
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-    i->second->info_.worker = this;
+    i->second->set_worker(this);
   }
 
   the_network = new NetworkThread(new RPCHelper(&world_));
