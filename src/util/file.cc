@@ -42,6 +42,14 @@ string File::Slurp(const string& f) {
   return out;
 }
 
+bool File::Exists(const string& f) {
+  FILE* fp = fopen(f.c_str(), "r");
+  if (fp) {
+    fclose(fp);
+    return true;
+  }
+  return false;
+}
 void File::Dump(const string& f, StringPiece data) {
   FILE* fp = fopen(f.c_str(), "w+");
   if (!fp) { LOG(FATAL) << "Failed to open output file " << f.c_str(); }

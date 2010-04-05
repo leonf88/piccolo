@@ -1,7 +1,7 @@
 /*
  * hashmap.h
  *
- * Simple generic hashmap using quadratic probing.
+ * Simple generic hashmap using linear probing.
  *
  */
 
