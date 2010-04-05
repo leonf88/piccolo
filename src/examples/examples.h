@@ -14,8 +14,3 @@ namespace dsm { namespace data {
     t->ParseFromArray(s.data, s.len);
   }
 } }
-
-static void BucketMerge(Bucket *l, const Bucket &r) {
-  l->MergeFrom(r);
-}
-
