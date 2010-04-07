@@ -1,8 +1,10 @@
 #ifndef FILE_H_
 #define FILE_H_
 
+#include "boost/noncopyable.hpp"
 #include "util/common.h"
 #include "util/common.pb.h"
+#include <lzo/lzo1x.h>
 
 #include <stdio.h>
 
@@ -12,11 +14,13 @@ namespace dsm {
 
 class File {
 public:
+  virtual ~File() {}
   virtual int read(char *buffer, int len) = 0;
   virtual bool readLine(string *out) = 0;
   virtual bool eof() = 0;
   virtual void seek(int64_t pos) = 0;
   virtual uint64_t tell() = 0;
+  virtual const char* name() { return ""; }
 
   int writeString(const string& buffer) { return write(buffer.data(), buffer.size()); }
 
@@ -147,12 +151,67 @@ public:
   }
 };
 
+class LZOFile : public File, private boost::noncopyable {
+public:
+  LZOFile(LocalFile* target, const string& mode) :
+    f_(target), pos_(0) {
+    if (mode == "r") {
+      read_block();
+    } else {
+      block.len = block.pos = 0;
+    }
+  }
+
+  virtual ~LZOFile() {
+    write_block();
+    delete f_;
+  }
+
+  bool readLine(string *out) {
+    LOG(FATAL) << "Not implemented";
+  }
+
+  virtual int read(char *buffer, int len);
+  virtual int write(const char* buffer, int len);
+  void seek(int64_t pos) { LOG(FATAL) << "Not seekable."; }
+  uint64_t tell() { return pos_; }
+
+  const char* name() { return f_->name(); }
+  bool eof() { return f_->eof() && block.pos == block.len; }
+
+private:
+  LocalFile *f_;
+  long pos_;
+
+  void write_block();
+  void read_block();
+
+  static const int kBlockSize = 65536;
+  static const int kCompressedBlockSize = kBlockSize + (kBlockSize / 16) + 64 + 3;
+
+  struct Block {
+    char raw[kBlockSize];
+    char comp[kCompressedBlockSize];
+    char scratch[LZO1X_1_15_MEM_COMPRESS];
+    int pos;
+    int len;
+  };
+
+  Block block;
+};
 
 class RecordFile {
 public:
+  enum CompressionType {
+    NONE = 0,
+    LZO = 1
+  };
+
   RecordFile(const string& path, const string& mode, int compression=NONE);
   RecordFile(FILE* fp, const string& mode);
-  ~RecordFile() {}
+  virtual ~RecordFile() {
+    delete fp;
+  }
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
@@ -161,16 +220,15 @@ public:
 
   void write(const google::protobuf::Message &m);
   bool read(google::protobuf::Message *m);
-  const char* name() { return fp.name(); }
+  const char* name() { return fp->name(); }
 
-  bool eof() { return fp.eof(); }
+  bool eof() { return fp->eof(); }
 
-  LocalFile fp;
+  File *fp;
 private:
   void Init(const string& mode);
-  void writeChunk(const string &s, bool raw=0);
+  void writeChunk(const string &s);
   const string& readChunk();
-  const string& readChunkRaw();
 
   void writeHeader();
   bool firstWrite;

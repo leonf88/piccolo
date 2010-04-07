@@ -1,7 +1,6 @@
 #include "util/file.h"
 #include "util/common.h"
 #include "google/protobuf/message.h"
-#include <lzo/lzo1x.h>
 #include <stdio.h>
 #include <glob.h>
 
@@ -131,26 +130,87 @@ void Encoder::write_bytes(const char* a, int len) {
   else { out_f_->write(a, len); }
 }
 
-RecordFile::RecordFile(FILE *stream, const string& mode) : fp(stream), firstWrite(true) {
+int LZOFile::write(const char* data, int len) {
+  if (block.len + len > kBlockSize) {
+    write_block();
+  }
+
+  memcpy(block.raw + block.len, data, len);
+  block.len += len;
+
+  return len;
+}
+
+int LZOFile::read(char* data, int len) {
+  if (block.pos == block.len) {
+    read_block();
+  }
+  int read = min(len, block.len - block.pos);
+
+  memcpy(data, block.raw + block.pos, read);
+  block.pos += read;
+  pos_ += read;
+  return read;
+}
+
+void LZOFile::write_block() {
+  if (block.len == 0)
+    return;
+
+//  LOG(INFO) << "Writing... " << block.len << " : " << f_->tell();
+
+  lzo_uint comp_size = kCompressedBlockSize;
+  CHECK_EQ(0, lzo1x_1_15_compress((unsigned char*)block.raw, block.len,
+                                  (unsigned char*)block.comp, (lzo_uint*)&comp_size,
+                                  (unsigned char*)block.scratch));
+
+  f_->write((char*)&comp_size, sizeof(int));
+  f_->write(block.comp, comp_size);
+  block.len = 0;
+}
+
+void LZOFile::read_block() {
+  block.len = kBlockSize;
+  int comp_size;
+  if (f_->read((char*)&comp_size, sizeof(int)) != sizeof(int)) {
+    block.len = 0;
+    block.pos = 0;
+    return;
+  }
+
+  CHECK_EQ(f_->read(block.comp, comp_size), comp_size);
+  CHECK_GT(comp_size, 0);
+  CHECK_EQ(0, lzo1x_decompress_safe((unsigned char*)block.comp, comp_size,
+                                    (unsigned char*)block.raw, (lzo_uint*)&block.len,
+                                    (unsigned char*)block.scratch));
+
+//  LOG(INFO) << "Read block of size: " << MP(block.len, comp_size);
+  block.pos = 0;
+}
+
+RecordFile::RecordFile(FILE *stream, const string& mode) : firstWrite(true) {
+  fp = new LocalFile(stream);
   Init(mode);
 }
 
-RecordFile::RecordFile(const string& path, const string& mode, int compression)
-: fp(path, mode), firstWrite(true) {
-  params_.set_compression(compression);
+RecordFile::RecordFile(const string& path, const string& mode, int compression) : firstWrite(true) {
+  if (compression == LZO) {
+    fp = new LZOFile(new LocalFile(path + ".lzo", mode), mode);
+  } else {
+    fp = new LocalFile(path, mode);
+  }
+
   Init(mode);
 }
 
 void RecordFile::Init(const string& mode) {
   if (strstr(mode.c_str(), "r")) {
-    params_.ParseFromString(readChunkRaw());
+    params_.ParseFromString(readChunk());
 
     for (int i = 0; i < params_.attr_size(); ++i) {
       attributes[params_.attr(i).key()] = params_.attr(i).value();
     }
   }
-
-  decomp_scratch_.resize(LZO1X_1_15_MEM_COMPRESS);
 }
 
 void RecordFile::writeHeader() {
@@ -160,7 +220,7 @@ void RecordFile::writeHeader() {
     p->set_value(i->second);
   }
 
-  writeChunk(params_.SerializeAsString(), true);
+  writeChunk(params_.SerializeAsString());
 }
 
 void RecordFile::write(const google::protobuf::Message & m) {
@@ -169,56 +229,28 @@ void RecordFile::write(const google::protobuf::Message & m) {
     firstWrite = false;
   }
 
-  //LOG_EVERY_N(DEBUG, 1000) << "Writing... " << m.ByteSize() << " bytes at pos " << ftell(fp.filePointer());
+  //LOG_EVERY_N(DEBUG, 1000) << "Writing... " << m.ByteSize() << " bytes at pos " << ftell(fp->filePointer());
   writeChunk(m.SerializeAsString());
-  //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp.filePointer());
+  //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp->filePointer());
 }
 
-void RecordFile::writeChunk(const string& data, bool raw) {
-  if (params_.compression() == 1 && !raw) {
-    int comp_size = data.size() * 10;
-    buf_.resize(comp_size);
-    CHECK_EQ(0, lzo1x_1_15_compress((unsigned char*)&data[0], data.size(),
-                                    (unsigned char*)&buf_[0], (lzo_uint*)&comp_size,
-                                    (unsigned char*)&decomp_scratch_[0]));
-    //LOG(INFO) << "comp: " << res;
-    fp.write((char*)&comp_size, sizeof(int));
-    fp.write(buf_.data(), comp_size);
-  } else {
-    int len = data.size();
-    fp.write((char*)&len, sizeof(int));
-    fp.write(data.data(), data.size());
-  }
+void RecordFile::writeChunk(const string& data) {
+  int len = data.size();
+  fp->write((char*)&len, sizeof(int));
+  fp->write(data.data(), data.size());
 }
 
-const string& RecordFile::readChunkRaw() {
+const string& RecordFile::readChunk() {
   buf_.clear();
 
   int len;
-  int bytes_read = fp.read((char*)&len, sizeof(len));
+  int bytes_read = fp->read((char*)&len, sizeof(len));
 
   if (bytes_read < sizeof(int)) { return buf_; }
 
   buf_.resize(len);
-  fp.read(&buf_[0], len);
+  fp->read(&buf_[0], len);
   return buf_;
-}
-
-
-const string& RecordFile::readChunk() {
-  if (params_.compression() == 0) {
-    return readChunkRaw();
-  }
-
-  readChunkRaw();
-  decomp_buf_.resize(buf_.size() * 10);
-  lzo_uint decomp_size = decomp_buf_.size();
-  CHECK_EQ(0, lzo1x_decompress_safe((unsigned char*)&buf_[0], buf_.size(),
-                                    (unsigned char*)&decomp_buf_[0], &decomp_size,
-                                    (unsigned char*)&decomp_scratch_[0]));
-
-  //LOG(INFO) << "Results: " << err;
-  return decomp_buf_;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
