@@ -24,7 +24,7 @@ static int DomainSharding(const string& in, int num_shards) {
 %module python_support
 
 %{
-#include "python_support.h"
+#include "python_support.i"
 %}
 
 #define GOOGLE_PROTOBUF_VERSION 2003000
@@ -41,7 +41,7 @@ typedef google::protobuf::int32_t int32_t;
 
 %include "util/common.h"
 %include "util/file.h"
-%include "python_support.h"
+%include "python_support.i"
 %include "kernel/table.h"
 %include "kernel/kernel-registry.h"
 
