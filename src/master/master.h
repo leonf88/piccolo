@@ -104,6 +104,9 @@ private:
 
     int slots;
 
+    double last_task_start;
+    double total_runtime;
+
     bool is_assigned(int table, int shard) {
       return assigned.find(MP(table, shard)) != assigned.end();
     }

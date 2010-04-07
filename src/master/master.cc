@@ -42,6 +42,8 @@ Master::~Master() {
 
 Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {
   last_ping_time = Now();
+  last_task_start = 0;
+  total_runtime = 0;
 }
 
 bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
@@ -58,6 +60,8 @@ bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
 
   active[pending.begin()->first] = t;
   pending.erase(pending.begin());
+
+  last_task_start = Now();
 
   return true;
 }
@@ -281,6 +285,16 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   int count = 0;
   while (count < shards.size()) {
+    PERIODIC(5, {
+               string status;
+               for (int k = 0; k < config_.num_workers(); ++k) {
+                 status += StringPrintf("%d/%d ",
+                                        workers_[k].assigned.size() - workers_[k].pending.size() - workers_[k].active.size(),
+                                        workers_[k].assigned.size());
+               }
+               LOG(INFO) << StringPrintf("Progress (%s): %s left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
+    });
+
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
       checkpoint();
       last_checkpoint_ = Now();
@@ -299,9 +313,11 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
       CHECK(w.active.find(task_id) != w.active.end());
       w.active.erase(task_id);
+      w.total_runtime += Now() - w.last_task_start;
       w.ping();
     } else {
       Sleep(0.001);
+      continue;
     }
 
     for (int i = 0; i < workers_.size(); ++i) {
@@ -315,16 +331,11 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
         rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
       }
     }
+  }
 
-    PERIODIC(5, {
-               string status;
-               for (int k = 0; k < config_.num_workers(); ++k) {
-                 status += StringPrintf("%d/%d ",
-                                        workers_[k].assigned.size() - workers_[k].pending.size() - workers_[k].active.size(),
-                                        workers_[k].assigned.size());
-               }
-               LOG(INFO) << StringPrintf("Progress (%s): %s left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
-    });
+  for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = workers_[i];
+    LOG(INFO) << StringPrintf("Worker %2d: %.3f", i, w.total_runtime);
   }
 
   kernel_epoch_++;
