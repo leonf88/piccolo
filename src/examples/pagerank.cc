@@ -34,6 +34,10 @@ static int SiteSharding(const PageId& p, int nshards) {
   return p.first % nshards;
 }
 
+static double powerlaw_random(double dmin, double dmax, double n) {
+  double r = (double)random() / RAND_MAX;
+  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
+}
 
 static boost::recursive_mutex file_lock;
 
@@ -45,20 +49,22 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   File::Mkdirs(dirname(d));
   if (site_sizes.empty()) {
     for (int n = 0; n < FLAGS_nodes; ) {
-      int c = 50 + random() % 10000;
+      int c = powerlaw_random(10, 500000, 0.001);
       site_sizes.push_back(c);
+      LOG_EVERY_N(INFO, 100) << "Site size: " << c;
       n += c;
     }
   }
 
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
+  //FILE* lzo = popen(StringPrintf("lzop -f -q -1 -o%s", target.c_str()).c_str(), "w");
 
-  if (File::Exists(target)) {
+  if (File::Exists(target + ".lzo")) {
     return;
   }
 
   Page n;
-  RecordFile out(target, "w", 0);
+  RecordFile out(target, "w", RecordFile::LZO);
   for (int i = shard; i < site_sizes.size(); i += nshards) {
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
@@ -72,6 +78,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
       out.write(n);
     }
   }
+  //pclose(lzo);
 }
 
 static double random_restart_seed() {
@@ -101,12 +108,17 @@ public:
   RecordFile* get_reader() {
     string file = StringPrintf("%s-%05d-of-%05d-N%05d",
         FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
-    RecordFile * r = new RecordFile(file, "r");
-    return r;
+    //FILE* lzo = popen(StringPrintf("lzop -d -c %s", file.c_str()).c_str(), "r");
+    //RecordFile * r = new RecordFile(lzo, "r");
+    return new RecordFile(file, "r", RecordFile::LZO);
+  }
+
+  void free_reader(RecordFile* r) {
+    //pclose(r->fp.filePointer());
+    delete r;
   }
 
   void Initialize() {
-    LOG(INFO) << "Resizing to: " << FLAGS_nodes;
     next_pr_hash->resize(FLAGS_nodes);
     curr_pr_hash->resize(FLAGS_nodes);
 
@@ -115,7 +127,7 @@ public:
     while (r->read(&n)) {
       curr_pr_hash->update(MP(n.site(), n.id()), random_restart_seed());
     }
-    delete r;
+    free_reader(r);
   }
 
   void WriteStatus() {
@@ -137,7 +149,7 @@ public:
         next_pr_hash->update(MP(n.target_site(i), n.target_id(i)), contribution);
       }
     }
-    delete r;
+    free_reader(r);
 
     char host[1024];
     gethostname(host, 1024);
@@ -178,7 +190,12 @@ int Pagerank(ConfigData& conf) {
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
     if (FLAGS_build_graph) {
-      RUN_ALL(m, PRKernel, BuildGraph, 0);
+      vector<int> shards;
+      for (int i = 0; i < conf.num_workers(); ++i) {
+        shards.push_back(i);
+      }
+
+      RUN_RANGE(m, PRKernel, BuildGraph, 0, shards);
     }
 
     RUN_ALL(m, PRKernel, Initialize, 0);
