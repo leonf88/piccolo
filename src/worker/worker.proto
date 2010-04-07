@@ -46,6 +46,9 @@ message Stats {
 	
   optional int64 get_out = 5;
   optional int64 get_in = 6;
+
+  optional double idle_time = 7;
+  optional double network_time = 8;
 }
 
 message ShardAssignment {

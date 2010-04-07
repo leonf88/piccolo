@@ -276,13 +276,16 @@ void Worker::KernelLoop() {
   req.set_id(id());
   req.set_slots(config_.slots());
   the_network->Send(0, MTYPE_REGISTER_WORKER, req);
-
+ 
+  double idle_start = Now();
   while (running_) {
     if (kernel_queue_.empty()) {
-      PERIODIC(0.01, { CheckNetwork(); });
+      CheckNetwork();
       Sleep(FLAGS_sleep_time);
       continue;
     }
+
+    stats_.set_idle_time(stats_.idle_time() + Now() - idle_start);
 
     KernelRequest k = kernel_queue_.front();
     kernel_queue_.pop_front();
@@ -317,10 +320,13 @@ void Worker::KernelLoop() {
       i->second->SendUpdates();
     }
 
+    idle_start = Now();
     while (the_network->pending_bytes()) {
-      PERIODIC(0.01, { CheckNetwork(); });
+      CheckNetwork();
       Sleep(FLAGS_sleep_time);
     }
+    stats_.set_network_time(stats_.network_time() + Now() - idle_start);
+    idle_start = Now();
 
     kernel_done_.push_back(k);
 

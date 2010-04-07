@@ -10,11 +10,13 @@ find_package(PythonLibs REQUIRED)
 include(${SWIG_USE_FILE})
 
 set(CMAKE_CXX_FLAGS "-ggdb2 -DCPUPROF")
-set(CMAKE_SWIG_FLAGS "-ignoremissing -O -c++ -python")
+set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
 
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
 include_directories( ${PYTHON_INCLUDE_PATH} )
 include_directories( .
+                     ${PICCOLO_BINARY_DIR}
+                     ${PROTOBUF_INCLUDE_DIRS}
                      ${PICCOLO_SOURCE_DIR}/../extlib/glog/src 
                      ${PICCOLO_SOURCE_DIR}/../extlib/gflags/src 
                      ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/src 
