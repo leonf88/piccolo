@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+NUM_CORES=24
 
 mkdir -p results/
 #strace -c -f -o results/trace.$n.\$BASHPID 
@@ -8,14 +9,20 @@ mkdir -p results/
 function run_command() {
   runner=$1
   args=$2
-  for n in 6 12 18 23; do 
+  for n in 6 12 18 24; do 
       pdsh -g muppets -f 100 -l root 'echo 3 > /proc/sys/vm/drop_caches'
       echo > results/$runner.n_$n
       echo "$runner :: $n"
       IFS=$(echo -e '\n')
-      
+
+      if [[ $n != $NUM_CORES ]]; then 
+        AFFINITY=1
+      else
+        AFFINITY=0
+      fi
+
       /usr/bin/time ~/share/bin/mpirun \
-         --mca mpi_paffinity_alone 1 \
+         -mca mpi_paffinity_alone $AFFINITY \
          -hostfile mpi_hostfile\
          -bynode \
          -tag-output -n $((n + 1)) \

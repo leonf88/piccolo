@@ -9,7 +9,7 @@ find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
 
-set(CMAKE_CXX_FLAGS "-ggdb2 -DCPUPROF")
+set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2 -DCPUPROF")
 set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
 
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
