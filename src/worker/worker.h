@@ -57,7 +57,7 @@ private:
   RecordFile *checkpoint_delta_;
 
   deque<KernelRequest> kernel_queue_;
-  deque<KernelRequest> kernel_done_;
+  deque<KernelDone> kernel_done_;
 
   mutable boost::recursive_mutex state_lock_;
   boost::thread *table_thread_, *kernel_thread_;

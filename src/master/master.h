@@ -69,11 +69,11 @@ private:
     int status;
   };
 
-  struct ShardInfo {};
-
   typedef pair<int, int> Taskid;
   typedef map<Taskid, Task*> TaskMap;
-  typedef map<Taskid, ShardInfo> ShardMap;
+  typedef map<Taskid, bool> ShardMap;
+  typedef map<int, map<int, ShardInfo> > TableInfo;
+
 
   struct WorkerState;
   WorkerState* worker_for_shard(int table, int shard);
@@ -125,10 +125,15 @@ private:
     void set_serves(int shard, bool should_service);
     bool serves(int table, int shard);
 
-    bool get_next(const RunDescriptor& r, KernelRequest* msg);
+    bool get_next(const RunDescriptor& r, const TableInfo& tables, KernelRequest* msg);
   };
 
+  friend class WorkerState;
+
   vector<WorkerState> workers_;
+
+  // Global table information, as reported by workers.
+  TableInfo tables_;
 };
 
 #define RUN_ONE(m, klass, method, table)\
