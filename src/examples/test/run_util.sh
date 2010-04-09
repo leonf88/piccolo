@@ -8,7 +8,8 @@ mkdir -p results/
 function run_command() {
   runner=$1
   args=$2
-  for n in 6 12 18 24; do 
+  for n in 6 12 18 23; do 
+      pdsh -g muppets -f 100 -l root 'echo 3 > /proc/sys/vm/drop_caches'
       echo > results/$runner.n_$n
       echo "$runner :: $n"
       IFS=$(echo -e '\n')
@@ -18,7 +19,8 @@ function run_command() {
          -hostfile mpi_hostfile\
          -bynode \
          -tag-output -n $((n + 1)) \
-        bash -c "LD_LIBRARY_PATH=/home/power/share/lib \
+        bash -c "\
+              LD_LIBRARY_PATH=/home/power/share/lib \
               bin/examples/example-dsm \
         			--runner=$runner \
         			$args "\

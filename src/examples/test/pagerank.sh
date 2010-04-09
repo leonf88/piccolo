@@ -19,10 +19,10 @@ function make_graph() {
 function run_test() {
   run_command 'Pagerank' "--nodes=$NODES \
               --shards=72 \
-              --sleep_time=0.01 \
+              --sleep_time=0.001 \
               --iterations=10 \
               --graph_prefix=/scratch/pagerank_test/pr"
 }
 
-make_graph
+#make_graph
 run_test
