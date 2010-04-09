@@ -293,7 +293,7 @@ struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
 #include <google/protobuf/message.h>
 namespace std{
 static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
-  string s = q.ShortDebugString();
+  string s = q.DebugString();
   out << s;
   return out;
 }

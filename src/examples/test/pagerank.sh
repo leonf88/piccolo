@@ -20,7 +20,7 @@ function run_test() {
   run_command 'Pagerank' "--nodes=$NODES \
               --shards=72 \
               --sleep_time=0.001 \
-              --iterations=10 \
+              --iterations=5 \
               --graph_prefix=/scratch/pagerank_test/pr"
 }
 
