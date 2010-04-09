@@ -20,7 +20,7 @@ TypedGlobalTable<K, V>* create_table(
                                      int shards,
                                      typename TypedTable<K, V>::ShardingFunction sharding,
                                      typename TypedTable<K, V>::AccumFunction accum) {
-  TableInfo info;
+  TableDescriptor info;
   info.num_shards = shards;
   info.accum_function = (void*) accum;
   info.sharding_function = (void*) sharding;

@@ -20,7 +20,7 @@ struct HashPutCoder {
 };
 
 
-GlobalTable::GlobalTable(const dsm::TableInfo &info) : Table(info) {
+GlobalTable::GlobalTable(const dsm::TableDescriptor &info) : Table(info) {
   partitions_.resize(info.num_shards);
 }
 

@@ -24,7 +24,7 @@ struct Accumulator {
 
 class Worker;
 
-struct TableInfo {
+struct TableDescriptor {
 public:
   int table_id;
   int num_shards;
@@ -35,8 +35,8 @@ public:
   // We use void* to pass around the various accumulation and sharding
   // functions; they are cast to the appropriate type at the time of use.
   void *accum_function;
-  void *sharding_function;}
-;
+  void *sharding_function;
+};
 
 struct Table_Iterator {
   virtual void key_str(string *out) = 0;
@@ -50,11 +50,11 @@ class Table {
 public:
   typedef Table_Iterator Iterator;
 
-  Table(TableInfo tinfo) : info_(tinfo) {}
+  Table(TableDescriptor tinfo) : info_(tinfo) {}
   virtual ~Table() {}
 
-  const TableInfo& info() const { return info_; }
-  void set_info(const TableInfo& t) { info_ = t; }
+  const TableDescriptor& info() const { return info_; }
+  void set_info(const TableDescriptor& t) { info_ = t; }
 
   int id() const { return info_.table_id; }
   int shard() const { return info_.shard; }
@@ -80,13 +80,13 @@ public:
   virtual void finish_checkpoint() = 0;
   virtual void restore(const string& f) = 0;
 
-  TableInfo info_;
+  TableDescriptor info_;
 };
 
 // A local partition of a global table.
 class TableShard : public Table {
 public:
-  TableShard(const TableInfo& info) :
+  TableShard(const TableDescriptor& info) :
     Table(info), dirty(false), tainted(false), owner(-1) {}
 
   // Log the given put for checkpointing
@@ -111,7 +111,7 @@ protected:
 
 class GlobalTable : public Table {
 public:
-  GlobalTable(const TableInfo& info);
+  GlobalTable(const TableDescriptor& info);
 
   virtual ~GlobalTable() {
     for (int i = 0; i < partitions_.size(); ++i) {
@@ -217,7 +217,7 @@ class TypedTableShard : public TableShard {
 public:
   typedef HashMap<K, V> DataMap;
 
-  TypedTableShard(TableInfo tinfo, int size=5) :
+  TypedTableShard(TableDescriptor tinfo, int size=5) :
     TableShard(tinfo), data_(size) {
   }
 
@@ -320,12 +320,12 @@ private:
   typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
 protected:
   TableShard* create_local(int shard) {
-    TableInfo linfo = ((GlobalTable*)this)->info();
+    TableDescriptor linfo = ((GlobalTable*)this)->info();
     linfo.shard = shard;
     return new TypedTableShard<K, V>(linfo);
   }
 public:
-  TypedGlobalTable(TableInfo tinfo);
+  TypedGlobalTable(TableDescriptor tinfo);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -347,7 +347,7 @@ public:
   Table::Iterator* get_iterator(int shard);
   TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
-  const TableInfo& info() { return this->info_; }
+  const TableDescriptor& info() { return this->info_; }
 
   int get_shard(const K& k) {
     ShardingFunction sf = (ShardingFunction)info().sharding_function;
@@ -391,9 +391,9 @@ public:
 };
 
 template <class K, class V>
-TypedGlobalTable<K, V>::TypedGlobalTable(TableInfo tinfo) : GlobalTable(tinfo) {
+TypedGlobalTable<K, V>::TypedGlobalTable(TableDescriptor tinfo) : GlobalTable(tinfo) {
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableInfo linfo = info();
+    TableDescriptor linfo = info();
     linfo.shard = i;
     partitions_[i] = new TypedTableShard<K, V>(linfo);
   }
