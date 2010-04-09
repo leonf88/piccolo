@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NODES=$((90 * 1000 * 1000))
+NODES=$((10 * 1000 * 1000))
 
 source $(dirname $0)/run_util.sh
 

@@ -49,7 +49,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   File::Mkdirs(dirname(d));
   if (site_sizes.empty()) {
     for (int n = 0; n < FLAGS_nodes; ) {
-      int c = powerlaw_random(10, 500000, 0.001);
+      int c = powerlaw_random(1, (int)(100000. * FLAGS_nodes / 100e6), 0.001);
       site_sizes.push_back(c);
       LOG_EVERY_N(INFO, 100) << "Site size: " << c;
       n += c;
