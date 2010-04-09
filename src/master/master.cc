@@ -316,8 +316,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       w.total_runtime += Now() - w.last_task_start;
       w.ping();
     } else {
-      Sleep(0.001);
-      continue;
+      Sleep(0.01);
     }
 
     for (int i = 0; i < workers_.size(); ++i) {
