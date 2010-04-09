@@ -184,6 +184,7 @@ static int KMeans(ConfigData& conf) {
   } else {
     Worker w(conf);
     w.Run();
+    LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
   }
 
   return 0;

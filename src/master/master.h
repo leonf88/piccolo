@@ -74,7 +74,6 @@ private:
   typedef map<Taskid, bool> ShardMap;
   typedef map<int, map<int, ShardInfo> > TableInfo;
 
-
   struct WorkerState;
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -119,7 +118,8 @@ private:
       last_ping_time = Now();
     }
 
-    bool idle() { return pending.empty() && active.empty() && Now() - last_ping_time > 10; }
+    bool idle() { return pending.empty() && active.empty() &&
+                         Now() - last_ping_time > 1; }
     bool full() { return assigned.size() >= slots; }
 
     void set_serves(int shard, bool should_service);
@@ -134,6 +134,13 @@ private:
 
   // Global table information, as reported by workers.
   TableInfo tables_;
+
+  typedef map<string, MethodStats> MethodStatsMap;
+  MethodStatsMap method_stats_;
+
+  // The list of tasks that have been stolen already, to avoid
+  // moving things too often.
+  set<Taskid> stolen_;
 };
 
 #define RUN_ONE(m, klass, method, table)\

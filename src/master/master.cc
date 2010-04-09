@@ -33,15 +33,19 @@ Master::Master(const ConfigData &conf) {
 }
 
 Master::~Master() {
-  EmptyMessage msg;
-  LOG(INFO) << "Shutting down workers.";
-  for (int i = 1; i < world_.Get_size(); ++i) {
-    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
-  }
-
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = workers_[i];
     LOG(INFO) << StringPrintf("Worker %2d: %.3f", i, w.total_runtime);
+  }
+
+  for (MethodStatsMap::iterator i = method_stats_.begin(); i != method_stats_.end(); ++i) {
+    LOG(INFO) << "Kernel stats: " << i->first << " :: " << i->second;
+  }
+
+  LOG(INFO) << "Shutting down workers.";
+  EmptyMessage msg;
+  for (int i = 1; i < world_.Get_size(); ++i) {
+    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
 }
 
@@ -234,8 +238,18 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
   if (busy_worker == -1) { return; }
 
   WorkerState& src = workers_[busy_worker];
-  Taskid tid = src.pending.begin()->first;
-  Task *task = src.pending.begin()->second;
+  Taskid tid;
+  Task *task = NULL;
+  for (TaskMap::iterator i = src.pending.begin(); i != src.pending.end(); ++i) {
+    if (stolen_.find(i->first) == stolen_.end()) {
+      tid = i->first;
+      task = i->second;
+      break;
+    }
+  }
+
+  if (task == NULL)
+    return;
 
   LOG(INFO) << "Worker " << idle_worker << " is stealing task " << task->shard << " from " << busy_worker;
   dst.set_serves(task->shard, true);
@@ -246,6 +260,8 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
 
   dst.assigned[tid] = task;
   dst.pending[tid] = task;
+
+  stolen_.insert(tid);
 
   // Update the table assignments.
   send_assignments();
@@ -262,6 +278,9 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     kernel_epoch_++;
     return;
   }
+
+  MethodStats &mstats = method_stats_[r.kernel + ":" + r.method];
+  mstats.set_invocations(mstats.invocations() + 1);
 
   Timer t;
 
@@ -335,6 +354,8 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       CHECK(w.active.find(task_id) != w.active.end());
       w.active.erase(task_id);
       w.total_runtime += Now() - w.last_task_start;
+      mstats.set_total_shard_time(mstats.total_shard_time() + Now() - w.last_task_start);
+      mstats.set_shard_invocations(mstats.shard_invocations() + 1);
       w.ping();
     } else {
       Sleep(0.001);
@@ -352,6 +373,8 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       }
     }
   }
+
+  mstats.set_total_time(mstats.total_time() + t.elapsed());
 
   kernel_epoch_++;
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
