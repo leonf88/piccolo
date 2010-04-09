@@ -2,13 +2,6 @@ package dsm;
 
 option optimize_for = SPEED;
 
-message ConfigData {
-  required int32 num_workers = 1;
-  required int32 worker_id = 2;
-  required int32 master_id = 3;
-  optional int32 slots = 4 [default = 10];
-}
-
 enum MessageTypes {
   MTYPE_RUN_KERNEL = 1;
   MTYPE_STOP_KERNEL = 9;
@@ -31,6 +24,13 @@ enum MessageTypes {
   
   MTYPE_MAX = 16;
 };
+
+message ConfigData {
+  required int32 num_workers = 1;
+  required int32 worker_id = 2;
+  required int32 master_id = 3;
+  optional int32 slots = 4 [default = 10];
+}
 
 message RegisterWorkerRequest {
   required int32 id = 1;
@@ -62,11 +62,26 @@ message ShardAssignmentRequest {
   repeated ShardAssignment assign = 1;
 }
 
+message ShardInfo {
+  required uint32 table = 1;
+  required uint32 shard = 2;
+  required uint64 entries = 3;
+  required uint32 owner = 4;
+}
+
 message KernelRequest {
   required string kernel = 1;
   required string method = 2;
   optional int32 table = 3;
   optional int32 shard = 4;
+}
+
+message KernelDone {
+  required KernelRequest kernel = 1;
+  
+  // updated information about the state of this workers
+  // table shards.
+  repeated ShardInfo shards = 5;
 }
 
 message HashGet {

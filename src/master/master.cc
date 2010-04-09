@@ -38,6 +38,11 @@ Master::~Master() {
   for (int i = 1; i < world_.Get_size(); ++i) {
     rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
+
+  for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = workers_[i];
+    LOG(INFO) << StringPrintf("Worker %2d: %.3f", i, w.total_runtime);
+  }
 }
 
 Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {
@@ -46,20 +51,31 @@ Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {
   total_runtime = 0;
 }
 
-bool Master::WorkerState::get_next(const RunDescriptor& r, KernelRequest* msg) {
+bool Master::WorkerState::get_next(const RunDescriptor& r,
+                                   const Master::TableInfo& tin,
+                                   KernelRequest* msg) {
   if (pending.empty()) {
     return false;
   }
 
-  Task *t = pending.begin()->second;
+  Master::TableInfo& tables = const_cast<Master::TableInfo&>(tin);
+  TaskMap::iterator best = pending.begin();
+  for (TaskMap::iterator i = pending.begin(); i != pending.end(); ++i) {
+    if (tables[r.table][i->second->shard].entries() >
+        tables[r.table][best->second->shard].entries()) {
+//      LOG(INFO) << "Choosing: " << i->second->shard << " : "
+//                << tables[r.table][i->second->shard].entries();
+      best = i;
+    }
+  }
 
   msg->set_kernel(r.kernel);
   msg->set_method(r.method);
   msg->set_table(r.table);
-  msg->set_shard(t->shard);
+  msg->set_shard(best->second->shard);
 
-  active[pending.begin()->first] = t;
-  pending.erase(pending.begin());
+  active[best->first] = best->second;
+  pending.erase(best);
 
   last_task_start = Now();
 
@@ -71,7 +87,7 @@ void Master::WorkerState::set_serves(int shard, bool should_service) {
   for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
     Taskid t = MP(i->first, shard);
     if (should_service) {
-      shards[MP(i->first, shard)] = ShardInfo();
+      shards[MP(i->first, shard)] = true;
     } else {
       shards.erase(shards.find(t));
     }
@@ -276,12 +292,12 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     w.pending = w.assigned;
 
     if (!w.pending.empty()) {
-      w.get_next(r, &w_req);
+      w.get_next(r, tables_, &w_req);
       rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }
   }
 
-  KernelRequest k_done;
+  KernelDone k_done;
 
   int count = 0;
   while (count < shards.size()) {
@@ -305,18 +321,23 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
       w_id -= 1;
 
-      pair<int, int> task_id = MP(k_done.table(), k_done.shard());
+      pair<int, int> task_id = MP(k_done.kernel().table(), k_done.kernel().shard());
 
       VLOG(1) << "Finished: " << task_id;
       WorkerState& w = workers_[w_id];
       ++count;
+
+      for (int i = 0; i < k_done.shards_size(); ++i) {
+        const ShardInfo &si = k_done.shards(i);
+        tables_[si.table()][si.shard()].CopyFrom(si);
+      }
 
       CHECK(w.active.find(task_id) != w.active.end());
       w.active.erase(task_id);
       w.total_runtime += Now() - w.last_task_start;
       w.ping();
     } else {
-      Sleep(0.01);
+      Sleep(0.001);
     }
 
     for (int i = 0; i < workers_.size(); ++i) {
@@ -326,19 +347,13 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       }
 
       if (w.active.empty() && !w.pending.empty()) {
-        w.get_next(r, &w_req);
+        w.get_next(r, tables_, &w_req);
         rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
       }
     }
   }
 
-  for (int i = 0; i < workers_.size(); ++i) {
-    WorkerState& w = workers_[i];
-    LOG(INFO) << StringPrintf("Worker %2d: %.3f", i, w.total_runtime);
-  }
-
   kernel_epoch_++;
-
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
 

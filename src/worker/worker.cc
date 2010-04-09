@@ -11,7 +11,6 @@ DEFINE_double(sleep_time, 0.001, "");
 DEFINE_string(checkpoint_dir, "checkpoints", "");
 
 namespace dsm {
-static const int kMaxHosts = 64;
 
 // Represents an active RPC to a remote peer.
 struct SendRequest : private boost::noncopyable {
@@ -58,8 +57,13 @@ struct Worker::Stub : private boost::noncopyable {
   }
 };
 
+// Hackery to get around mpi's unhappiness with threads.  This thread
+// simply polls mpi continously for any kind of update and adds it to
+// a local queue.
 class NetworkThread {
 private:
+  static const int kMaxHosts = 64;
+
   typedef deque<string> Queue;
 
   vector<SendRequest*> pending_sends_;
@@ -328,7 +332,24 @@ void Worker::KernelLoop() {
     stats_.set_network_time(stats_.network_time() + Now() - idle_start);
     idle_start = Now();
 
-    kernel_done_.push_back(k);
+    KernelDone kd;
+    kd.mutable_kernel()->CopyFrom(k);
+    Registry::TableMap &tmap = Registry::get_tables();
+    for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+      GlobalTable* t = i->second;
+      for (int j = 0; j < t->num_shards(); ++j) {
+        if (t->is_local_shard(j)) {
+          ShardInfo si;
+          si.set_entries(t->get_partition(j)->size());
+          si.set_owner(this->id());
+          si.set_table(i->first);
+          si.set_shard(j);
+          kd.add_shards()->CopyFrom(si);
+        }
+      }
+    }
+
+    kernel_done_.push_back(kd);
 
     VLOG(1) << "Kernel finished: " << k;
     DumpProfile();
@@ -345,7 +366,7 @@ int64_t Worker::pending_kernel_bytes() const {
 
   Registry::TableMap &tmap = Registry::get_tables();
   for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-    t += ((GlobalTable*)i->second)->pending_write_bytes();
+    t += i->second->pending_write_bytes();
   }
 
   return t;
