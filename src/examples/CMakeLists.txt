@@ -1,5 +1,5 @@
-set(MPILIBS mpi_cxx mpi open-rte open-pal boost_thread-mt util )
-set(OTHERLIBS protobuf lzo2 pthread rt dl numa)
+set(MPILIBS open-rte open-pal boost_thread-mt util )
+set(OTHERLIBS mpi_cxx mpi protobuf lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 

@@ -59,9 +59,9 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
   //FILE* lzo = popen(StringPrintf("lzop -f -q -1 -o%s", target.c_str()).c_str(), "w");
 
-  if (File::Exists(target + ".lzo")) {
-    return;
-  }
+//  if (File::Exists(target + ".lzo")) {
+//    return;
+//  }
 
   Page n;
   RecordFile out(target, "w", RecordFile::LZO);
@@ -176,13 +176,11 @@ REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
 
-DECLARE_bool(work_stealing);
 int Pagerank(ConfigData& conf) {
   conf.set_slots(256);
 
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
-  FLAGS_work_stealing = false;
 
   Registry::create_table<PageId, double>(0, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
   Registry::create_table<PageId, double>(1, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
