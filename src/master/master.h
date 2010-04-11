@@ -82,10 +82,13 @@ private:
   // worker and assign it to them.
   WorkerState* assign_worker(int table, int shard);
 
-  void send_assignments();
+  void send_table_assignments();
   void steal_work(const RunDescriptor& r, int idle_worker);
+  void assign_tables();
+  void assign_tasks(const RunDescriptor& r, vector<int> shards);
+  void dispatch_work(const RunDescriptor& r);
 
-  struct WorkerState {
+  struct WorkerState : private boost::noncopyable {
     WorkerState(int id);
 
     // Pending tasks to work on.
@@ -106,11 +109,15 @@ private:
     double last_task_start;
     double total_runtime;
 
+    bool alive() {
+      return true;
+    }
+
     bool is_assigned(int table, int shard) {
       return assigned.find(MP(table, shard)) != assigned.end();
     }
 
-    int finished() {
+    int num_finished() {
       return assigned.size() - pending.size() - active.size();
     }
 
@@ -118,8 +125,12 @@ private:
       last_ping_time = Now();
     }
 
-    bool idle() { return pending.empty() && active.empty() &&
-                         Now() - last_ping_time > 1; }
+    bool idle(double avg_completion_time) {
+      return pending.empty() &&
+             active.empty() &&
+             Now() - last_ping_time > avg_completion_time / 2;
+    }
+
     bool full() { return assigned.size() >= slots; }
 
     void set_serves(int shard, bool should_service);
@@ -130,7 +141,7 @@ private:
 
   friend class WorkerState;
 
-  vector<WorkerState> workers_;
+  vector<WorkerState*> workers_;
 
   // Global table information, as reported by workers.
   TableInfo tables_;
