@@ -6,6 +6,8 @@
 
 namespace dsm {
 
+static const int kFileBufferSize = 4 * 1024 * 1024;
+
 vector<string> File::Glob(const string& pattern) {
   glob_t globbuf;
   globbuf.gl_offs = 0;
@@ -94,6 +96,7 @@ LocalFile::LocalFile(const string &name, const string& mode) {
   fp = fopen(name.c_str(), mode.c_str());
   path = name;
   close_on_delete = true;
+  setvbuf(fp, NULL, _IOFBF, kFileBufferSize);
   if (!fp) {
     LOG(FATAL) << StringPrintf("Failed to open file! %s with mode %s.", name.c_str(), mode.c_str());
   }
