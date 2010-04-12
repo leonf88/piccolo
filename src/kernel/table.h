@@ -217,7 +217,7 @@ class TypedTableShard : public TableShard {
 public:
   typedef HashMap<K, V> DataMap;
 
-  TypedTableShard(TableDescriptor tinfo, int size=5) :
+  TypedTableShard(TableDescriptor tinfo, int size=3) :
     TableShard(tinfo), data_(size) {
   }
 
