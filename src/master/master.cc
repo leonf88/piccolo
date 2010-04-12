@@ -376,6 +376,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
       }
 
       if (!w.alive()) {
+        LOG(INFO) << "Worker " << i << " died, restoring from last checkpoint.";
         // fall back to our checkpointed data, and reassign work for this method
         restore();
 
