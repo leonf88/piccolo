@@ -30,7 +30,7 @@ function run_command() {
          -tag-output -n $((n + 1)) \
         bash -c "\
               LD_LIBRARY_PATH=/home/power/share/lib \
-              bin/examples/example-dsm \
+              bin/release/examples/example-dsm \
         			--runner=$runner \
         			$args "\
         2>&1 | while read line; do 

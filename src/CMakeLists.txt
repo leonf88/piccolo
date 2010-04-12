@@ -1,7 +1,6 @@
 cmake_minimum_required (VERSION 2.6) 
 project (PICCOLO) 
 
-set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
 find_package(ProtoBuf REQUIRED)
 find_package(SWIG REQUIRED)

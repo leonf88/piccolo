@@ -3,13 +3,14 @@ CC = distcc gcc
 CMAKE = cmake
 
 export CXX CC
-example-dsm:
-	cd bin && $(CMAKE) ../src && $(MAKE) example-dsm
+release:
+	mkdir -p bin/release
+	cd bin/release && $(CMAKE) -DCMAKE_BUILD_TYPE=Release ../../src && $(MAKE) example-dsm
 
-all:
-	cd bin && $(CMAKE) ../src && $(MAKE) example-dsm
-	
+debug:
+	mkdir -p bin/debug
+	cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug ../../src && $(MAKE) example-dsm
+
 clean:
 	rm -rf bin/*
-
 
