@@ -1,6 +1,5 @@
 #!/bin/bash
 
-set -e
 NUM_CORES=24
 RESULTS_DIR=results/
 PARALLELISM="6 12 18 23"
@@ -27,11 +26,11 @@ function run_command() {
       /usr/bin/time ~/share/bin/mpirun \
          -mca mpi_paffinity_alone $AFFINITY \
          -hostfile mpi_hostfile\
-         -bynode \
+         -byslot \
          -tag-output -n $((n + 1)) \
         bash -c "\
               LD_LIBRARY_PATH=/home/power/share/lib \
-              bin/release/examples/example-dsm \
+              bin/debug/examples/example-dsm \
         			--runner=$runner \
         			$args "\
         2>&1 | while read line; do 
