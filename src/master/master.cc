@@ -25,10 +25,10 @@ Master::Master(const ConfigData &conf) {
 
   for (int i = 0; i < config_.num_workers(); ++i) {
     RegisterWorkerRequest req;
-    LOG(INFO) << "Waiting for workers... " << i << " of " << world_.Get_size() - 1;
     int src = 0;
     rpc_->ReadAny(&src, MTYPE_REGISTER_WORKER, &req);
     workers_[src - 1]->slots = req.slots();
+    LOG(INFO) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
 }
 
