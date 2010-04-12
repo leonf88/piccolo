@@ -184,13 +184,13 @@ namespace data {
   // I really, really, really hate C++.
   template <class T>
   static void marshal(const T& t, string* out) {
-    DCHECK(std::tr1::is_pod<T>::value);
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
     out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
   }
 
   template <class T>
   static void unmarshal(const StringPiece& s, T *t) {
-    DCHECK(std::tr1::is_pod<T>::value);
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
     *t = *reinterpret_cast<const T*>(s.data);
   }
 

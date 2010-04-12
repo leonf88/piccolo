@@ -45,7 +45,7 @@ public:
   KMarshal key_marshaller;
   VMarshal value_marshaller;
 private:
-  static const double kLoadFactor = 0.7;
+  static const double kLoadFactor = 0.6;
 
   uint32_t bucket_idx(K k) {
     return dsm::data::hash<K>(k) % size_;
