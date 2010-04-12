@@ -1,6 +1,7 @@
 #!/bin/bash
 
-NODES=$((10 * 1000 * 1000))
+SHARDS=72
+NODES=$((50 * 1000 * 1000))
 
 source $(dirname $0)/run_util.sh
 
@@ -11,18 +12,24 @@ function make_graph() {
           --runner=Pagerank \
           --build_graph \
           --nodes=$NODES\
-          --shards=72\
+          --shards=$SHARDS\
           --iterations=0 \
           --graph_prefix=/scratch/pagerank_test/pr"
 }
 
 function run_test() {
   run_command 'Pagerank' "--nodes=$NODES \
-              --shards=72 \
+              --shards=$SHARDS \
               --sleep_time=0.001 \
-              --iterations=5 \
+              --iterations=10 \
+              --work_stealing=$1 \
               --graph_prefix=/scratch/pagerank_test/pr"
 }
 
-#make_graph
-run_test
+make_graph
+
+RESULTS_DIR=results.noworkstealing/
+run_test false
+
+RESULTS_DIR=results.workstealing/
+run_test true
