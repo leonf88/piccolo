@@ -2,14 +2,16 @@
 
 set -e
 NUM_CORES=24
+RESULTS_DIR=results/
+PARALLELISM="6 12 18 23"
 
-mkdir -p results/
 #strace -c -f -o results/trace.$n.\$BASHPID 
 
 function run_command() {
+  mkdir -p $RESULTS_DIR
   runner=$1
   args=$2
-  for n in 6 12 18 24; do 
+  for n in $PARALLELISM; do 
       pdsh -g muppets -f 100 -l root 'echo 3 > /proc/sys/vm/drop_caches'
       echo > results/$runner.n_$n
       echo "$runner :: $n"

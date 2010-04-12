@@ -40,11 +40,14 @@ struct MatrixMultiplicationKernel : public DSMKernel {
       for (int bx = 0; bx < bCols; bx ++) {
         if (!is_local(by, bx)) { continue; }
         LOG(INFO) << "Putting... " << MP(by, bx);
+        CHECK(matrix_a->get_shard(by * bCols + bx) == current_shard());
         matrix_a->update(by * bCols + bx, b);
         matrix_b->update(by * bCols + bx, b);
         matrix_c->update(by * bCols + bx, z);
       }
     }
+
+    LOG(INFO) << "Done.";
   }
 
   void Multiply() {

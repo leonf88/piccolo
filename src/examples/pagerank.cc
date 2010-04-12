@@ -101,6 +101,7 @@ public:
   void BuildGraph() {
     srand(0);
     for (int i = 0; i < FLAGS_shards; ++i) {
+      LOG(INFO) << "Building... " << i;
       ::BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
     }
   }
