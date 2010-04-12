@@ -20,18 +20,32 @@ DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 
-typedef pair<uint32_t, uint32_t> PageId;
+// I'd like to use a pair here, but for some reason they fail to count
+// as POD types according to C++.  Sigh.
+struct PageId {
+  uint32_t site;
+  uint32_t page;
+};
+
+PageId P(int s, int p) {
+  PageId pid = { s, p };
+  return pid;
+}
+
+bool operator==(const PageId& a, const PageId& b) {
+  return a.site == b.site && a.page == b.page;
+}
 
 namespace dsm { namespace data {
 template<>
   uint32_t hash(PageId p) {
-    return hash(p.first) ^ hash(p.second);
+    return hash(p.site) ^ hash(p.page);
   }
 }
 }
 
 static int SiteSharding(const PageId& p, int nshards) {
-  return p.first % nshards;
+  return p.site % nshards;
 }
 
 static double powerlaw_random(double dmin, double dmax, double n) {
@@ -101,8 +115,7 @@ public:
   void BuildGraph() {
     srand(0);
     for (int i = 0; i < FLAGS_shards; ++i) {
-      LOG(INFO) << "Building... " << i;
-      ::BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
+       ::BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
     }
   }
 
@@ -126,14 +139,14 @@ public:
     Page n;
     RecordFile *r = get_reader();
     while (r->read(&n)) {
-      curr_pr_hash->update(MP(n.site(), n.id()), random_restart_seed());
+      curr_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
     }
     free_reader(r);
   }
 
   void WriteStatus() {
     fprintf(stderr, "Iteration %d, PR:: ", iter);
-    fprintf(stderr, "%.2f\n", curr_pr_hash->get(MP(0, 0)));
+    fprintf(stderr, "%.2f\n", curr_pr_hash->get(P(0, 0)));
   }
 
   void PageRankIter() {
@@ -144,10 +157,10 @@ public:
 
     RecordFile *r = get_reader();
     while (r->read(&n)) {
-      double v = curr_pr_hash->get_local(MP(n.site(), n.id()));
+      double v = curr_pr_hash->get_local(P(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
-        next_pr_hash->update(MP(n.target_site(i), n.target_id(i)), contribution);
+        next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);
       }
     }
     free_reader(r);
