@@ -26,10 +26,10 @@ function run_test() {
               --graph_prefix=/scratch/pagerank_test/pr"
 }
 
-make_graph
+#make_graph
 
-RESULTS_DIR=results.noworkstealing/
-run_test false
+#RESULTS_DIR=results.noworkstealing/
+#run_test false
 
 RESULTS_DIR=results.workstealing/
 run_test true
