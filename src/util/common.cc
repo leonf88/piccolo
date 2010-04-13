@@ -234,7 +234,6 @@ void Init(int argc, char** argv) {
   sigaction(SIGABRT, &sig_action, NULL);
   sigaction(SIGBUS, &sig_action, NULL);
   sigaction(SIGTERM, &sig_action, NULL);
-  sigaction(SIGINT, &sig_action, NULL);
 
   srandom(time(NULL));
 #ifdef CPUPROF
