@@ -73,8 +73,8 @@ private:
   vector<V> values_;
   vector<uint8_t> in_use_;
 
-  int entries_;
-  int size_;
+  uint32_t entries_;
+  uint32_t size_;
   iterator *end_;
 public:
   struct iterator {
@@ -109,7 +109,7 @@ public:
 
   void accumulate(const K& k, const V& v, AccumFunction f);
 
-  void resize(int size);
+  void resize(uint32_t size);
 
   bool empty() { return size() == 0; }
   int size() { return entries_; }
@@ -148,7 +148,7 @@ static int log2(int s) {
 }
 
 template <class K, class V>
-void HashMap<K, V>::resize(int size) {
+void HashMap<K, V>::resize(uint32_t size) {
   if (size_ == size)
     return;
 
@@ -242,22 +242,41 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
 
 template <class K, class V>
 void HashMap<K, V>::checkpoint(const string& file) {
-  RecordFile rf(file, "w");
-  Pair p;
-  for (iterator i = begin(); i != end(); ++i) {
-    key_marshaller(i.key(), p.mutable_key());
-    value_marshaller(i.value(), p.mutable_value());
-    rf.write(p);
+  Timer t;
+
+  LocalFile f(file, "w");
+  Encoder e(&f);
+  e.write(size_);
+  e.write(entries_);
+
+  for (uint32_t i = 0; i < size_; ++i) {
+    if (in_use_[i]) {
+      e.write(i);
+      e.write_bytes((char*)&keys_[i], sizeof(K));
+      e.write_bytes((char*)&values_[i], sizeof(V));
+    }
   }
+
+  f.sync();
+//  LOG(INFO) << "Flushed " << file << " to disk in: " << t.elapsed();
 }
 
 template <class K, class V>
 void HashMap<K, V>::restore(const string& file) {
-  Pair p;
-  RecordFile rf(file, "r");
+  LocalFile f(file, "r");
+  Decoder d(&f);
+  d.read(&size_);
+  d.read(&entries_);
 
-  while (rf.read(&p)) {
-    put(data::from_string<K>(p.key()), data::from_string<V>(p.value()));
+  keys_.resize(size_);
+  values_.resize(size_);
+  in_use_.resize(size_);
+
+  for (uint32_t i = 0; i < entries_; ++i) {
+    uint32_t idx;
+    d.read(&idx);
+    d.read_bytes((char*)&keys_[idx], sizeof(K));
+    d.read_bytes((char*)&values_[i], sizeof(V));
   }
 }
 
