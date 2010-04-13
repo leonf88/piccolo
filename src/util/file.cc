@@ -6,7 +6,7 @@
 
 namespace dsm {
 
-static const int kFileBufferSize = 4 * 1024 * 1024;
+static const int kFileBufferSize = 128 * 1024;
 
 vector<string> File::Glob(const string& pattern) {
   glob_t globbuf;
@@ -51,12 +51,17 @@ bool File::Exists(const string& f) {
   }
   return false;
 }
+
 void File::Dump(const string& f, StringPiece data) {
   FILE* fp = fopen(f.c_str(), "w+");
   if (!fp) { LOG(FATAL) << "Failed to open output file " << f.c_str(); }
   fwrite(data.data, 1, data.len, fp);
   fflush(fp);
   fclose(fp);
+}
+
+void File::Move(const string& src, const string&dst) {
+  rename(src.c_str(), dst.c_str());
 }
 
 bool LocalFile::readLine(string *out) {
@@ -94,12 +99,10 @@ LocalFile::LocalFile(FILE* stream) {
 
 LocalFile::LocalFile(const string &name, const string& mode) {
   fp = fopen(name.c_str(), mode.c_str());
+  CHECK(fp != NULL) << "Failed to open file " << name << " with mode " << mode;
   path = name;
   close_on_delete = true;
   setvbuf(fp, NULL, _IOFBF, kFileBufferSize);
-  if (!fp) {
-    LOG(FATAL) << StringPrintf("Failed to open file! %s with mode %s.", name.c_str(), mode.c_str());
-  }
 }
 
 template <class T>
@@ -134,26 +137,41 @@ void Encoder::write_bytes(const char* a, int len) {
 }
 
 int LZOFile::write(const char* data, int len) {
-  if (block.len + len > kBlockSize) {
-    write_block();
-  }
+  int left = len;
+  do {
+    if (block.len + left > kBlockSize) {
+      write_block();
+    }
 
-  memcpy(block.raw + block.len, data, len);
-  block.len += len;
+    int bytes_to_write = min(kBlockSize - block.len, left);
+    memcpy(block.raw + block.len, data, bytes_to_write);
+    block.len += bytes_to_write;
+    left -= bytes_to_write;
+    data += bytes_to_write;
+  } while (left > 0);
 
   return len;
 }
 
 int LZOFile::read(char* data, int len) {
-  if (block.pos == block.len) {
-    read_block();
-  }
-  int read = min(len, block.len - block.pos);
+  int left = len;
+  do {
+//    LOG_EVERY_N(INFO, 1000) << MP(left, block.pos, block.len);
+    if (block.pos == block.len) {
+      if (!read_block()) {
+        return 0;
+      }
+    }
 
-  memcpy(data, block.raw + block.pos, read);
-  block.pos += read;
-  pos_ += read;
-  return read;
+    int bytes_to_read = min(left, block.len - block.pos);
+    memcpy(data, block.raw + block.pos, bytes_to_read);
+    block.pos += bytes_to_read;
+    pos_ += bytes_to_read;
+    left -= bytes_to_read;
+    data += bytes_to_read;
+  } while (left > 0);
+
+  return len;
 }
 
 void LZOFile::write_block() {
@@ -172,13 +190,13 @@ void LZOFile::write_block() {
   block.len = 0;
 }
 
-void LZOFile::read_block() {
+bool LZOFile::read_block() {
   block.len = kBlockSize;
   int comp_size;
   if (f_->read((char*)&comp_size, sizeof(int)) != sizeof(int)) {
     block.len = 0;
     block.pos = 0;
-    return;
+    return false;
   }
 
   CHECK_EQ(f_->read(block.comp, comp_size), comp_size);
@@ -189,6 +207,7 @@ void LZOFile::read_block() {
 
 //  LOG(INFO) << "Read block of size: " << MP(block.len, comp_size);
   block.pos = 0;
+  return true;
 }
 
 RecordFile::RecordFile(FILE *stream, const string& mode) : firstWrite(true) {
