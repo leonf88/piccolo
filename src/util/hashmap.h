@@ -244,7 +244,7 @@ template <class K, class V>
 void HashMap<K, V>::checkpoint(const string& file) {
   Timer t;
 
-  LocalFile f(file, "w");
+  LZOFile f(file, "w");
   Encoder e(&f);
   e.write(size_);
   e.write(entries_);
@@ -263,7 +263,7 @@ void HashMap<K, V>::checkpoint(const string& file) {
 
 template <class K, class V>
 void HashMap<K, V>::restore(const string& file) {
-  LocalFile f(file, "r");
+  LZOFile f(file, "r");
   Decoder d(&f);
   d.read(&size_);
   d.read(&entries_);

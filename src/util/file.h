@@ -158,13 +158,12 @@ public:
 
 class LZOFile : public File, private boost::noncopyable {
 public:
-  LZOFile(LocalFile* target, const string& mode) :
-    f_(target), pos_(0) {
-    if (mode == "r") {
-      read_block();
-    } else {
-      block.len = block.pos = 0;
-    }
+  LZOFile(const string& fname, const string& mode) {
+    init(new LocalFile(fname, mode), mode);
+  }
+
+  LZOFile(LocalFile* target, const string& mode) {
+    init(target, mode);
   }
 
   virtual ~LZOFile() {
@@ -183,8 +182,19 @@ public:
 
   const char* name() { return f_->name(); }
   bool eof() { return f_->eof() && block.pos == block.len; }
+  void sync() { f_->sync(); }
 
 private:
+  void init(LocalFile* f, const string& mode) {
+    f_ = f;
+    pos_ = 0;
+    if (mode == "r") {
+      read_block();
+    } else {
+      block.len = block.pos = 0;
+    }
+  }
+
   LocalFile *f_;
   long pos_;
 
