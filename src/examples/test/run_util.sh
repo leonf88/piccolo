@@ -27,10 +27,10 @@ function run_command() {
          -mca mpi_paffinity_alone $AFFINITY \
          -hostfile mpi_hostfile\
          -byslot \
-         -tag-output -n $((n + 1)) \
+         -n $((n + 1)) \
         bash -c "\
               LD_LIBRARY_PATH=/home/power/share/lib \
-              bin/debug/examples/example-dsm \
+              bin/release/examples/example-dsm \
         			--runner=$runner \
         			$args "\
         2>&1 | while read line; do 

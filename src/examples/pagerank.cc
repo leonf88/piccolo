@@ -73,12 +73,12 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
   //FILE* lzo = popen(StringPrintf("lzop -f -q -1 -o%s", target.c_str()).c_str(), "w");
 
-//  if (File::Exists(target + ".lzo")) {
-//    return;
-//  }
+  if (File::Exists(target + ".lzo")) {
+    return;
+  }
 
   Page n;
-  RecordFile out(target, "w", RecordFile::LZO);
+  RecordFile out(target + ".tmp", "w", RecordFile::LZO);
   for (int i = shard; i < site_sizes.size(); i += nshards) {
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
@@ -92,6 +92,8 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
       out.write(n);
     }
   }
+
+  File::Move(StringPrintf("%s.tmp.lzo", target.c_str()), target + ".lzo");
   //pclose(lzo);
 }
 
@@ -138,9 +140,13 @@ public:
 
     Page n;
     RecordFile *r = get_reader();
+    int count = 0;
     while (r->read(&n)) {
+      ++count;
       curr_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
     }
+
+//    LOG(INFO) << "Initialized with " << count << " nodes.";
     free_reader(r);
   }
 
@@ -158,6 +164,8 @@ public:
     RecordFile *r = get_reader();
     while (r->read(&n)) {
       double v = curr_pr_hash->get_local(P(n.site(), n.id()));
+
+      next_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
       double contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
         next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);
@@ -171,16 +179,9 @@ public:
   }
 
   void ResetTable() {
-    // Move the values computed from the last iteration into the current table, and reset
-    // the values local to our node to the random restart value.
+    // Move the values computed from the last iteration into the current table.
     swap(curr_pr_hash, next_pr_hash);
     next_pr_hash->clear(current_shard());
-
-    TypedTable<PageId, double>::Iterator *it = curr_pr_hash->get_typed_iterator(current_shard());
-    while (!it->done()) {
-      next_pr_hash->update(it->key(), random_restart_seed());
-      it->Next();
-    }
   }
 };
 REGISTER_KERNEL(PRKernel);
@@ -189,6 +190,8 @@ REGISTER_METHOD(PRKernel, Initialize);
 REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
+
+DEFINE_bool(checkpoint, false, "Checkpoint between iterations.");
 
 int Pagerank(ConfigData& conf) {
   conf.set_slots(256);
@@ -208,6 +211,7 @@ int Pagerank(ConfigData& conf) {
       }
 
       RUN_RANGE(m, PRKernel, BuildGraph, 0, shards);
+      return 0;
     }
 
     RUN_ALL(m, PRKernel, Initialize, 0);
@@ -215,6 +219,9 @@ int Pagerank(ConfigData& conf) {
       RUN_ALL(m, PRKernel, PageRankIter, 0);
       RUN_ALL(m, PRKernel, ResetTable, 0);
       RUN_ONE(m, PRKernel, WriteStatus, 0);
+      if (FLAGS_checkpoint) {
+        m.checkpoint();
+      }
     }
   } else {
     Worker w(conf);
