@@ -3,9 +3,11 @@
 set -e
 source $(dirname $0)/run_util.sh
 
-GRAPHSIZE=10
+PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
 MACHINES=$(cat mpi_hostfile | wc -l)
-SHARDS=$((MACHINES * 10))
+
+GRAPHSIZE=100
+SHARDS=100
 
 function make_graph() {
   ~/share/bin/mpirun \
@@ -24,20 +26,26 @@ function make_graph() {
 }
 
 function run_test() {
+
+pdsh -f 100 -g muppets "rm -rf /scratch/checkpoints/${GRAPHSIZE}M/"
+pdsh -f 100 -g muppets "mkdir -p /scratch/checkpoints/${GRAPHSIZE}M"
+
   run_command 'Pagerank' "\
  --nodes=$((GRAPHSIZE*1000*1000)) \
  --shards=$SHARDS \
  --sleep_time=0.001 \
- --iterations=50 \
- --work_stealing=$1 \
+ --iterations=10 \
+ --checkpoint_dir=/scratch/checkpoints/${GRAPHSIZE}M/ \
+ --work_stealing=true \
+ --checkpoint=$1 \
+ --cpu_profile \
  --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr"
 }
 
-#make_graph
+make_graph
 
-PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
-RESULTS_DIR=results.workstealing/
+RESULTS_DIR=results.cp/
 run_test true
 
-RESULTS_DIR=results.noworkstealing/
-run_test false
+#RESULTS_DIR=results.no_cp/
+#run_test false
