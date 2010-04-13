@@ -3,13 +3,16 @@ set(OTHERLIBS mpi_cxx mpi protobuf lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 
-add_executable(example-dsm example-main.cc  k-means.cc matmul.cc pagerank.cc shortest-path.cc 
-			   nas/isort.cc nas/n-body.cc
-			   ${WORKER_PB_HDR} ${COMMON_PB_HDR}
-			   ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
+add_library(example 
+            k-means.cc matmul.cc pagerank.cc shortest-path.cc 
+            nas/isort.cc nas/n-body.cc
+            ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
+add_dependencies(example worker_proto common_proto)
+
+add_executable(example-dsm example-main.cc)
 
 # we need to resolve static initializers, so glob all the symbols in
-target_link_libraries(example-dsm -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
+target_link_libraries(example-dsm -Wl,--whole-archive common worker kernel master example -Wl,--no-whole-archive )
 
 # link statically if we can
 target_link_libraries(example-dsm -Wl,-Bstatic ${MPILIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
