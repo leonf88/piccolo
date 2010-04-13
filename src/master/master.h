@@ -37,7 +37,7 @@ public:
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
-  void checkpoint();
+  void checkpoint(bool compute_deltas=false);
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
   // the process is left in the original state.
