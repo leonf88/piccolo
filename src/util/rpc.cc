@@ -126,7 +126,7 @@ void RPCHelper::SendData(int target, int method, const string& msg) {
 MPI::Request RPCHelper::ISendData(int target, int method, const string& msg) {
   rpc_lock;
   rpc_log("ISendData", my_rank_, target, method);
-  return mpi_world_->Isend(&msg[0], msg.size(), MPI::BYTE, target, method);
+  return mpi_world_->Issend(&msg[0], msg.size(), MPI::BYTE, target, method);
 }
 
 
