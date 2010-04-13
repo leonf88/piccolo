@@ -50,7 +50,7 @@ public:
   bool has_incoming_data() const;
 
 private:
-  void Checkpoint(int epoch);
+  void Checkpoint(int epoch, bool compute_deltas);
   void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
 

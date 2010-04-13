@@ -102,20 +102,25 @@ bool Master::WorkerState::serves(int table, int shard) {
   return shards.find(MP(table, shard)) != shards.end();
 }
 
-void Master::checkpoint() {
+void Master::checkpoint(bool compute_deltas) {
   checkpoint_epoch_ += 1;
 
   StartCheckpoint req;
   req.set_epoch(checkpoint_epoch_);
+  req.set_compute_deltas(compute_deltas);
   rpc_->Broadcast(MTYPE_CHECKPOINT, req);
+
+  Timer t;
 
   // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
   // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
   // is complete.
   for (int i = 0; i < config_.num_workers(); ++i) {
     EmptyMessage resp;
-    LOG(INFO) << "Waiting for checkpoint to finish... " << i + 1 << " of " << config_.num_workers();
-    rpc_->ReadAny(NULL, MTYPE_CHECKPOINT_DONE, &resp);
+    int src;
+    rpc_->ReadAny(&src, MTYPE_CHECKPOINT_DONE, &resp);
+    LOG(INFO) << "Checkpoint: " << src - 1 << " finished in " << t.elapsed()
+              << "; " << config_.num_workers() - i << " tasks remaining.";
   }
 
   CheckpointInfo cinfo;
@@ -149,7 +154,7 @@ void Master::restore() {
 
   for (int i = 0; i < config_.num_workers(); ++i) {
     EmptyMessage resp;
-    LOG(INFO) << "Waiting for checkpoint to finish... " << i + 1 << " of " << config_.num_workers();
+    LOG(INFO) << "Waiting for restore to finish... " << i + 1 << " of " << config_.num_workers();
     rpc_->ReadAny(NULL, MTYPE_RESTORE_DONE, &resp);
   }
 }
@@ -338,7 +343,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     });
 
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint();
+      checkpoint(true /* require delta updates */);
       last_checkpoint_ = Now();
     }
 

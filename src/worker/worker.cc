@@ -58,7 +58,7 @@ struct Worker::Stub : private boost::noncopyable {
 };
 
 // Hackery to get around mpi's unhappiness with threads.  This thread
-// simply polls mpi continously for any kind of update and adds it to
+// simply polls MPI continuously for any kind of update and adds it to
 // a local queue.
 class NetworkThread {
 private:
@@ -82,6 +82,10 @@ public:
     rpc_ = rpc;
     world_ = rpc->world();
     running = 1;
+  }
+
+  bool network_active() const {
+    return active_sends_.size() + pending_sends_.size() > 0;
   }
 
   int64_t pending_bytes() const {
@@ -111,7 +115,7 @@ public:
       if (r->finished()) {
         if (r->failures > 0) {
           LOG(INFO) << "Send " << MP(world_->Get_rank(), r->target) << " of size " << r->payload.size()
-              << " succeeded after " << r->failures << " failures.";
+                    << " succeeded after " << r->failures << " failures.";
         }
         VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
         delete r;
@@ -339,12 +343,11 @@ void Worker::KernelLoop() {
       GlobalTable* t = i->second;
       for (int j = 0; j < t->num_shards(); ++j) {
         if (t->is_local_shard(j)) {
-          ShardInfo si;
-          si.set_entries(t->get_partition(j)->size());
-          si.set_owner(this->id());
-          si.set_table(i->first);
-          si.set_shard(j);
-          kd.add_shards()->CopyFrom(si);
+          ShardInfo *si = kd.add_shards();
+          si->set_entries(t->get_partition(j)->size());
+          si->set_owner(this->id());
+          si->set_table(i->first);
+          si->set_shard(j);
         }
       }
     }
@@ -382,10 +385,10 @@ bool Worker::has_incoming_data() const {
 
 void Worker::UpdateEpoch(int peer, int peer_marker) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
-  LOG(INFO) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
+  VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
   if (epoch_ < peer_marker) {
     LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_marker);
-    Checkpoint(peer_marker);
+    Checkpoint(peer_marker, true);
   }
 
   peers_[peer]->epoch = peer_marker;
@@ -394,7 +397,7 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
   for (int i = 0; i < peers_.size(); ++i) {
     if (peers_[i]->epoch != epoch_) {
       checkpoint_done = false;
-      LOG(INFO) << "Channel is out of date: " << i << " : " << MP(peers_[i]->epoch, epoch_);
+      VLOG(1) << "Channel is out of date: " << i << " : " << MP(peers_[i]->epoch, epoch_);
     }
   }
 
@@ -411,14 +414,14 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
   }
 }
 
-void Worker::Checkpoint(int epoch) {
+void Worker::Checkpoint(int epoch, bool compute_deltas) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   if (epoch_ >= epoch) {
     LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
     return;
   }
 
-  LOG(INFO) << "Checkpointing... " << MP(epoch_, epoch);
+  LOG(INFO) << "Checkpointing... " << MP(id(), epoch_, epoch);
 
   epoch_ = epoch;
 
@@ -428,14 +431,28 @@ void Worker::Checkpoint(int epoch) {
     t->start_checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
   }
 
-  HashPut epoch_marker;
-  epoch_marker.set_source(id());
-  epoch_marker.set_table(-1);
-  epoch_marker.set_shard(-1);
-  epoch_marker.set_done(true);
-  epoch_marker.set_marker(epoch_);
-  for (int i = 0; i < peers_.size(); ++i) {
-    the_network->Send(peers_[i]->CreateRequest(MTYPE_PUT_REQUEST, epoch_marker));
+  if (compute_deltas) {
+    HashPut epoch_marker;
+    epoch_marker.set_source(id());
+    epoch_marker.set_table(-1);
+    epoch_marker.set_shard(-1);
+    epoch_marker.set_done(true);
+    epoch_marker.set_marker(epoch_);
+    for (int i = 0; i < peers_.size(); ++i) {
+      the_network->Send(peers_[i]->CreateRequest(MTYPE_PUT_REQUEST, epoch_marker));
+    }
+  } else {
+    for (int i = 0; i < peers_.size(); ++i) {
+      peers_[i]->epoch = epoch;
+    }
+
+    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+       GlobalTable* t = i->second;
+       t->finish_checkpoint();
+    }
+
+    EmptyMessage req;
+    the_network->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
   }
 }
 
@@ -527,7 +544,7 @@ void Worker::CheckForMasterUpdates() {
 
   StartCheckpoint checkpoint_msg;
   while (the_network->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
-    Checkpoint(checkpoint_msg.epoch());
+    Checkpoint(checkpoint_msg.epoch(), checkpoint_msg.compute_deltas());
   }
 
   StartRestore restore_msg;

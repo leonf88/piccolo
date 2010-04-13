@@ -120,6 +120,7 @@ message EmptyMessage {}
 
 message StartCheckpoint {
   required int32 epoch = 1;
+  required bool compute_deltas = 2;
 }
 
 message StartRestore {
