@@ -108,7 +108,7 @@ public:
   TypedGlobalTable<PageId, double>* curr_pr_hash;
   TypedGlobalTable<PageId, double>* next_pr_hash;
 
-  void KernelInit() {
+  void Init() {
     curr_pr_hash = this->get_table<PageId, double>(0);
     next_pr_hash = this->get_table<PageId, double>(1);
     iter = 0;

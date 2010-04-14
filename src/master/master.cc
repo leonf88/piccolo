@@ -1,11 +1,109 @@
 #include "master/master.h"
 #include "kernel/table-registry.h"
-#include "kernel/kernel-registry.h"
+#include "kernel/kernel.h"
 
 DEFINE_bool(work_stealing, true, "");
 DECLARE_string(checkpoint_dir);
 
 namespace dsm {
+
+struct WorkerState : private boost::noncopyable {
+  WorkerState(int w_id) : id(w_id), slots(0) {
+    last_ping_time = Now();
+    last_task_start = 0;
+    total_runtime = 0;
+  }
+
+
+  // Pending tasks to work on.
+  Master::TaskMap assigned;
+  Master::TaskMap pending;
+  Master::TaskMap active;
+
+  // Table shards this worker is responsible for serving.
+  Master::ShardMap shards;
+
+  double last_ping_time;
+
+  int status;
+  int id;
+
+  int slots;
+
+  double last_task_start;
+  double total_runtime;
+
+  bool alive() {
+    return true;
+  }
+
+  bool is_assigned(int table, int shard) {
+    return assigned.find(MP(table, shard)) != assigned.end();
+  }
+
+  int num_finished() {
+    return assigned.size() - pending.size() - active.size();
+  }
+
+  void ping() {
+    last_ping_time = Now();
+  }
+
+  bool idle(double avg_completion_time) {
+    return pending.empty() &&
+           active.empty() &&
+           Now() - last_ping_time > avg_completion_time / 2;
+  }
+
+  bool full() { return assigned.size() >= slots; }
+
+  void set_serves(int shard, bool should_service) {
+    Registry::TableMap &tables = Registry::get_tables();
+    for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+      Master::Taskid t = MP(i->first, shard);
+      if (should_service) {
+        shards[MP(i->first, shard)] = true;
+      } else {
+        shards.erase(shards.find(t));
+      }
+    }
+  }
+
+  bool serves(int table, int shard) {
+    return shards.find(MP(table, shard)) != shards.end();
+  }
+
+  bool get_next(const Master::RunDescriptor& r,
+                const Master::TableInfo& tin,
+                KernelRequest* msg) {
+    if (pending.empty()) {
+      return false;
+    }
+
+    Master::TableInfo& tables = const_cast<Master::TableInfo&>(tin);
+    Master::TaskMap::iterator best = pending.begin();
+    for (Master::TaskMap::iterator i = pending.begin(); i != pending.end(); ++i) {
+      if (tables[r.table][i->second->shard].entries() >
+          tables[r.table][best->second->shard].entries()) {
+  //      LOG(INFO) << "Choosing: " << i->second->shard << " : "
+  //                << tables[r.table][i->second->shard].entries();
+        best = i;
+      }
+    }
+
+    msg->set_kernel(r.kernel);
+    msg->set_method(r.method);
+    msg->set_table(r.table);
+    msg->set_shard(best->second->shard);
+
+    active[best->first] = best->second;
+    pending.erase(best);
+
+    last_task_start = Now();
+
+    return true;
+  }
+};
 
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
@@ -47,59 +145,6 @@ Master::~Master() {
   for (int i = 1; i < world_.Get_size(); ++i) {
     rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
-}
-
-Master::WorkerState::WorkerState(int w_id) : id(w_id), slots(0) {
-  last_ping_time = Now();
-  last_task_start = 0;
-  total_runtime = 0;
-}
-
-bool Master::WorkerState::get_next(const RunDescriptor& r,
-                                   const Master::TableInfo& tin,
-                                   KernelRequest* msg) {
-  if (pending.empty()) {
-    return false;
-  }
-
-  Master::TableInfo& tables = const_cast<Master::TableInfo&>(tin);
-  TaskMap::iterator best = pending.begin();
-  for (TaskMap::iterator i = pending.begin(); i != pending.end(); ++i) {
-    if (tables[r.table][i->second->shard].entries() >
-        tables[r.table][best->second->shard].entries()) {
-//      LOG(INFO) << "Choosing: " << i->second->shard << " : "
-//                << tables[r.table][i->second->shard].entries();
-      best = i;
-    }
-  }
-
-  msg->set_kernel(r.kernel);
-  msg->set_method(r.method);
-  msg->set_table(r.table);
-  msg->set_shard(best->second->shard);
-
-  active[best->first] = best->second;
-  pending.erase(best);
-
-  last_task_start = Now();
-
-  return true;
-}
-
-void Master::WorkerState::set_serves(int shard, bool should_service) {
-  Registry::TableMap &tables = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
-    Taskid t = MP(i->first, shard);
-    if (should_service) {
-      shards[MP(i->first, shard)] = true;
-    } else {
-      shards.erase(shards.find(t));
-    }
-  }
-}
-
-bool Master::WorkerState::serves(int table, int shard) {
-  return shards.find(MP(table, shard)) != shards.end();
 }
 
 void Master::checkpoint(bool compute_deltas) {
@@ -173,7 +218,7 @@ void Master::run_one(const RunDescriptor& r) {
   run_range(r, shards);
 }
 
-Master::WorkerState* Master::worker_for_shard(int table, int shard) {
+WorkerState* Master::worker_for_shard(int table, int shard) {
   for (int i = 0; i < workers_.size(); ++i) {
     if (workers_[i]->serves(table, shard)) { return workers_[i]; }
   }
@@ -181,7 +226,7 @@ Master::WorkerState* Master::worker_for_shard(int table, int shard) {
   return NULL;
 }
 
-Master::WorkerState* Master::assign_worker(int table, int shard) {
+WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* ws = worker_for_shard(table, shard);
   if (ws) {
     ws->assigned[MP(table, shard)] = new Task(table, shard);

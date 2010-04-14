@@ -3,7 +3,7 @@
 
 #include "util/common.h"
 #include "util/rpc.h"
-#include "kernel/kernel-registry.h"
+#include "kernel/kernel.h"
 #include "kernel/table.h"
 #include "worker/worker.pb.h"
 

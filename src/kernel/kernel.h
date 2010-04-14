@@ -15,9 +15,21 @@ class Worker;
 
 class DSMKernel {
 public:
-  // The table and shard to be processed.
+  // Called upon creation of this kernel.
+  virtual void Init() {}
+
+  // Called before worker begins writing checkpoint data for the table
+  // this kernel is working on.  Values stored in 'params' will be made
+  // available in the corresponding Restore() call.
+  virtual void Checkpoint(Params* params) {}
+
+  // Called after worker has restored table state from a previous checkpoint
+  // with this kernel active.
+  virtual void Restore(const Params& params) {}
+
+  // The table and shard being processed.
   int current_shard() const { return shard_; }
-  int table_id() const { return table_id_; }
+  int current_table() const { return table_id_; }
 
   GlobalTable* get_table(int id);
 
@@ -25,16 +37,11 @@ public:
   TypedGlobalTable<K, V>* get_table(int id) {
     return (TypedGlobalTable<K, V>*)get_table(id);
   }
-
-  // Called once upon construction of the kernel, after the worker
-  // and table information has been setup.
-  virtual void KernelInit() {}
-
 private:
   friend class Worker;
   friend class Master;
 
-  void Init(Worker* w, int table_id, int shard);
+  void initialize_internal(Worker* w, int table_id, int shard);
 
   Worker *w_;
   int shard_;

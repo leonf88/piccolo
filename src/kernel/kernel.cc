@@ -1,12 +1,12 @@
 #include <stdio.h>
 
-#include "kernel/kernel-registry.h"
+#include "kernel/kernel.h"
 #include "kernel/table-registry.h"
 
 namespace dsm {
 
 class Worker;
-void DSMKernel::Init(Worker* w, int table_id, int shard) {
+void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
   w_ = w;
   table_id_ = table_id;
   shard_ = shard;

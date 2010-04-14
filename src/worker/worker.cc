@@ -3,7 +3,7 @@
 
 #include "util/common.h"
 #include "worker/worker.h"
-#include "kernel/kernel-registry.h"
+#include "kernel/kernel.h"
 #include "kernel/table-registry.h"
 
 DEFINE_double(sleep_hack, 0.0, "");
@@ -312,8 +312,8 @@ void Worker::KernelLoop() {
     if (!d) {
       d = helper->create();
       kernels_[id] = d;
-      d->Init(this, k.table(), k.shard());
-      d->KernelInit();
+      d->initialize_internal(this, k.table(), k.shard());
+      d->Init();
     }
 
     if (MPI::COMM_WORLD.Get_rank() == 1 && FLAGS_sleep_hack > 0) {

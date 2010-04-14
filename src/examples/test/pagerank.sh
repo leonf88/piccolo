@@ -6,7 +6,7 @@ source $(dirname $0)/run_util.sh
 PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
 MACHINES=$(cat mpi_hostfile | wc -l)
 
-GRAPHSIZE=100
+GRAPHSIZE=500
 SHARDS=100
 
 function make_graph() {
@@ -34,11 +34,10 @@ pdsh -f 100 -g muppets "mkdir -p /scratch/checkpoints/${GRAPHSIZE}M"
  --nodes=$((GRAPHSIZE*1000*1000)) \
  --shards=$SHARDS \
  --sleep_time=0.001 \
- --iterations=10 \
+ --iterations=5 \
  --checkpoint_dir=/scratch/checkpoints/${GRAPHSIZE}M/ \
  --work_stealing=true \
  --checkpoint=$1 \
- --cpu_profile \
  --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr"
 }
 
@@ -47,5 +46,5 @@ make_graph
 RESULTS_DIR=results.cp/
 run_test true
 
-#RESULTS_DIR=results.no_cp/
-#run_test false
+RESULTS_DIR=results.no_cp/
+run_test false

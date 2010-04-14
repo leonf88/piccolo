@@ -7,6 +7,9 @@
 
 namespace dsm {
 
+
+class WorkerState;
+
 class Master {
 public:
   Master(const ConfigData &conf);
@@ -74,7 +77,8 @@ private:
   typedef map<Taskid, bool> ShardMap;
   typedef map<int, map<int, ShardInfo> > TableInfo;
 
-  struct WorkerState;
+  friend class WorkerState;
+
   WorkerState* worker_for_shard(int table, int shard);
 
   // Find a worker to run a kernel on the given table and shard.  If a worker
@@ -87,60 +91,6 @@ private:
   void assign_tables();
   void assign_tasks(const RunDescriptor& r, vector<int> shards);
   void dispatch_work(const RunDescriptor& r);
-
-  struct WorkerState : private boost::noncopyable {
-    WorkerState(int id);
-
-    // Pending tasks to work on.
-    TaskMap assigned;
-    TaskMap pending;
-    TaskMap active;
-
-    // Table shards this worker is responsible for serving.
-    ShardMap shards;
-
-    double last_ping_time;
-
-    int status;
-    int id;
-
-    int slots;
-
-    double last_task_start;
-    double total_runtime;
-
-    bool alive() {
-      return true;
-    }
-
-    bool is_assigned(int table, int shard) {
-      return assigned.find(MP(table, shard)) != assigned.end();
-    }
-
-    int num_finished() {
-      return assigned.size() - pending.size() - active.size();
-    }
-
-    void ping() {
-      last_ping_time = Now();
-    }
-
-    bool idle(double avg_completion_time) {
-      return pending.empty() &&
-             active.empty() &&
-             Now() - last_ping_time > avg_completion_time / 2;
-    }
-
-    bool full() { return assigned.size() >= slots; }
-
-    void set_serves(int shard, bool should_service);
-    bool serves(int table, int shard);
-
-    bool get_next(const RunDescriptor& r, const TableInfo& tables, KernelRequest* msg);
-  };
-
-  friend class WorkerState;
-
   vector<WorkerState*> workers_;
 
   // Global table information, as reported by workers.
