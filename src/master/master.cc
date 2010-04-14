@@ -3,9 +3,14 @@
 #include "kernel/kernel.h"
 
 DEFINE_bool(work_stealing, true, "");
+DEFINE_double(failure_simulation_interval, -1,
+              "If > 0, randomly trigger one machine failure each interval seconds.");
+
 DECLARE_string(checkpoint_dir);
 
 namespace dsm {
+
+static Timer *failure_timer = NULL;
 
 struct WorkerState : private boost::noncopyable {
   WorkerState(int w_id) : id(w_id), slots(0) {
@@ -13,7 +18,6 @@ struct WorkerState : private boost::noncopyable {
     last_task_start = 0;
     total_runtime = 0;
   }
-
 
   // Pending tasks to work on.
   Master::TaskMap assigned;
@@ -34,6 +38,11 @@ struct WorkerState : private boost::noncopyable {
   double total_runtime;
 
   bool alive() {
+    if (!failure_timer) { failure_timer = new Timer(); }
+    if (failure_timer->elapsed() > FLAGS_failure_simulation_interval) {
+      failure_timer->Reset();
+      return false;
+    }
     return true;
   }
 
@@ -147,8 +156,11 @@ Master::~Master() {
   }
 }
 
-void Master::checkpoint(bool compute_deltas) {
+void Master::checkpoint(Params *params, bool compute_deltas) {
   checkpoint_epoch_ += 1;
+
+  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                            FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_));
 
   StartCheckpoint req;
   req.set_epoch(checkpoint_epoch_);
@@ -164,30 +176,44 @@ void Master::checkpoint(bool compute_deltas) {
     EmptyMessage resp;
     int src;
     rpc_->ReadAny(&src, MTYPE_CHECKPOINT_DONE, &resp);
-    LOG(INFO) << "Checkpoint: " << src - 1 << " finished in " << t.elapsed()
-              << "; " << config_.num_workers() - i << " tasks remaining.";
+    PERIODIC(5,
+             LOG(INFO) << "Checkpoint: " << src - 1 << " finished in " << t.elapsed()
+                       << "; " << config_.num_workers() - i << " tasks remaining.");
   }
+
+
+  RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
+                            FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_), "w");
 
   CheckpointInfo cinfo;
   cinfo.set_checkpoint_epoch(checkpoint_epoch_);
   cinfo.set_kernel_epoch(kernel_epoch_);
 
-  LocalFile lf(StringPrintf("%s/checkpoint.%05d.finished", FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_), "w");
-  lf.writeString(cinfo.SerializeAsString());
+  rf.write(cinfo);
+  rf.write(*params);
+  rf.sync();
 }
 
-void Master::restore() {
-  vector<string> matches = File::Glob(FLAGS_checkpoint_dir + "/checkpoint.*.finished");
-  if (matches.empty())
-    return;
+Params* Master::restore() {
+  vector<string> matches = File::Glob(FLAGS_checkpoint_dir + "/*/checkpoint.finished");
+  if (matches.empty()) {
+    return NULL;
+  }
 
-  // Glob returns results in sorted order, so our last checkpoint will be the last from glob.
-  const char* fname = basename(matches.back().c_str());
+  // Glob returns results in sorted order, so our last checkpoint will be the last.
+  const char* fname = matches.back().c_str();
   int epoch = -1;
-  CHECK_EQ(sscanf(fname, "checkpoint.%05d.finished", &epoch), 1);
+  CHECK_EQ(
+      sscanf(fname, (FLAGS_checkpoint_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
+      1) << "Unexpected filename: " << fname;
 
+  LOG(INFO) << "Restoring from file: " << matches.back();
+
+  RecordFile rf(matches.back(), "r");
   CheckpointInfo info;
-  info.ParseFromString(File::Slurp(matches.back()));
+  Params *params = new Params;
+  CHECK(rf.read(&info));
+  CHECK(rf.read(params));
 
   restored_kernel_epoch_ = info.kernel_epoch();
   restored_checkpoint_epoch_ = info.checkpoint_epoch();
@@ -202,6 +228,8 @@ void Master::restore() {
     LOG(INFO) << "Waiting for restore to finish... " << i + 1 << " of " << config_.num_workers();
     rpc_->ReadAny(NULL, MTYPE_RESTORE_DONE, &resp);
   }
+
+  return params;
 }
 
 void Master::run_all(const RunDescriptor& r) {
@@ -388,7 +416,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     });
 
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint(true /* require delta updates */);
+      checkpoint(NULL, true /* require delta updates */);
       last_checkpoint_ = Now();
     }
 

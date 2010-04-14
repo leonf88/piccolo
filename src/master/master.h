@@ -40,11 +40,11 @@ public:
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
-  void checkpoint(bool compute_deltas=false);
+  void checkpoint(Params* params, bool compute_deltas=false);
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
-  // the process is left in the original state.
-  void restore();
+  // the process is left in the original state, and this function returns NULL.
+  Params* restore();
 
 private:
   ConfigData config_;

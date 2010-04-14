@@ -26,7 +26,7 @@ void File::Mkdirs(const string& path) {
 
 string File::Slurp(const string& f) {
   FILE* fp = fopen(f.c_str(), "r");
-  if (!fp) { LOG(FATAL) << "Failed to read input file " << f.c_str(); }
+  CHECK(fp != NULL) << "Failed to read input file " << f;
 
   string out;
   char buffer[32768];
@@ -99,7 +99,7 @@ LocalFile::LocalFile(FILE* stream) {
 
 LocalFile::LocalFile(const string &name, const string& mode) {
   fp = fopen(name.c_str(), mode.c_str());
-  CHECK(fp != NULL) << "Failed to open file " << name << " with mode " << mode;
+  PCHECK(fp != NULL) << "; failed to open file " << name << " with mode " << mode;
   path = name;
   close_on_delete = true;
   setvbuf(fp, NULL, _IOFBF, kFileBufferSize);
@@ -237,7 +237,7 @@ void RecordFile::Init(const string& mode) {
 
 void RecordFile::writeHeader() {
   for (AttrMap::iterator i = attributes.begin(); i != attributes.end(); ++i) {
-    FileAttribute *p = params_.add_attr();
+    Param *p = params_.add_attr();
     p->set_key(i->first);
     p->set_value(i->second);
   }

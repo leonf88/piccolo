@@ -21,8 +21,11 @@ public:
   virtual void seek(int64_t pos) = 0;
   virtual uint64_t tell() = 0;
   virtual const char* name() { return ""; }
+  virtual void sync() = 0;
 
-  int writeString(const string& buffer) { return write(buffer.data(), buffer.size()); }
+  int writeString(const string& buffer) {
+    return write(buffer.data(), buffer.size());
+  }
 
   virtual int write(const char* buffer, int len) = 0;
 
@@ -52,9 +55,7 @@ public:
     }
   }
 
-  void sync() {
-    fsync(fileno(fp));
-  }
+  void sync() { fsync(fileno(fp)); }
 
   bool readLine(string *out);
   int read(char *buffer, int len);
@@ -238,6 +239,8 @@ public:
   const char* name() { return fp->name(); }
 
   bool eof() { return fp->eof(); }
+
+  void sync() { fp->sync(); }
 
   File *fp;
 private:

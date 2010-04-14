@@ -65,7 +65,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
     for (int n = 0; n < FLAGS_nodes; ) {
       int c = powerlaw_random(1, (int)(100000. * FLAGS_nodes / 100e6), 0.001);
       site_sizes.push_back(c);
-      LOG_EVERY_N(INFO, 100) << "Site size: " << c;
+//      LOG_EVERY_N(INFO, 100) << "Site size: " << c;
       n += c;
     }
   }
@@ -220,7 +220,11 @@ int Pagerank(ConfigData& conf) {
       RUN_ALL(m, PRKernel, ResetTable, 0);
       RUN_ONE(m, PRKernel, WriteStatus, 0);
       if (FLAGS_checkpoint) {
-        m.checkpoint();
+        Params params;
+        Param *p = params.add_param();
+        p->set_key("iteration");
+        p->set_value(StringPrintf("%d", i));
+        m.checkpoint(&params);
       }
     }
   } else {

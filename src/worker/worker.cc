@@ -421,14 +421,16 @@ void Worker::Checkpoint(int epoch, bool compute_deltas) {
     return;
   }
 
-  LOG(INFO) << "Checkpointing... " << MP(id(), epoch_, epoch);
+  VLOG(1) << "Checkpointing... " << MP(id(), epoch_, epoch);
 
   epoch_ = epoch;
 
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalTable* t = i->second;
-    t->start_checkpoint(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
+    t->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
+                                     FLAGS_checkpoint_dir.c_str(),
+                                     epoch_, i->first));
   }
 
   if (compute_deltas) {
@@ -464,7 +466,8 @@ void Worker::Restore(int epoch) {
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalTable* t = i->second;
-    t->restore(StringPrintf("%s/checkpoint.table_%d.epoch_%d", FLAGS_checkpoint_dir.c_str(), i->first, epoch_));
+    t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
+                            FLAGS_checkpoint_dir.c_str(), epoch_, i->first));
   }
 
   EmptyMessage req;
