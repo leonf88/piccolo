@@ -10,7 +10,7 @@ function run_command() {
   echo $RESULTS_DIR
   mkdir -p $RESULTS_DIR
   runner=$1
-  args=$2
+  
   for n in $PARALLELISM; do 
       pdsh -g muppets -f 100 -l root 'echo 3 > /proc/sys/vm/drop_caches'
       echo > $RESULTS_DIR/$runner.n_$n
@@ -32,7 +32,7 @@ function run_command() {
               LD_LIBRARY_PATH=/home/power/share/lib \
               bin/release/examples/example-dsm \
         			--runner=$runner \
-        			$args "\
+        			$2 $3 $4 $5 $6 $7 "\
         2>&1 | while read line; do 
           echo $line >> $RESULTS_DIR/$runner.n_$n
           echo $line

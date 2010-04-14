@@ -1,17 +1,12 @@
 package dsm;
 
-message Pair {
+message Param {
   required bytes key = 1;
   required bytes value = 2;
 }
 
 message Params {
-  repeated Pair param = 1;
-}
-
-message FileAttribute {
-  required bytes key = 1;
-  required bytes value = 2;
+  repeated Param param = 1;
 }
 
 enum CompressionFormat {
@@ -21,6 +16,6 @@ enum CompressionFormat {
 };
 
 message FileParams {
-  repeated FileAttribute attr = 1;
+  repeated Param attr = 1;
   optional int32 compression = 2 [default=0];
 }

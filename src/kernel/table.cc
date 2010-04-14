@@ -187,8 +187,8 @@ int GlobalTable::pending_write_bytes() {
 void GlobalTable::ApplyUpdates(const dsm::HashPut& req) {
   if (!is_local_shard(req.shard())) {
     LOG_EVERY_N(INFO, 1000)
-        << "Received unexpected push request for: " << MP(id(), req.shard())
-        << "; should have gone to " << get_owner(req.shard());
+        << "Forwarding push request from: " << MP(id(), req.shard())
+        << " to " << get_owner(req.shard());
   }
 
   partitions_[req.shard()]->ApplyUpdates(req);
