@@ -7,10 +7,13 @@ CHECKPOINT_DIR=/home/power/w/hashdsm/checkpoints
 GRAPHSIZE=10
 SHARDS=100
 ITERATIONS=25
+BUILD_TYPE=release
 
 PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
 MACHINES=$(cat mpi_hostfile | wc -l)
 
+rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
+mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
 
 function make_graph() {
   ~/share/bin/mpirun \
@@ -28,11 +31,7 @@ function make_graph() {
           --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr"
 }
 
-function run_test() {
-
-pdsh -f 100 -g muppets "rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/ 2>/dev/null"
-pdsh -f 100 -g muppets "mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M"
-
+function run_test_bg() {
   run_command 'Pagerank' "\
  --nodes=$((GRAPHSIZE*1000*1000)) \
  --shards=$SHARDS \
@@ -40,7 +39,12 @@ pdsh -f 100 -g muppets "mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M"
  --iterations=$ITERATIONS \
  --checkpoint_dir=${CHECKPOINT_DIR}/${GRAPHSIZE}M/ \
  --work_stealing=true \
- --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7
+ --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7 & 
+}
+
+function run_test() {
+  run_test_bg
+  wait
 }
 
 #make_graph
@@ -51,5 +55,12 @@ pdsh -f 100 -g muppets "mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M"
 #RESULTS_DIR=results.no_cp/
 #run_test '--checkpoint=false'
 
+# test terminating job and trying to restore from checkpoint
 RESULTS_DIR=results.fault/
-run_test '--checkpoint=true' '--failure_simulation_interval=15'
+run_test_bg '--checkpoint=true'
+sleep 30
+pkill mpirun
+
+
+run_test_bg '--checkpoint=true' '--dead_workers=5,6,10'
+wait

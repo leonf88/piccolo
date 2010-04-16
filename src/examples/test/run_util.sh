@@ -1,5 +1,6 @@
 #!/bin/bash
 
+BUILD_TYPE=release
 NUM_CORES=24
 RESULTS_DIR=results/
 PARALLELISM="6 12 18 23"
@@ -30,7 +31,7 @@ function run_command() {
          -n $((n + 1)) \
         bash -c "\
               LD_LIBRARY_PATH=/home/power/share/lib \
-              bin/release/examples/example-dsm \
+              bin/$BUILD_TYPE/examples/example-dsm \
         			--runner=$runner \
         			$2 $3 $4 $5 $6 $7 "\
         2>&1 | while read line; do 
