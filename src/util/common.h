@@ -18,6 +18,7 @@
 
 #include "util/hash.h"
 #include "util/common.pb.h"
+#include "util/static-initializers.h"
 
 #ifdef SWIG
 
@@ -134,6 +135,8 @@ public:
 
   const char* data;
   int len;
+
+  static vector<StringPiece> split(StringPiece sp, StringPiece delim);
 };
 
 static bool operator==(const StringPiece& a, const StringPiece& b) {

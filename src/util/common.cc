@@ -1,5 +1,6 @@
 #include "util/common.h"
 #include "util/file.h"
+#include "util/static-initializers.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +39,23 @@ StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
 uint32_t StringPiece::hash() const { return Hash32(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
 
+vector<StringPiece> StringPiece::split(StringPiece sp, StringPiece delim) {
+  vector<StringPiece> out;
+  const char* c = sp.AsString().c_str();
+  const char* delim_c = delim.AsString().c_str();
+  while (1) {
+    const char* d = strpbrk(c, delim_c);
+    if (!d) {
+      out.push_back(StringPiece(c));
+      break;
+    } else {
+      out.push_back(StringPiece(c, d - c));
+      c = d + 1;
+    }
+  }
+
+  return out;
+}
 string StringPrintf(StringPiece fmt, ...) {
   va_list l;
   va_start(l, fmt.AsString().c_str());
@@ -209,11 +227,13 @@ void Init(int argc, char** argv) {
 
   CHECK_EQ(lzo_init(), 0);
 
-  MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
-
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+
+  RunInitializers();
+
+  MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
 
   MPI::Comm *world = &MPI::COMM_WORLD;
   MPI_Errhandler handler;
