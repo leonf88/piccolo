@@ -3,14 +3,13 @@
 #include "kernel/kernel.h"
 
 DEFINE_bool(work_stealing, true, "");
-DEFINE_double(failure_simulation_interval, -1,
-              "If > 0, randomly trigger one machine failure each interval seconds.");
-
+DEFINE_string(dead_workers, "",
+              "Comma delimited list of workers to pretend have died.");
 DECLARE_string(checkpoint_dir);
 
 namespace dsm {
 
-static Timer *failure_timer = NULL;
+static unordered_set<int> dead_workers;
 
 struct WorkerState : private boost::noncopyable {
   WorkerState(int w_id) : id(w_id), slots(0) {
@@ -38,12 +37,7 @@ struct WorkerState : private boost::noncopyable {
   double total_runtime;
 
   bool alive() {
-    if (!failure_timer) { failure_timer = new Timer(); }
-    if (failure_timer->elapsed() > FLAGS_failure_simulation_interval) {
-      failure_timer->Reset();
-      return false;
-    }
-    return true;
+    return dead_workers.find(id) == dead_workers.end();
   }
 
   bool is_assigned(int table, int shard) {
@@ -137,6 +131,13 @@ Master::Master(const ConfigData &conf) {
     workers_[src - 1]->slots = req.slots();
     LOG(INFO) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
+
+  vector<StringPiece> bits = StringPiece::split(FLAGS_dead_workers, ",");
+  LOG(INFO) << "dead workers: " << FLAGS_dead_workers;
+  for (int i = 0; i < bits.size(); ++i) {
+    LOG(INFO) << MP(i, bits[i].AsString());
+    dead_workers.insert(strtod(bits[i].AsString().c_str(), NULL));
+  }
 }
 
 Master::~Master() {
@@ -203,9 +204,8 @@ Params* Master::restore() {
   // Glob returns results in sorted order, so our last checkpoint will be the last.
   const char* fname = matches.back().c_str();
   int epoch = -1;
-  CHECK_EQ(
-      sscanf(fname, (FLAGS_checkpoint_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
-      1) << "Unexpected filename: " << fname;
+  CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
+           1) << "Unexpected filename: " << fname;
 
   LOG(INFO) << "Restoring from file: " << matches.back();
 
@@ -218,6 +218,9 @@ Params* Master::restore() {
   restored_kernel_epoch_ = info.kernel_epoch();
   restored_checkpoint_epoch_ = info.checkpoint_epoch();
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
+
+  kernel_epoch_ = info.kernel_epoch();
+  checkpoint_epoch_ = info.checkpoint_epoch();
 
   StartRestore req;
   req.set_epoch(epoch);
@@ -257,6 +260,7 @@ WorkerState* Master::worker_for_shard(int table, int shard) {
 WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* ws = worker_for_shard(table, shard);
   if (ws) {
+//    LOG(INFO) << "Worker for shard: " << MP(table, shard, ws->id);
     ws->assigned[MP(table, shard)] = new Task(table, shard);
     return ws;
   }
@@ -269,6 +273,9 @@ WorkerState* Master::assign_worker(int table, int shard) {
       best = workers_[i];
     }
   }
+
+  LOG(INFO) << "Assigned " << MP(table, shard, best->id);
+  CHECK(best->alive());
 
   if (best->full()) {
     LOG(FATAL) << "Failed to assign work - no available workers!";
@@ -303,6 +310,10 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
   }
 
   WorkerState &dst = *workers_[idle_worker];
+
+  if (!dst.alive()) {
+    return;
+  }
 
   // Find a worker with an idle task.
   int busy_worker = -1;
@@ -453,18 +464,19 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
         steal_work(r, w.id);
       }
 
-      if (!w.alive()) {
-        LOG(INFO) << "Worker " << i << " died, restoring from last checkpoint.";
-        // fall back to our checkpointed data, and reassign work for this method
-        restore();
-
-        count = 0;
-        w.shards.clear();
-        assign_tables();
-        assign_tasks(r, shards);
-        send_table_assignments();
-        break;
-      }
+      // Just restore when the job is restarted by MPI.
+//      if (!w.alive()) {
+//        LOG(FATAL) << "Worker " << i << " died, restoring from last checkpoint.";
+//        exit(1);
+//        restore();
+//
+//        count = 0;
+//        w.shards.clear();
+//        assign_tables();
+//        assign_tasks(r, shards);
+//        send_table_assignments();
+//        break;
+//      }
     }
 
     dispatch_work(r);
