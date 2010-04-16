@@ -3,17 +3,15 @@
 set -e
 source $(dirname $0)/run_util.sh
 
-CHECKPOINT_DIR=/home/power/w/hashdsm/checkpoints
-GRAPHSIZE=10
+CHECKPOINT_WRITE_DIR=/scratch/checkpoints/
+CHECKPOINT_READ_DIR=/scratch/cp-union/
+GRAPHSIZE=100
 SHARDS=100
-ITERATIONS=25
+ITERATIONS=15
 BUILD_TYPE=release
 
 PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
 MACHINES=$(cat mpi_hostfile | wc -l)
-
-rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
-mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
 
 function make_graph() {
   ~/share/bin/mpirun \
@@ -37,30 +35,39 @@ function run_test_bg() {
  --shards=$SHARDS \
  --sleep_time=0.001 \
  --iterations=$ITERATIONS \
- --checkpoint_dir=${CHECKPOINT_DIR}/${GRAPHSIZE}M/ \
+ --checkpoint_write_dir=${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M/ \
+ --checkpoint_read_dir=${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/ \
  --work_stealing=true \
- --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7 & 
+ --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7 $8 & 
 }
 
 function run_test() {
-  run_test_bg
+  run_test_bg $1 $2 $3 $4 $5 $6 $7 $8
   wait
 }
 
 #make_graph
 
-#RESULTS_DIR=results.cp/
+#rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
+#mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
+
+#RESULTS_DIR=results.checkpoint/
 #run_test '--checkpoint=true'
 
-#RESULTS_DIR=results.no_cp/
+#rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
+#mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
+
+#RESULTS_DIR=results.no_checkpoint/
 #run_test '--checkpoint=false'
 
+rm -rf ${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/
+pdsh -g muppets mkdir -p ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+
 # test terminating job and trying to restore from checkpoint
-RESULTS_DIR=results.fault/
+RESULTS_DIR=results.checkpoint_fault/
 run_test_bg '--checkpoint=true'
-sleep 30
+sleep 180
 pkill mpirun
 
-
-run_test_bg '--checkpoint=true' '--dead_workers=5,6,10'
-wait
+RESULTS_DIR=results.restore
+run_test '--checkpoint=true' '--dead_workers=5,6,10'

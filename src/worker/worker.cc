@@ -8,7 +8,8 @@
 
 DEFINE_double(sleep_hack, 0.0, "");
 DEFINE_double(sleep_time, 0.001, "");
-DEFINE_string(checkpoint_dir, "checkpoints", "");
+DEFINE_string(checkpoint_write_dir, "checkpoints", "");
+DEFINE_string(checkpoint_read_dir, "checkpoints", "");
 
 namespace dsm {
 
@@ -425,11 +426,14 @@ void Worker::Checkpoint(int epoch, bool compute_deltas) {
 
   epoch_ = epoch;
 
+  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                            FLAGS_checkpoint_write_dir.c_str(), epoch_));
+
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalTable* t = i->second;
     t->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
-                                     FLAGS_checkpoint_dir.c_str(),
+                                     FLAGS_checkpoint_write_dir.c_str(),
                                      epoch_, i->first));
   }
 
@@ -467,7 +471,7 @@ void Worker::Restore(int epoch) {
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalTable* t = i->second;
     t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
-                            FLAGS_checkpoint_dir.c_str(), epoch_, i->first));
+                            FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
   }
 
   EmptyMessage req;
