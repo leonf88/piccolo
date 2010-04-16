@@ -5,7 +5,9 @@
 DEFINE_bool(work_stealing, true, "");
 DEFINE_string(dead_workers, "",
               "Comma delimited list of workers to pretend have died.");
-DECLARE_string(checkpoint_dir);
+
+DECLARE_string(checkpoint_write_dir);
+DECLARE_string(checkpoint_read_dir);
 
 namespace dsm {
 
@@ -55,7 +57,7 @@ struct WorkerState : private boost::noncopyable {
   bool idle(double avg_completion_time) {
     return pending.empty() &&
            active.empty() &&
-           Now() - last_ping_time > avg_completion_time / 2;
+           Now() - last_ping_time > 1.0 + avg_completion_time / 2;
   }
 
   bool full() { return assigned.size() >= slots; }
@@ -161,7 +163,7 @@ void Master::checkpoint(Params *params, bool compute_deltas) {
   checkpoint_epoch_ += 1;
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
-                            FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_));
+                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
 
   StartCheckpoint req;
   req.set_epoch(checkpoint_epoch_);
@@ -178,13 +180,13 @@ void Master::checkpoint(Params *params, bool compute_deltas) {
     int src;
     rpc_->ReadAny(&src, MTYPE_CHECKPOINT_DONE, &resp);
     PERIODIC(5,
-             LOG(INFO) << "Checkpoint: " << src - 1 << " finished in " << t.elapsed()
-                       << "; " << config_.num_workers() - i << " tasks remaining.");
+             LOG(INFO) << "Checkpoint: "
+             << t.elapsed() << " seconds elapsed; "
+             << config_.num_workers() - i << " tasks remaining.");
   }
 
-
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
-                            FLAGS_checkpoint_dir.c_str(), checkpoint_epoch_), "w");
+                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_), "w");
 
   CheckpointInfo cinfo;
   cinfo.set_checkpoint_epoch(checkpoint_epoch_);
@@ -196,7 +198,7 @@ void Master::checkpoint(Params *params, bool compute_deltas) {
 }
 
 Params* Master::restore() {
-  vector<string> matches = File::Glob(FLAGS_checkpoint_dir + "/*/checkpoint.finished");
+  vector<string> matches = File::Glob(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
     return NULL;
   }
@@ -204,7 +206,7 @@ Params* Master::restore() {
   // Glob returns results in sorted order, so our last checkpoint will be the last.
   const char* fname = matches.back().c_str();
   int epoch = -1;
-  CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
+  CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
            1) << "Unexpected filename: " << fname;
 
   LOG(INFO) << "Restoring from file: " << matches.back();
@@ -274,7 +276,7 @@ WorkerState* Master::assign_worker(int table, int shard) {
     }
   }
 
-  LOG(INFO) << "Assigned " << MP(table, shard, best->id);
+//  LOG(INFO) << "Assigned " << MP(table, shard, best->id);
   CHECK(best->alive());
 
   if (best->full()) {
