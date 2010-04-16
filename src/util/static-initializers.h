@@ -6,9 +6,15 @@
 namespace dsm {
 
 void RunInitializers();
+void RunTests();
 
 struct StaticInitHelper {
   StaticInitHelper(const std::string& name);
+  virtual void Run() = 0;
+};
+
+struct StaticTestHelper {
+  StaticTestHelper(const std::string& name);
   virtual void Run() = 0;
 };
 
@@ -22,4 +28,14 @@ struct StaticInitHelper {
   }\
   };\
 static name ## StaticInitHelper name ## helper;
+
+#define REGISTER_TEST(name, code)\
+  struct name ## StaticTestHelper : public dsm::StaticTestHelper {\
+    name ## StaticTestHelper() : StaticTestHelper(#name) {}\
+    void Run() {\
+    code \
+  }\
+  };\
+static name ## StaticTestHelper name ## helper;
+
 #endif
