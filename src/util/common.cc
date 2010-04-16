@@ -41,21 +41,43 @@ string StringPiece::AsString() const { return string(data, len); }
 
 vector<StringPiece> StringPiece::split(StringPiece sp, StringPiece delim) {
   vector<StringPiece> out;
-  const char* c = sp.AsString().c_str();
-  const char* delim_c = delim.AsString().c_str();
-  while (1) {
-    const char* d = strpbrk(c, delim_c);
-    if (!d) {
-      out.push_back(StringPiece(c));
-      break;
-    } else {
-      out.push_back(StringPiece(c, d - c));
-      c = d + 1;
+  const char* c = sp.data;
+  while (c < sp.data + sp.len) {
+    const char* next = c;
+
+    bool found = false;
+
+    while (next < sp.data + sp.len) {
+      for (int i = 0; i < delim.len; ++i) {
+        if (*next == delim.data[i]) {
+          found = true;
+        }
+      }
+      if (found)
+        break;
+
+      ++next;
     }
+
+    if (found || c < sp.data + sp.len) {
+      StringPiece part(c, next - c);
+      out.push_back(part);
+    }
+
+    c = next + 1;
   }
 
   return out;
 }
+
+REGISTER_TEST(StringPiece, {
+  vector<StringPiece> sp = StringPiece::split("a,b,c,d", ",");
+  CHECK_EQ(sp[0].AsString(), "a");
+  CHECK_EQ(sp[1].AsString(), "b");
+  CHECK_EQ(sp[2].AsString(), "c");
+  CHECK_EQ(sp[3].AsString(), "d");
+});
+
 string StringPrintf(StringPiece fmt, ...) {
   va_list l;
   va_start(l, fmt.AsString().c_str());
@@ -232,6 +254,7 @@ void Init(int argc, char** argv) {
   google::InstallFailureSignalHandler();
 
   RunInitializers();
+  RunTests();
 
   MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
 
