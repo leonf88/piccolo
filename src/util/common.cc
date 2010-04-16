@@ -215,6 +215,7 @@ static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
 }
 
 static void FatalSignalHandler(int sig) {
+  fprintf(stderr, "Fatal error; signal %d occurred.\n", sig);
   static SpinLock lock;
   static void* stack[128];
 
@@ -276,7 +277,6 @@ void Init(int argc, char** argv) {
   sigaction(SIGFPE, &sig_action, NULL);
   sigaction(SIGABRT, &sig_action, NULL);
   sigaction(SIGBUS, &sig_action, NULL);
-  sigaction(SIGTERM, &sig_action, NULL);
 
   srandom(time(NULL));
 #ifdef CPUPROF

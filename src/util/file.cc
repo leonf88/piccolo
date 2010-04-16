@@ -6,7 +6,7 @@
 
 namespace dsm {
 
-static const int kFileBufferSize = 128 * 1024;
+static const int kFileBufferSize = 4 * 1024 * 1024;
 
 vector<string> File::Glob(const string& pattern) {
   glob_t globbuf;
