@@ -214,6 +214,7 @@ NetworkThread *the_network;
 
 Worker::Worker(const ConfigData &c) {
   epoch_ = 0;
+  active_checkpoint_ = NONE;
 
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -384,15 +385,15 @@ bool Worker::has_incoming_data() const {
   return true;
 }
 
-void Worker::UpdateEpoch(int peer, int peer_marker) {
+void Worker::UpdateEpoch(int peer, int peer_epoch) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
-  VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_marker));
-  if (epoch_ < peer_marker) {
-    LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_marker);
-    Checkpoint(peer_marker, true);
+  VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_epoch));
+  if (epoch_ < peer_epoch) {
+    LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_epoch);
+    Checkpoint(peer_epoch, true);
   }
 
-  peers_[peer]->epoch = peer_marker;
+  peers_[peer]->epoch = peer_epoch;
 
   bool checkpoint_done = true;
   for (int i = 0; i < peers_.size(); ++i) {
@@ -403,19 +404,11 @@ void Worker::UpdateEpoch(int peer, int peer_marker) {
   }
 
   if (checkpoint_done) {
-    LOG(INFO) << "All channels up to date; flushing deltas.";
-    Registry::TableMap &t = Registry::get_tables();
-    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-      GlobalTable* t = i->second;
-      t->finish_checkpoint();
-    }
-
-    EmptyMessage req;
-    the_network->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
+    FinishCheckpoint();
   }
 }
 
-void Worker::Checkpoint(int epoch, bool compute_deltas) {
+void Worker::StartCheckpoint(int epoch, CheckpointType type) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   if (epoch_ >= epoch) {
     LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
@@ -437,7 +430,11 @@ void Worker::Checkpoint(int epoch, bool compute_deltas) {
                                      epoch_, i->first));
   }
 
-  if (compute_deltas) {
+  active_checkpoint_ = type;
+
+  // For rolling checkpoints, send out a marker to other workers indicating
+  // that we have switched epochs.
+  if (type == ROLLING) {
     HashPut epoch_marker;
     epoch_marker.set_source(id());
     epoch_marker.set_table(-1);
@@ -447,19 +444,25 @@ void Worker::Checkpoint(int epoch, bool compute_deltas) {
     for (int i = 0; i < peers_.size(); ++i) {
       the_network->Send(peers_[i]->CreateRequest(MTYPE_PUT_REQUEST, epoch_marker));
     }
-  } else {
-    for (int i = 0; i < peers_.size(); ++i) {
-      peers_[i]->epoch = epoch;
-    }
-
-    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-       GlobalTable* t = i->second;
-       t->finish_checkpoint();
-    }
-
-    EmptyMessage req;
-    the_network->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
   }
+}
+
+void Worker::FinishCheckpoint() {
+  active_checkpoint_ = NONE;
+  LOG(INFO) << "All channels up to date; flushing deltas.";
+  Registry::TableMap &t = Registry::get_tables();
+
+  for (int i = 0; i < peers_.size(); ++i) {
+    peers_[i]->epoch = epoch_;
+  }
+
+  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+     GlobalTable* t = i->second;
+     t->finish_checkpoint();
+  }
+
+  EmptyMessage req;
+  the_network->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
 }
 
 void Worker::Restore(int epoch) {
@@ -493,9 +496,9 @@ void Worker::HandlePutRequests() {
     boost::recursive_mutex::scoped_lock sl(t->mutex());
     t->ApplyUpdates(put);
 
-
     // Record messages from our peer channel up until they checkpointed.
-    if (put.epoch() < epoch_) {
+    if (active_checkpoint_ == MASTER_CONTROLLED ||
+        (active_checkpoint_ == ROLLING && put.epoch() < epoch_)) {
       t->write_delta(put);
     }
 
@@ -551,7 +554,7 @@ void Worker::CheckForMasterUpdates() {
 
   StartCheckpoint checkpoint_msg;
   while (the_network->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
-    Checkpoint(checkpoint_msg.epoch(), checkpoint_msg.compute_deltas());
+    StartCheckpoint(checkpoint_msg.epoch(), checkpoint_msg.compute_deltas());
   }
 
   StartRestore restore_msg;
