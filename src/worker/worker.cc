@@ -214,7 +214,7 @@ NetworkThread *the_network;
 
 Worker::Worker(const ConfigData &c) {
   epoch_ = 0;
-  active_checkpoint_ = NONE;
+  active_checkpoint_ = CP_NONE;
 
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -390,7 +390,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_epoch));
   if (epoch_ < peer_epoch) {
     LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_epoch);
-    Checkpoint(peer_epoch, true);
+    StartCheckpoint(peer_epoch, CP_ROLLING);
   }
 
   peers_[peer]->epoch = peer_epoch;
@@ -434,7 +434,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
 
   // For rolling checkpoints, send out a marker to other workers indicating
   // that we have switched epochs.
-  if (type == ROLLING) {
+  if (type == CP_ROLLING) {
     HashPut epoch_marker;
     epoch_marker.set_source(id());
     epoch_marker.set_table(-1);
@@ -448,7 +448,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
 }
 
 void Worker::FinishCheckpoint() {
-  active_checkpoint_ = NONE;
+  active_checkpoint_ = CP_NONE;
   LOG(INFO) << "All channels up to date; flushing deltas.";
   Registry::TableMap &t = Registry::get_tables();
 
@@ -497,8 +497,8 @@ void Worker::HandlePutRequests() {
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
-    if (active_checkpoint_ == MASTER_CONTROLLED ||
-        (active_checkpoint_ == ROLLING && put.epoch() < epoch_)) {
+    if (active_checkpoint_ == CP_MASTER_CONTROLLED ||
+        (active_checkpoint_ == CP_ROLLING && put.epoch() < epoch_)) {
       t->write_delta(put);
     }
 
@@ -552,9 +552,13 @@ void Worker::CheckForMasterUpdates() {
     return;
   }
 
-  StartCheckpoint checkpoint_msg;
-  while (the_network->TryRead(config_.master_id(), MTYPE_CHECKPOINT, &checkpoint_msg)) {
-    StartCheckpoint(checkpoint_msg.epoch(), checkpoint_msg.compute_deltas());
+  CheckpointRequest checkpoint_msg;
+  while (the_network->TryRead(config_.master_id(), MTYPE_START_CHECKPOINT, &checkpoint_msg)) {
+    StartCheckpoint(checkpoint_msg.epoch(), (CheckpointType)checkpoint_msg.checkpoint_type());
+  }
+  
+  while (the_network->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &msg)) {
+    FinishCheckpoint();
   }
 
   StartRestore restore_msg;

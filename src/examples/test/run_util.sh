@@ -33,6 +33,7 @@ function run_command() {
               LD_LIBRARY_PATH=/home/power/share/lib \
               bin/$BUILD_TYPE/examples/example-dsm \
         			--runner=$runner \
+        			--dump_stacktrace=false \
         			$2 $3 $4 $5 $6 $7 "\
         2>&1 | while read line; do 
           echo $line >> $RESULTS_DIR/$runner.n_$n

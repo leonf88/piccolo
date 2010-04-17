@@ -214,25 +214,36 @@ int Pagerank(ConfigData& conf) {
       return 0;
     }
 
-    Params* p = m.restore();
+    
     int i = 0;
+    Params *p = NULL;
+
+    if (FLAGS_checkpoint) {
+      p = m.restore();
+    }
+
     if (p == NULL) {
       i = 0;
       RUN_ALL(m, PRKernel, Initialize, 0);
     } else {
       i = strtod(p->param(0).value().c_str(), NULL);
     }
+
     for (; i < FLAGS_iterations; i++) {
-      RUN_ALL(m, PRKernel, PageRankIter, 0);
+      Params params;
+      Param *p = params.add_param();
+      p->set_key("iteration");
+      p->set_value(StringPrintf("%d", i));
+
+      Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", 0);
+      r.params = &params;
+      if (FLAGS_checkpoint) {
+        r.checkpoint_type = CP_MASTER_CONTROLLED;
+      }
+
+      m.run_all(r);
       RUN_ALL(m, PRKernel, ResetTable, 0);
       RUN_ONE(m, PRKernel, WriteStatus, 0);
-      if (FLAGS_checkpoint) {
-        Params params;
-        Param *p = params.add_param();
-        p->set_key("iteration");
-        p->set_value(StringPrintf("%d", i));
-        m.checkpoint(&params);
-      }
     }
   } else {
     Worker w(conf);

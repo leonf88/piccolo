@@ -158,17 +158,28 @@ Master::~Master() {
 }
 
 void Master::checkpoint(Params *params, CheckpointType type) {
+  start_checkpoint(params, type);
+  finish_checkpoint(params, type);
+}
+
+void Master::start_checkpoint(Params *params, CheckpointType type) {
+  cp_timer_.Reset();
   checkpoint_epoch_ += 1;
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
 
-  StartCheckpoint req;
+  CheckpointRequest req;
   req.set_epoch(checkpoint_epoch_);
   req.set_checkpoint_type(type);
-  rpc_->Broadcast(MTYPE_CHECKPOINT, req);
+  rpc_->Broadcast(MTYPE_START_CHECKPOINT, req);
+}
 
-  Timer t;
+void Master::finish_checkpoint(Params* params, CheckpointType type) {
+  if (type == CP_MASTER_CONTROLLED) {
+    EmptyMessage req;
+    rpc_->Broadcast(MTYPE_FINISH_CHECKPOINT, req);
+  }
 
   // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
   // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
@@ -177,10 +188,6 @@ void Master::checkpoint(Params *params, CheckpointType type) {
     EmptyMessage resp;
     int src;
     rpc_->ReadAny(&src, MTYPE_CHECKPOINT_DONE, &resp);
-    PERIODIC(5,
-             LOG(INFO) << "Checkpoint: "
-             << t.elapsed() << " seconds elapsed; "
-             << config_.num_workers() - i << " tasks remaining.");
   }
 
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
@@ -193,6 +200,8 @@ void Master::checkpoint(Params *params, CheckpointType type) {
   rf.write(cinfo);
   rf.write(*params);
   rf.sync();
+
+  LOG(INFO) << "Checkpoint: " << cp_timer_.elapsed() << " seconds elapsed; ";
 }
 
 Params* Master::restore() {
@@ -425,7 +434,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     });
 
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint(NULL, ROLLING);
+      checkpoint(r.params, CP_ROLLING);
       last_checkpoint_ = Now();
     }
 
