@@ -113,8 +113,6 @@ struct WorkerState : private boost::noncopyable {
 Master::Master(const ConfigData &conf) {
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
-  restored_checkpoint_epoch_ = 0;
-  restored_kernel_epoch_ = 0;
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
   last_checkpoint_ = Now();
@@ -159,7 +157,7 @@ Master::~Master() {
   }
 }
 
-void Master::checkpoint(Params *params, bool compute_deltas) {
+void Master::checkpoint(Params *params, CheckpointType type) {
   checkpoint_epoch_ += 1;
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
@@ -167,7 +165,7 @@ void Master::checkpoint(Params *params, bool compute_deltas) {
 
   StartCheckpoint req;
   req.set_epoch(checkpoint_epoch_);
-  req.set_compute_deltas(compute_deltas);
+  req.set_checkpoint_type(type);
   rpc_->Broadcast(MTYPE_CHECKPOINT, req);
 
   Timer t;
@@ -217,8 +215,6 @@ Params* Master::restore() {
   CHECK(rf.read(&info));
   CHECK(rf.read(params));
 
-  restored_kernel_epoch_ = info.kernel_epoch();
-  restored_checkpoint_epoch_ = info.checkpoint_epoch();
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
 
   kernel_epoch_ = info.kernel_epoch();
@@ -429,7 +425,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     });
 
     if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint(NULL, true /* require delta updates */);
+      checkpoint(NULL, ROLLING);
       last_checkpoint_ = Now();
     }
 

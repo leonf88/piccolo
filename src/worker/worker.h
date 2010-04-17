@@ -50,7 +50,8 @@ public:
   bool has_incoming_data() const;
 
 private:
-  void Checkpoint(int epoch, bool compute_deltas);
+  void StartCheckpoint(int epoch, CheckpointType type);
+  void FinishCheckpoint();
   void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
 
@@ -69,6 +70,7 @@ private:
 
   int num_peers_;
   bool running_;
+  CheckpointType active_checkpoint_;
 
   ConfigData config_;
 

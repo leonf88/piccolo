@@ -2,6 +2,12 @@ package dsm;
 
 option optimize_for = SPEED;
 
+  enum CheckpointType {
+  	NONE = 0,
+    MASTER_CONTROLLED = 1,
+    ROLLING = 2
+  };
+
 enum MessageTypes {
   MTYPE_RUN_KERNEL = 1;
   MTYPE_STOP_KERNEL = 9;
@@ -16,14 +22,16 @@ enum MessageTypes {
   MTYPE_WORKER_SHUTDOWN = 8;
   MTYPE_REGISTER_WORKER = 9;
   
-  MTYPE_CHECKPOINT = 10;
-  MTYPE_CHECKPOINT_DONE = 11;
+  MTYPE_START_CHECKPOINT = 10;
+  MTYPE_FINISH_CHECKPOINT = 11;
+  MTYPE_CHECKPOINT_DONE = 12;
   
-  MTYPE_RESTORE = 12;
-  MTYPE_RESTORE_DONE = 13;
+  MTYPE_RESTORE = 13;
+  MTYPE_RESTORE_DONE = 14;
   
   MTYPE_MAX = 16;
 };
+
 
 message ConfigData {
   required int32 num_workers = 1;
@@ -120,7 +128,7 @@ message EmptyMessage {}
 
 message StartCheckpoint {
   required int32 epoch = 1;
-  required bool compute_deltas = 2;
+  required int32 checkpoint_type = 2;
 }
 
 message StartRestore {

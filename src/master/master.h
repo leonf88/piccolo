@@ -40,7 +40,7 @@ public:
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
-  void checkpoint(Params* params, bool compute_deltas=false);
+  void checkpoint(Params* params, CheckpointType type=ROLLING);
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
   // the process is left in the original state, and this function returns NULL.
@@ -50,8 +50,6 @@ private:
   ConfigData config_;
   RPCHelper *rpc_;
   MPI::Intracomm world_;
-  int restored_checkpoint_epoch_;
-  int restored_kernel_epoch_;
   int checkpoint_epoch_;
   int kernel_epoch_;
 
