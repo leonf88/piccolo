@@ -2,6 +2,8 @@ CXX = distcc g++
 CC = distcc gcc
 CMAKE = cmake
 
+MAKE := $(MAKE) --no-print-directory
+
 export CXX CC
 release:
 	mkdir -p bin/release

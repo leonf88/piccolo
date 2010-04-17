@@ -2,11 +2,11 @@ package dsm;
 
 option optimize_for = SPEED;
 
-  enum CheckpointType {
-  	NONE = 0,
-    MASTER_CONTROLLED = 1,
-    ROLLING = 2
-  };
+enum CheckpointType {
+  CP_NONE = 0;
+  CP_MASTER_CONTROLLED = 1;
+  CP_ROLLING = 2;
+};
 
 enum MessageTypes {
   MTYPE_RUN_KERNEL = 1;
@@ -126,7 +126,7 @@ message HashPut {
 
 message EmptyMessage {}
 
-message StartCheckpoint {
+message CheckpointRequest {
   required int32 epoch = 1;
   required int32 checkpoint_type = 2;
 }

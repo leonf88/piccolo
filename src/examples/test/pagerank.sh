@@ -5,13 +5,18 @@ source $(dirname $0)/run_util.sh
 
 CHECKPOINT_WRITE_DIR=/scratch/checkpoints/
 CHECKPOINT_READ_DIR=/scratch/cp-union/
-GRAPHSIZE=100
+GRAPHSIZE=10
 SHARDS=100
-ITERATIONS=15
+ITERATIONS=100
 BUILD_TYPE=release
 
 PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
 MACHINES=$(cat mpi_hostfile | wc -l)
+
+function cleanup() {
+  pdsh -g muppets rm -rf ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+  pdsh -g muppets mkdir -p ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+}
 
 function make_graph() {
   ~/share/bin/mpirun \
@@ -48,26 +53,20 @@ function run_test() {
 
 #make_graph
 
-#rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
-#mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
+cleanup
+RESULTS_DIR=results.checkpoint/
+run_test '--checkpoint=true'
 
-#RESULTS_DIR=results.checkpoint/
-#run_test '--checkpoint=true'
-
-#rm -rf ${CHECKPOINT_DIR}/${GRAPHSIZE}M/
-#mkdir -p ${CHECKPOINT_DIR}/${GRAPHSIZE}M
-
-#RESULTS_DIR=results.no_checkpoint/
-#run_test '--checkpoint=false'
-
-rm -rf ${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/
-pdsh -g muppets mkdir -p ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+cleanup
+RESULTS_DIR=results.no_checkpoint/
+run_test '--checkpoint=false'
 
 # test terminating job and trying to restore from checkpoint
+cleanup
 RESULTS_DIR=results.checkpoint_fault/
 run_test_bg '--checkpoint=true'
 sleep 180
 pkill mpirun
 
-RESULTS_DIR=results.restore
+RESULTS_DIR=results.restore_fault
 run_test '--checkpoint=true' '--dead_workers=5,6,10'

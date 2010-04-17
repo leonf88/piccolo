@@ -87,8 +87,8 @@ int MatrixMultiplication(ConfigData& conf) {
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
 
-    m.run_all(Master::RunDescriptor::C("MatrixMultiplicationKernel", "Initialize", 0));
-    m.run_all(Master::RunDescriptor::C("MatrixMultiplicationKernel", "Multiply", 0));
+    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", 0));
+    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", 0));
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
