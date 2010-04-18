@@ -50,7 +50,7 @@ public:
   bool has_incoming_data() const;
 
 private:
-  void StartCheckpoint(int epoch, CheckpointType type);
+  void StartCheckpoint(int epoch, CheckpointType type, vector<int> tables);
   void FinishCheckpoint();
   void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);

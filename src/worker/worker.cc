@@ -390,7 +390,14 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_epoch));
   if (epoch_ < peer_epoch) {
     LOG(INFO) << "Received new epoch marker from peer:" << MP(epoch_, peer_epoch);
-    StartCheckpoint(peer_epoch, CP_ROLLING);
+
+    vector<int> to_checkpoint;
+    Registry::TableMap &t = Registry::get_tables();
+    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+      to_checkpoint.push_back(i->first);
+    }
+
+    StartCheckpoint(peer_epoch, CP_ROLLING, to_checkpoint);
   }
 
   peers_[peer]->epoch = peer_epoch;
@@ -408,14 +415,12 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   }
 }
 
-void Worker::StartCheckpoint(int epoch, CheckpointType type) {
+void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_checkpoint) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   if (epoch_ >= epoch) {
     LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
     return;
   }
-
-  LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch);
 
   epoch_ = epoch;
 
@@ -423,11 +428,13 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
                             FLAGS_checkpoint_write_dir.c_str(), epoch_));
 
   Registry::TableMap &t = Registry::get_tables();
-  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-    GlobalTable* t = i->second;
-    t->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
+  for (int i = 0; i < to_checkpoint.size(); ++i) {
+    LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch)
+        << " : " << to_checkpoint[i];
+    GlobalTable* table = t[to_checkpoint[i]];
+    table->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                                      FLAGS_checkpoint_write_dir.c_str(),
-                                     epoch_, i->first));
+                                     epoch_, to_checkpoint[i]));
   }
 
   active_checkpoint_ = type;
@@ -558,7 +565,14 @@ void Worker::CheckForMasterUpdates() {
 
   CheckpointRequest checkpoint_msg;
   while (the_network->TryRead(config_.master_id(), MTYPE_START_CHECKPOINT, &checkpoint_msg)) {
-    StartCheckpoint(checkpoint_msg.epoch(), (CheckpointType)checkpoint_msg.checkpoint_type());
+    vector<int> tablev;
+    for (int i = 0; i < checkpoint_msg.table_size(); ++i) {
+      tablev.push_back(checkpoint_msg.table(i));
+    }
+
+    StartCheckpoint(checkpoint_msg.epoch(),
+                    (CheckpointType)checkpoint_msg.checkpoint_type(),
+                    tablev);
   }
   
   while (the_network->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &msg)) {

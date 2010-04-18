@@ -137,7 +137,7 @@ Master::Master(const ConfigData &conf) {
   }
 
   vector<StringPiece> bits = StringPiece::split(FLAGS_dead_workers, ",");
-  LOG(INFO) << "dead workers: " << FLAGS_dead_workers;
+//  LOG(INFO) << "dead workers: " << FLAGS_dead_workers;
   for (int i = 0; i < bits.size(); ++i) {
     LOG(INFO) << MP(i, bits[i].AsString());
     dead_workers.insert(strtod(bits[i].AsString().c_str(), NULL));
@@ -161,7 +161,7 @@ Master::~Master() {
   }
 }
 
-void Master::checkpoint(Params *params, CheckpointType type) {
+void Master::checkpoint(RunDescriptor r) {
   // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
   // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
   // is complete.
@@ -169,14 +169,14 @@ void Master::checkpoint(Params *params, CheckpointType type) {
   start_checkpoint();
 
   for (int i = 0; i < workers_.size(); ++i) {
-    start_worker_checkpoint(i, params, type);
+    start_worker_checkpoint(i, r);
   }
 
   for (int i = 0; i < workers_.size(); ++i) {
-    finish_worker_checkpoint(i, params, type);
+    finish_worker_checkpoint(i, r);
   }
 
-  flush_checkpoint(params);
+  flush_checkpoint(r.params);
 }
 
 void Master::start_checkpoint() {
@@ -191,21 +191,30 @@ void Master::start_checkpoint() {
   LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
 }
 
-void Master::start_worker_checkpoint(int worker_id, Params *params, CheckpointType type) {
+void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
   start_checkpoint();
 
   LOG(INFO) << "Starting checkpoint on: " << worker_id;
+
+  CHECK_EQ(workers_[worker_id]->checkpointing, false);
 
   workers_[worker_id]->checkpointing = true;
 
   CheckpointRequest req;
   req.set_epoch(checkpoint_epoch_);
-  req.set_checkpoint_type(type);
+  req.set_checkpoint_type(r.checkpoint_type);
+
+  for (int i = 0; i < r.checkpoint_tables.size(); ++i) {
+    req.add_table(r.checkpoint_tables[i]);
+  }
+
   rpc_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
 }
 
-void Master::finish_worker_checkpoint(int worker_id, Params* params, CheckpointType type) {
-  if (type == CP_MASTER_CONTROLLED) {
+void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
+  CHECK_EQ(workers_[worker_id]->checkpointing, true);
+
+  if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
     EmptyMessage req;
     rpc_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
@@ -235,7 +244,7 @@ void Master::flush_checkpoint(Params* params) {
   last_checkpoint_ = Now();
 }
 
-Params* Master::restore() {
+ParamMap* Master::restore() {
   vector<string> matches = File::Glob(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
     return NULL;
@@ -251,9 +260,9 @@ Params* Master::restore() {
 
   RecordFile rf(matches.back(), "r");
   CheckpointInfo info;
-  Params *params = new Params;
+  Params params;
   CHECK(rf.read(&info));
-  CHECK(rf.read(params));
+  CHECK(rf.read(&params));
 
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
 
@@ -270,10 +279,10 @@ Params* Master::restore() {
     rpc_->ReadAny(NULL, MTYPE_RESTORE_DONE, &resp);
   }
 
-  return params;
+  return ParamMap::from_params(params);
 }
 
-void Master::run_all(const RunDescriptor& r) {
+void Master::run_all(RunDescriptor r) {
   vector<int> shards;
   for (int i = 0; i < Registry::get_table(r.table)->info().num_shards; ++i) {
     shards.push_back(i);
@@ -281,7 +290,7 @@ void Master::run_all(const RunDescriptor& r) {
   run_range(r, shards);
 }
 
-void Master::run_one(const RunDescriptor& r) {
+void Master::run_one(RunDescriptor r) {
   vector<int> shards;
   shards.push_back(0);
   run_range(r, shards);
@@ -435,13 +444,20 @@ void Master::dispatch_work(const RunDescriptor& r) {
   }
 }
 
-void Master::run_range(const RunDescriptor& r, vector<int> shards) {
+void Master::run_range(RunDescriptor r, vector<int> shards) {
   KernelInfo *k = Registry::get_kernel(r.kernel);
   CHECK(k != NULL) << "Invalid kernel class " << r.kernel;
   CHECK(k->has_method(r.method)) << "Invalid method: " << MP(r.kernel, r.method);
 
   MethodStats &mstats = method_stats_[r.kernel + ":" + r.method];
   mstats.set_invocations(mstats.invocations() + 1);
+
+  // Fill in the list of tables to checkpoint, if it was left empty.
+  if (r.checkpoint_tables.empty()) {
+    for (TableInfo::iterator i = tables_.begin(); i != tables_.end(); ++i) {
+      r.checkpoint_tables.push_back(i->first);
+    }
+  }
 
   Timer t;
 
@@ -468,7 +484,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
     if (r.checkpoint_type == CP_ROLLING &&
         Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint(r.params, CP_ROLLING);
+      checkpoint(r);
     }
 
     if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
@@ -509,7 +525,7 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
           0.8 * shards.size() < count &&
           w.idle(avg_completion_time) &&
           !w.checkpointing) {
-        start_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
+        start_worker_checkpoint(w.id, r);
       }
 
       // Just restore when the job is restarted by MPI.
@@ -536,13 +552,13 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     for (int i = 0; i < workers_.size(); ++i) {
       WorkerState& w = *workers_[i];
       if (!w.checkpointing) {
-        start_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
+        start_worker_checkpoint(w.id, r);
       }
     }
 
     for (int i = 0; i < workers_.size(); ++i) {
       WorkerState& w = *workers_[i];
-      finish_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
+      finish_worker_checkpoint(w.id, r);
     }
 
     flush_checkpoint(r.params);

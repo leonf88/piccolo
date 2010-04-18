@@ -129,6 +129,7 @@ message EmptyMessage {}
 message CheckpointRequest {
   required int32 epoch = 1;
   required int32 checkpoint_type = 2;
+  repeated int32 table = 3;
 }
 
 message StartRestore {
