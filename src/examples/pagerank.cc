@@ -239,6 +239,8 @@ int Pagerank(ConfigData& conf) {
       r.params = &params;
       if (FLAGS_checkpoint) {
         r.checkpoint_type = CP_MASTER_CONTROLLED;
+      } else {
+        r.checkpoint_type = CP_NONE;
       }
 
       m.run_all(r);

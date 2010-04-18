@@ -8,7 +8,7 @@ PARALLELISM="6 12 18 23"
 #strace -c -f -o results/trace.$n.\$BASHPID 
 
 function run_command() {
-  echo $RESULTS_DIR
+  echo "Writing output to: $RESULTS_DIR"
   mkdir -p $RESULTS_DIR
   runner=$1
   
@@ -29,18 +29,11 @@ function run_command() {
          -hostfile mpi_hostfile\
          -byslot \
          -n $((n + 1)) \
-        bash -c "\
-              LD_LIBRARY_PATH=/home/power/share/lib \
-              bin/$BUILD_TYPE/examples/example-dsm \
-        			--runner=$runner \
-        			--dump_stacktrace=false \
-        			$2 $3 $4 $5 $6 $7 "\
-        2>&1 | while read line; do 
-          echo $line >> $RESULTS_DIR/$runner.n_$n
-          echo $line
-        done
-      if [[ $? -ne 0 ]]; then
-        exit 1
-      fi
+	        bash -c "\
+	              LD_LIBRARY_PATH=/home/power/share/lib \
+	              bin/$BUILD_TYPE/examples/example-dsm \
+	        			--runner=$runner \
+	        			$2 $3 $4 $5 $6 $7 "
+	  
   done
 }

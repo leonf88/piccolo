@@ -389,7 +389,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_epoch));
   if (epoch_ < peer_epoch) {
-    LOG(INFO) << "Checkpointing; received new epoch marker from peer:" << MP(epoch_, peer_epoch);
+    LOG(INFO) << "Received new epoch marker from peer:" << MP(epoch_, peer_epoch);
     StartCheckpoint(peer_epoch, CP_ROLLING);
   }
 
@@ -415,7 +415,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
     return;
   }
 
-  VLOG(1) << "Checkpointing... " << MP(id(), epoch_, epoch);
+  LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch);
 
   epoch_ = epoch;
 
@@ -445,11 +445,15 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
       the_network->Send(peers_[i]->CreateRequest(MTYPE_PUT_REQUEST, epoch_marker));
     }
   }
+
+  LOG(INFO) << "Starting delta logging... " << MP(id(), epoch_, epoch);
 }
 
 void Worker::FinishCheckpoint() {
+  boost::recursive_mutex::scoped_lock sl(state_lock_);
+
   active_checkpoint_ = CP_NONE;
-  LOG(INFO) << "All channels up to date; flushing deltas.";
+  LOG(INFO) << "Worker " << id() << " flushing checkpoint.";
   Registry::TableMap &t = Registry::get_tables();
 
   for (int i = 0; i < peers_.size(); ++i) {
