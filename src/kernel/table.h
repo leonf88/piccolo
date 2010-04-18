@@ -87,7 +87,7 @@ public:
 class TableShard : public Table {
 public:
   TableShard(const TableDescriptor& info) :
-    Table(info), dirty(false), tainted(false), owner(-1) {}
+    Table(info), dirty(false), tainted(false), owner(-1), delta_file_(NULL) {}
 
   // Log the given put for checkpointing
   void write_delta(const HashPut& put);
@@ -274,8 +274,10 @@ public:
   }
 
   void finish_checkpoint() {
-    delete delta_file_;
-    delta_file_ = NULL;
+    if (delta_file_) {
+      delete delta_file_;
+      delta_file_ = NULL;
+    }
   }
 
   void restore(const string& f) {
