@@ -137,17 +137,6 @@ public:
   void Initialize() {
     next_pr_hash->resize(FLAGS_nodes);
     curr_pr_hash->resize(FLAGS_nodes);
-
-    Page n;
-    RecordFile *r = get_reader();
-    int count = 0;
-    while (r->read(&n)) {
-      ++count;
-      curr_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
-    }
-
-//    LOG(INFO) << "Initialized with " << count << " nodes.";
-    free_reader(r);
   }
 
   void WriteStatus() {
@@ -163,9 +152,10 @@ public:
 
     RecordFile *r = get_reader();
     while (r->read(&n)) {
-      double v = curr_pr_hash->get_local(P(n.site(), n.id()));
-
       next_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
+
+
+      double v = curr_pr_hash->get_local(P(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
         next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);
