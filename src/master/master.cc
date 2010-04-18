@@ -18,6 +18,7 @@ struct WorkerState : private boost::noncopyable {
     last_ping_time = Now();
     last_task_start = 0;
     total_runtime = 0;
+    checkpointing = false;
   }
 
   // Pending tasks to work on.
@@ -37,6 +38,8 @@ struct WorkerState : private boost::noncopyable {
 
   double last_task_start;
   double total_runtime;
+
+  bool checkpointing;
 
   bool alive() {
     return dead_workers.find(id) == dead_workers.end();
@@ -116,6 +119,7 @@ Master::Master(const ConfigData &conf) {
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
   last_checkpoint_ = Now();
+  checkpointing_ = false;
 
   CHECK_GT(world_.Get_size(), 1) << "At least one master and one worker required!";
 
@@ -158,38 +162,63 @@ Master::~Master() {
 }
 
 void Master::checkpoint(Params *params, CheckpointType type) {
-  start_checkpoint(params, type);
-  finish_checkpoint(params, type);
+  // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
+  // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
+  // is complete.
+
+  start_checkpoint();
+
+  for (int i = 0; i < workers_.size(); ++i) {
+    start_worker_checkpoint(i, params, type);
+  }
+
+  for (int i = 0; i < workers_.size(); ++i) {
+    finish_worker_checkpoint(i, params, type);
+  }
+
+  flush_checkpoint(params);
 }
 
-void Master::start_checkpoint(Params *params, CheckpointType type) {
+void Master::start_checkpoint() {
+  if (checkpointing_) {
+    return;
+  }
+
   cp_timer_.Reset();
   checkpoint_epoch_ += 1;
+  checkpointing_ = true;
 
-  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
-                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
+  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+}
+
+void Master::start_worker_checkpoint(int worker_id, Params *params, CheckpointType type) {
+  start_checkpoint();
+
+  LOG(INFO) << "Starting checkpoint on: " << worker_id;
+
+  workers_[worker_id]->checkpointing = true;
 
   CheckpointRequest req;
   req.set_epoch(checkpoint_epoch_);
   req.set_checkpoint_type(type);
-  rpc_->Broadcast(MTYPE_START_CHECKPOINT, req);
+  rpc_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
 }
 
-void Master::finish_checkpoint(Params* params, CheckpointType type) {
+void Master::finish_worker_checkpoint(int worker_id, Params* params, CheckpointType type) {
   if (type == CP_MASTER_CONTROLLED) {
     EmptyMessage req;
-    rpc_->Broadcast(MTYPE_FINISH_CHECKPOINT, req);
+    rpc_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
 
-  // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
-  // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
-  // is complete.
-  for (int i = 0; i < config_.num_workers(); ++i) {
-    EmptyMessage resp;
-    int src;
-    rpc_->ReadAny(&src, MTYPE_CHECKPOINT_DONE, &resp);
-  }
+  LOG(INFO) << "Waiting for " << worker_id << " to finish checkpointing.";
 
+  EmptyMessage resp;
+  rpc_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
+
+  workers_[worker_id]->checkpointing = false;
+}
+
+void Master::flush_checkpoint(Params* params) {
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_), "w");
 
@@ -202,6 +231,8 @@ void Master::finish_checkpoint(Params* params, CheckpointType type) {
   rf.sync();
 
   LOG(INFO) << "Checkpoint: " << cp_timer_.elapsed() << " seconds elapsed; ";
+  checkpointing_ = false;
+  last_checkpoint_ = Now();
 }
 
 Params* Master::restore() {
@@ -433,9 +464,11 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
        LOG(INFO) << StringPrintf("Running %s; %s; left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
     });
 
-    if (r.checkpoint_interval > 0 && Now() - last_checkpoint_ > r.checkpoint_interval) {
+
+
+    if (r.checkpoint_type == CP_ROLLING &&
+        Now() - last_checkpoint_ > r.checkpoint_interval) {
       checkpoint(r.params, CP_ROLLING);
-      last_checkpoint_ = Now();
     }
 
     if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
@@ -467,8 +500,16 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
     for (int i = 0; i < workers_.size(); ++i) {
       WorkerState& w = *workers_[i];
       double avg_completion_time = mstats.total_shard_time() / mstats.shard_invocations();
-      if (w.idle(avg_completion_time) && !w.full()) {
+      if (w.idle(avg_completion_time) &&
+          !w.full() && !checkpointing_) {
         steal_work(r, w.id);
+      }
+
+      if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
+          0.8 * shards.size() < count &&
+          w.idle(avg_completion_time) &&
+          !w.checkpointing) {
+        start_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
       }
 
       // Just restore when the job is restarted by MPI.
@@ -491,6 +532,21 @@ void Master::run_range(const RunDescriptor& r, vector<int> shards) {
 
   mstats.set_total_time(mstats.total_time() + t.elapsed());
 
+  if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
+    for (int i = 0; i < workers_.size(); ++i) {
+      WorkerState& w = *workers_[i];
+      if (!w.checkpointing) {
+        start_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
+      }
+    }
+
+    for (int i = 0; i < workers_.size(); ++i) {
+      WorkerState& w = *workers_[i];
+      finish_worker_checkpoint(w.id, r.params, CP_MASTER_CONTROLLED);
+    }
+
+    flush_checkpoint(r.params);
+  }
   kernel_epoch_++;
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }

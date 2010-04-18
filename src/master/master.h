@@ -52,8 +52,11 @@ public:
   Params* restore();
 
 private:
-  void start_checkpoint(Params* params, CheckpointType type=CP_ROLLING);
-  void finish_checkpoint(Params* params, CheckpointType type);
+  void start_checkpoint();
+  void start_worker_checkpoint(int worker_id, Params* params, CheckpointType type);
+  void finish_worker_checkpoint(int worker_id, Params* params, CheckpointType type);
+  void flush_checkpoint(Params* params);
+
   ConfigData config_;
   RPCHelper *rpc_;
   MPI::Intracomm world_;
@@ -61,6 +64,7 @@ private:
   int kernel_epoch_;
 
   Timer cp_timer_;
+  bool checkpointing_;
 
   // Used for interval checkpointing.
   double last_checkpoint_;

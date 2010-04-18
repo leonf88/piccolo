@@ -99,6 +99,12 @@ void GlobalTable::start_checkpoint(const string& f) {
 }
 
 void GlobalTable::write_delta(const HashPut& d) {
+  if (!is_local_shard(d.shard())) {
+    LOG_EVERY_N(INFO, 1000)
+        << "Ignoring delta write for forwarded data";
+    return;
+  }
+
   partitions_[d.shard()]->write_delta(d);
 }
 
@@ -244,7 +250,11 @@ int HashPutCoder::size() {
 }
 
 void TableShard::write_delta(const HashPut& req) {
-  delta_file_->write(req);
+  if (!delta_file_) {
+    LOG(ERROR) << "Shard: " << this->info().shard << " is somehow missing it's delta file?";
+  } else {
+    delta_file_->write(req);
+  }
 }
 
 void TableShard::ApplyUpdates(const HashPut& req) {
