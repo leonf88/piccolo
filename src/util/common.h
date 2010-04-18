@@ -271,6 +271,30 @@ inline tuple3<A, B, C> MP(A x, B y, C z) { return tuple3<A, B, C>(x, y, z); }
 
 }
 
+template<class A>
+inline vector<A> MakeVector(const A&x) {
+  vector<A> out;
+  out.push_back(x);
+  return out;
+}
+
+template<class A>
+inline vector<A> MakeVector(const A&x, const A&y) {
+  vector<A> out;
+  out.push_back(x);
+  out.push_back(y);
+  return out;
+}
+
+template<class A>
+inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
+  vector<A> out;
+  out.push_back(x);
+  out.push_back(y);
+  out.push_back(z);
+  return out;
+}
+
 namespace std {  namespace tr1 {
 template <>
 struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {
