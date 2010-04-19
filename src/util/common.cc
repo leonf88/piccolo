@@ -28,6 +28,8 @@ DEFINE_bool(cpu_profile, false, "");
 
 DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
+DEFINE_bool(run_tests, false, "");
+
 
 namespace dsm {
 
@@ -253,9 +255,12 @@ void Init(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
-
   RunInitializers();
-  RunTests();
+
+  if (FLAGS_run_tests) {
+    RunTests();
+    exit(0);
+  }
 
   MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
 

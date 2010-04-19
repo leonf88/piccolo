@@ -1,6 +1,8 @@
 #include "util/static-initializers.h"
 #include <tr1/unordered_map>
 #include <stdio.h>
+#include <gflags/gflags.h>
+
 
 using namespace std;
 using namespace std::tr1;
@@ -37,9 +39,14 @@ void RunInitializers() {
 }
 
 void RunTests() {
+  fprintf(stderr, "Starting tests...\n");
+  int c = 1;
   for (TestMap::iterator i = tests()->begin(); i != tests()->end(); ++i) {
+    fprintf(stderr, "Running test %5d/%5d: %s\n", c, tests()->size(), i->first.c_str());
     i->second->Run();
+    ++c;
   }
+  fprintf(stderr, "Done.\n");
 }
 
 

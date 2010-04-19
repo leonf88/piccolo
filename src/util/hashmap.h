@@ -1,10 +1,3 @@
-/*
- * hashmap.h
- *
- * Simple generic hashmap using linear probing.
- *
- */
-
 #ifndef HASHMAP_H_
 #define HASHMAP_H_
 
@@ -53,6 +46,7 @@ private:
 
   int bucket_for_key(const K& k) {
     int b = bucket_idx(k);
+    int i = 1;
 
     while(1) {
       if (in_use_[b]) {
@@ -63,7 +57,9 @@ private:
         return -1;
       }
 
-      b = (b + 1) % size_;
+//      b = (b + i * i + i) % size_;
+//      ++i;
+       b = (b + 1) % size_;
     }
 
     return -1;
@@ -216,10 +212,14 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   int start = bucket_idx(k);
   int b = start;
 
+  int i = 1;
   do {
     if (!in_use_[b] || keys_[b] == k) {
       break;
     }
+
+//    b = (b + i * i + i) % size_;
+//    ++i;
     b = (b + 1) % size_;
   } while(b != start);
 

@@ -178,6 +178,15 @@ public:
   double elapsed() const;
   uint64_t cycles_elapsed() const;
 
+  // Rate at which an event occurs.
+  double rate(int count) {
+    return count / (Now() - start_time_);
+  }
+
+  double cycle_rate(int count) {
+    return double(cycles_elapsed()) / count;
+  }
+
 private:
   double start_time_;
   uint64_t start_cycle_;
