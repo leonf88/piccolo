@@ -4,7 +4,7 @@ set -e
 source $(dirname $0)/run_util.sh
 
 CHECKPOINT_WRITE_DIR=/scratch/checkpoints/
-CHECKPOINT_READ_DIR=/scratch/cp-union/
+CHECKPOINT_READ_DIR=/scratch/cp-union/checkpoints/
 GRAPHSIZE=100
 SHARDS=100
 ITERATIONS=10
@@ -43,7 +43,6 @@ function run_test_bg() {
  --checkpoint_write_dir=${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M/ \
  --checkpoint_read_dir=${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/ \
  --work_stealing=true \
- --cpu_profile \
  --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7 $8 & 
 }
 
@@ -58,16 +57,16 @@ function run_test() {
 #RESULTS_DIR=results.checkpoint/
 #run_test '--checkpoint=true'
 
-#cleanup
-#RESULTS_DIR=results.no_checkpoint/
-#run_test '--checkpoint=false'
+cleanup
+RESULTS_DIR=results.no_checkpoint/
+run_test '--checkpoint=false'
 
 # test terminating job and trying to restore from checkpoint
-cleanup
-RESULTS_DIR=results.checkpoint_fault/
-run_test_bg '--checkpoint=true'
-sleep 180
-pkill mpirun
+#cleanup
+#RESULTS_DIR=results.checkpoint_fault/
+#run_test_bg '--checkpoint=true'
+#sleep 180
+#pkill mpirun
 
 #RESULTS_DIR=results.restore_fault
 #run_test '--checkpoint=true' '--dead_workers=5,6,10'

@@ -154,7 +154,6 @@ public:
     while (r->read(&n)) {
       next_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
 
-
       double v = curr_pr_hash->get_local(P(n.site(), n.id()));
       double contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
@@ -226,9 +225,8 @@ int Pagerank(ConfigData& conf) {
       pmap->set_int("iteration", i);
       if (FLAGS_checkpoint) {
         r.checkpoint_type = CP_MASTER_CONTROLLED;
-        // We only need to save the next_pr table.  This alternates
-        // each iteration, so we specify it thusly.
-        r.checkpoint_tables = MakeVector(i % 2 == 0 ? 1 : 0);
+        // We only need to save the next_pr table, which alternates each iteration.
+        r.checkpoint_tables = MakeVector((i % 2 == 0) ? 1 : 0);
       } else {
         r.checkpoint_type = CP_NONE;
       }

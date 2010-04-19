@@ -522,7 +522,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
       }
 
       if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
-          0.8 * shards.size() < count &&
+          0.7 * shards.size() < count &&
           w.idle(avg_completion_time) &&
           !w.checkpointing) {
         start_worker_checkpoint(w.id, r);

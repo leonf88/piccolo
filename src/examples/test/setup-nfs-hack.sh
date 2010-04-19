@@ -10,7 +10,7 @@ FUSE_CMD=
 for h in 2 3 5 6 7 8 9 10 11 12 13; do
   mkdir -p /scratch/cp-remote/beaker-$h
   umount -f /scratch/cp-remote/beaker-$h
-  mount beaker-$h:/scratch/checkpoints /scratch/cp-remote/beaker-$h
+  mount beaker-$h:/scratch/ /scratch/cp-remote/beaker-$h
   FUSE_CMD="/scratch/cp-remote/beaker-$h=RW:${FUSE_CMD}"
 done
 
