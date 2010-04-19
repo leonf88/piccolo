@@ -251,7 +251,7 @@ int HashPutCoder::size() {
 
 void TableShard::write_delta(const HashPut& req) {
   if (!delta_file_) {
-    LOG(ERROR) << "Shard: " << this->info().shard << " is somehow missing it's delta file?";
+    LOG_EVERY_N(ERROR, 100) << "Shard: " << this->info().shard << " is somehow missing it's delta file?";
   } else {
     delta_file_->write(req);
   }
