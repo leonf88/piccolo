@@ -20,7 +20,7 @@ struct StaticTestHelper {
 
 }
 
-#define REGISTER_INTIALIZER(name, code)\
+#define REGISTER_INITIALIZER(name, code)\
   struct name ## StaticInitHelper : public dsm::StaticInitHelper {\
     name ## StaticInitHelper() : StaticInitHelper(#name) {}\
     void Run() {\
@@ -33,7 +33,7 @@ static name ## StaticInitHelper name ## helper;
   struct name ## StaticTestHelper : public dsm::StaticTestHelper {\
     name ## StaticTestHelper() : StaticTestHelper(#name) {}\
     void Run() {\
-    code \
+    code; \
   }\
   };\
 static name ## StaticTestHelper name ## helper;
