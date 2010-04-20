@@ -275,6 +275,7 @@ void HashMap<K, V>::restore(const string& file) {
   for (uint32_t i = 0; i < entries_; ++i) {
     uint32_t idx;
     d.read(&idx);
+    in_use_[idx] = 1;
     d.read_bytes((char*)&keys_[idx], sizeof(K));
     d.read_bytes((char*)&values_[i], sizeof(V));
   }
