@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <execinfo.h>
+#include <fcntl.h>
 
 #include <math.h>
 
@@ -257,6 +258,15 @@ void Init(int argc, char** argv) {
   google::InstallFailureSignalHandler();
   RunInitializers();
 
+#ifdef CPUPROF
+  if (FLAGS_cpu_profile) {
+    mkdir("profile/", 0755);
+    char buf[100];
+    gethostname(buf, 100);
+    ProfilerStart(StringPrintf("profile/worker.%s.%d", buf, getpid()).c_str());
+  }
+#endif
+
   if (FLAGS_run_tests) {
     RunTests();
     exit(0);
@@ -284,13 +294,5 @@ void Init(int argc, char** argv) {
   sigaction(SIGBUS, &sig_action, NULL);
 
   srandom(time(NULL));
-#ifdef CPUPROF
-  if (FLAGS_cpu_profile) {
-    mkdir("profile/", 0755);
-    char buf[100];
-    gethostname(buf, 100);
-    ProfilerStart(StringPrintf("profile/worker.%d", world->Get_rank()).c_str());
-  }
-#endif
 }
 }
