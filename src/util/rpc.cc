@@ -41,7 +41,8 @@ bool RPCHelper::TryRead(int target, int method, Message *msg) {
     mpi_world_->Recv(&scratch[0], scratch.size(), MPI::BYTE, target, method, status);
     rpc_log("ReadDone", my_rank_, target, method);
 
-    msg->ParseFromString(scratch);
+    CHECK(msg->ParseFromString(scratch)) << "Failed to parse message of size: " << scratch.size()
+      << "source: " << target << " dest: " << my_rank_ << " method: " << method;
   }
 
 //  rpc_log("IProbeDone", my_rank_, target, method);
