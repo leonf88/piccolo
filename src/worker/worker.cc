@@ -63,7 +63,7 @@ struct Worker::Stub : private boost::noncopyable {
 // a local queue.
 class NetworkThread {
 private:
-  static const int kMaxHosts = 64;
+  static const int kMaxHosts = 512;
 
   typedef deque<string> Queue;
 
@@ -141,6 +141,7 @@ public:
         world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
 
         boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
+        CHECK_LT(source, kMaxHosts);
         incoming[tag][source].push_back(data);
       } else {
         Sleep(FLAGS_sleep_time);
@@ -162,6 +163,7 @@ public:
 
   bool check_queue(int src, int type, Message* data) {
     boost::recursive_mutex::scoped_lock sl(q_lock[type]);
+    CHECK_LT(src, kMaxHosts);
     Queue& q = incoming[type][src];
     if (!q.empty()) {
       data->ParseFromString(q.front());
