@@ -1,5 +1,5 @@
 set(MPILIBS open-rte open-pal boost_thread-mt util )
-set(OTHERLIBS mpi_cxx mpi protobuf lzo2 pthread rt dl numa)
+set(OTHERLIBS mpi_cxx mpi lzo2 pthread rt dl numa protobuf)
 
 protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 
@@ -15,6 +15,14 @@ add_executable(example-dsm example-main.cc)
 target_link_libraries(example-dsm -Wl,--whole-archive common worker kernel master example -Wl,--no-whole-archive )
 
 # link statically if we can
+if ($ENV{TCMALLOC})
+  target_link_libraries(example-dsm -Wl,-Bstatic tcmalloc -Wl,-Bdynamic )
+endif()
+
+if ($ENV{JEMALLOC})
+  target_link_libraries(example-dsm -Wl,--whole-archive jemalloc_pic -Wl,--no-whole-archive)
+endif()
+
 target_link_libraries(example-dsm -Wl,-Bstatic ${MPILIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
 target_link_libraries(example-dsm ${OTHERLIBS})		      
 

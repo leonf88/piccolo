@@ -5,17 +5,16 @@ source $(dirname $0)/run_util.sh
 
 CHECKPOINT_WRITE_DIR=/scratch/checkpoints/
 CHECKPOINT_READ_DIR=/scratch/cp-union/checkpoints/
-GRAPHSIZE=100
-SHARDS=100
+GRAPHSIZE=900
+SHARDS=384
 ITERATIONS=10
+#BUILD_TYPE=debug
 BUILD_TYPE=release
 
-PARALLELISM=$(awk -F= '{s+=$2} END {print s-1}' mpi_hostfile)
-MACHINES=$(cat mpi_hostfile | wc -l)
-
 function cleanup() {
-  pdsh -g muppets rm -rf ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
-  pdsh -g muppets mkdir -p ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+  echo "Removing old checkpoints..."
+  pdsh -f20 -g muppets mkdir -p ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M
+  pdsh -f20 -g muppets rm -rf ${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M/*
 }
 
 function make_graph() {
@@ -37,12 +36,14 @@ function make_graph() {
 function run_test_bg() {
   run_command 'Pagerank' "\
  --nodes=$((GRAPHSIZE*1000*1000)) \
+ --log_prefix=false \
  --shards=$SHARDS \
  --sleep_time=0.001 \
+ --cpu_profile=false \
  --iterations=$ITERATIONS \
  --checkpoint_write_dir=${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M/ \
  --checkpoint_read_dir=${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/ \
- --work_stealing=true \
+ --work_stealing=true\
  --graph_prefix=/scratch/pagerank_test/${GRAPHSIZE}M/pr" $1 $2 $3 $4 $5 $6 $7 $8 & 
 }
 

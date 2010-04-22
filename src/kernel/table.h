@@ -3,6 +3,7 @@
 
 #include "util/common.h"
 #include "util/hashmap.h"
+#include "util/file.h"
 #include "worker/worker.pb.h"
 #include <boost/thread.hpp>
 
@@ -209,7 +210,7 @@ public:
   typedef int (*ShardingFunction)(const K& k, int num_shards);
 };
 
-static const int kWriteFlushCount = 1000000;
+static const int kWriteFlushCount = 100000;
 
 // A local accumulated hash table.
 template <class K, class V>
@@ -221,7 +222,7 @@ public:
     TableShard(tinfo), data_(size) {
   }
 
-  bool contains(const K &k) { return data_.contains(k); }
+  bool contains(const K &k) { return data_.find(k) != data_.end(); }
   bool empty() { return data_.empty(); }
   int64_t size() { return data_.size(); }
 
@@ -231,11 +232,11 @@ public:
   V get(const K &k) { return data_[k]; }
 
   void put(const K &k, const V &v) {
-    data_.put(k, v);
+    data_[k] = v;
   }
 
   void update(const K &k, const V &v) {
-    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
+    ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function)(&data_[k], v);
   }
 
   void remove(const K &k) {
@@ -249,7 +250,7 @@ public:
   }
 
   void resize(int64_t new_size) {
-    data_.resize(new_size);
+    data_.rehash(new_size);
   }
 
   void put_str(const StringPiece &k, const StringPiece &v) {
@@ -269,8 +270,8 @@ public:
   }
 
   void start_checkpoint(const string& f) {
-    data_.checkpoint(f);
-    delta_file_ = new RecordFile(f + ".delta", "w");
+//    data_.checkpoint(f);
+//    delta_file_ = new RecordFile(f + ".delta", "w");
   }
 
   void finish_checkpoint() {
@@ -281,7 +282,7 @@ public:
   }
 
   void restore(const string& f) {
-    data_.restore(f);
+//    data_.restore(f);
 
     // Replay delta log.
     RecordFile rf(f + ".delta", "r");
@@ -302,8 +303,8 @@ public:
     bool done() { return  it_ == t_->data_.end(); }
     void Next() { ++it_; }
 
-    const K& key() { return it_.key(); }
-    V& value() { return it_.value(); }
+    const K& key() { return it_->first; }
+    V& value() { return it_->second; }
 
     TableShard* owner() { return t_; }
 

@@ -9,6 +9,10 @@ find_package(PythonLibs REQUIRED)
 include(${SWIG_USE_FILE})
 
 set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2 -DCPUPROF")
+if ($ENV{TCMALLOC})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHEAPPROF")
+endif()
+
 set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
 
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
@@ -24,6 +28,7 @@ include_directories( .
 link_directories( ${PICCOLO_SOURCE_DIR}/../extlib/glog/.libs/
                   ${PICCOLO_SOURCE_DIR}/../extlib/gflags/.libs/
             		  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/.libs/
+            		  ${PICCOLO_SOURCE_DIR}/../extlib/jemalloc/lib/
 		              /home/power/share/lib )
 
 add_subdirectory (util)

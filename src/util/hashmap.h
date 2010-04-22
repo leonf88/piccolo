@@ -9,7 +9,6 @@
 
 namespace dsm {
 
-
 namespace data {
 template <class K>
 static uint32_t hash(K k) {
@@ -25,8 +24,10 @@ uint32_t hash(string s) {
   return SuperFastHash(s.data(), s.size());
 }
 
-}
+} }
 
+
+namespace dsm {
 template <class K, class V>
 class HashMap : private boost::noncopyable {
 public:
@@ -38,36 +39,39 @@ public:
   KMarshal key_marshaller;
   VMarshal value_marshaller;
 private:
-  static const double kLoadFactor = 0.6;
+  static const double kLoadFactor = 0.8;
 
   uint32_t bucket_idx(K k) {
     return dsm::data::hash<K>(k) % size_;
   }
 
   int bucket_for_key(const K& k) {
-    int b = bucket_idx(k);
+    int start = bucket_idx(k);
+    int b = start;
     int i = 1;
 
-    while(1) {
-      if (in_use_[b]) {
-        if (keys_[b] == k) {
+    do {
+      if (buckets_[b].in_use) {
+        if (buckets_[b].k == k) {
           return b;
         }
       } else {
         return -1;
       }
 
-//      b = (b + i * i + i) % size_;
-//      ++i;
        b = (b + 1) % size_;
-    }
+    } while (b != start);
 
     return -1;
   }
 
-  vector<K> keys_;
-  vector<V> values_;
-  vector<uint8_t> in_use_;
+  struct Bucket {
+    K k;
+    V v;
+    bool in_use;
+  };
+
+  vector<Bucket> buckets_;
 
   uint32_t entries_;
   uint32_t size_;
@@ -75,17 +79,24 @@ private:
 public:
   struct iterator {
     iterator(HashMap<K, V>& parent) : pos(-1), parent_(parent) { ++(*this); }
+    iterator(HashMap<K, V>& parent, int p) : pos(p), parent_(parent) {}
 
      bool operator==(const iterator &o) { return o.pos == pos; }
      bool operator!=(const iterator &o) { return o.pos != pos; }
 
      iterator& operator++() {
-       do { ++pos; } while (pos < parent_.keys_.size() && !parent_.in_use_[pos]);
+       do { ++pos; } while (pos < parent_.size_ && !parent_.buckets_[pos].in_use);
        return *this;
      }
 
-     const K& key() { return parent_.keys_[pos]; }
-     V& value() { return parent_.values_[pos]; }
+     struct BucketPair {
+       K first;
+       V second;
+     };
+
+     BucketPair* operator->() {
+       return (BucketPair*)&parent_.buckets_[pos];
+     }
 
      int pos;
      HashMap<K, V> &parent_;
@@ -105,7 +116,7 @@ public:
 
   void accumulate(const K& k, const V& v, AccumFunction f);
 
-  void resize(uint32_t size);
+  void rehash(uint32_t size);
 
   bool empty() { return size() == 0; }
   int size() { return entries_; }
@@ -113,9 +124,16 @@ public:
   void remove(const K& k) {}
 
   void clear() {
-    for (int i = 0; i < size_; ++i) { in_use_[i] = 0; }
+    for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }
     entries_ = 0;
   }
+
+  iterator find(const K& k) {
+    int b = bucket_for_key(k);
+    if (b == -1) { return *end_; }
+    return iterator(*this, b);
+  }
+
 
   iterator begin() { return iterator(*this); }
   const iterator& end() { return *end_; }
@@ -126,13 +144,13 @@ public:
 
 template <class K, class V>
 HashMap<K, V>::HashMap(int size)
-  : keys_(0), values_(0), in_use_(0), entries_(0), size_(0) {
+  : buckets_(0), entries_(0), size_(0) {
   clear();
 
   end_ = new iterator(*this);
   end_->pos = size_;
 
-  resize(size);
+  rehash(size);
   key_marshaller = &data::marshal<K>;
   value_marshaller = &data::marshal<V>;
 }
@@ -144,27 +162,23 @@ static int log2(int s) {
 }
 
 template <class K, class V>
-void HashMap<K, V>::resize(uint32_t size) {
+void HashMap<K, V>::rehash(uint32_t size) {
   if (size_ == size)
     return;
 
   size = max(size_, size);
 
-  vector<K> old_k = keys_;
-  vector<V> old_v = values_;
-  vector<uint8_t> old_inuse = in_use_;
+  vector<Bucket> old_b = buckets_;
 
   int old_entries = entries_;
 
-  keys_.resize(size);
-  values_.resize(size);
-  in_use_.resize(size);
+  buckets_.resize(size);
   size_ = size;
   clear();
 
-  for (int i = 0; i < old_inuse.size(); ++i) {
-    if (old_inuse[i]) {
-      put(old_k[i], old_v[i]);
+  for (int i = 0; i < old_b.size(); ++i) {
+    if (old_b[i].in_use) {
+      put(old_b[i].k, old_b[i].v);
     }
   }
 
@@ -186,7 +200,7 @@ template <class K, class V>
 void HashMap<K, V>::accumulate(const K& k, const V& v, AccumFunction f) {
   int b = bucket_for_key(k);
   if (b != -1) {
-    f(&values_[b], v);
+    f(&buckets_[b].v, v);
   } else {
     put(k, v);
   }
@@ -204,7 +218,7 @@ V& HashMap<K, V>::get(const K& k) {
     LOG(FATAL) << "No entry for key.";
   }
 
-  return values_[b];
+  return buckets_[b].v;
 }
 
 template <class K, class V>
@@ -214,7 +228,7 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
 
   int i = 1;
   do {
-    if (!in_use_[b] || keys_[b] == k) {
+    if (!buckets_[b].in_use || buckets_[b].k == k) {
       break;
     }
 
@@ -223,21 +237,21 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
     b = (b + 1) % size_;
   } while(b != start);
 
-  if (!in_use_[b]) {
+  if (!buckets_[b].in_use) {
     if (entries_ > size_ * kLoadFactor) {
-      resize((int)(size_ * 1.5));
+      rehash((int)(size_ / kLoadFactor));
       put(k, v);
     } else {
-      in_use_[b] = 1;
-      keys_[b] = k;
-      values_[b] = v;
+      buckets_[b].in_use = 1;
+      buckets_[b].k = k;
+      buckets_[b].v = v;
       ++entries_;
     }
   } else {
-    values_[b] = v;
+    buckets_[b].v = v;
   }
 
-  return values_[b];
+  return buckets_[b].v;
 }
 
 template <class K, class V>
@@ -250,10 +264,9 @@ void HashMap<K, V>::checkpoint(const string& file) {
   e.write(entries_);
 
   for (uint32_t i = 0; i < size_; ++i) {
-    if (in_use_[i]) {
+    if (buckets_[i].in_use) {
       e.write(i);
-      e.write_bytes((char*)&keys_[i], sizeof(K));
-      e.write_bytes((char*)&values_[i], sizeof(V));
+      e.write_bytes((char*)&buckets_[i], sizeof(Bucket));
     }
   }
 
@@ -268,16 +281,13 @@ void HashMap<K, V>::restore(const string& file) {
   d.read(&size_);
   d.read(&entries_);
 
-  keys_.resize(size_);
-  values_.resize(size_);
-  in_use_.resize(size_);
+  buckets_.resize(size_);
 
   for (uint32_t i = 0; i < entries_; ++i) {
     uint32_t idx;
     d.read(&idx);
-    in_use_[idx] = 1;
-    d.read_bytes((char*)&keys_[idx], sizeof(K));
-    d.read_bytes((char*)&values_[i], sizeof(V));
+    buckets_[idx].in_use = 1;
+    d.read_bytes((char*)&buckets_[idx], sizeof(Bucket));
   }
 }
 

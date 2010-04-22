@@ -1,57 +1,44 @@
 #include "util/hashmap.h"
 #include "util/static-initializers.h"
+#include <gflags/gflags.h>
 
+#include <tr1/unordered_map>
+
+using std::tr1::unordered_map;
 using namespace dsm;
 
 int optimizer_hack;
 
-static const int kTestSize=50000000;
-static const int kHashSize=kTestSize * 2;
+DEFINE_int32(test_table_size, 1000000, "");
+#define TEST_PERF(name, op)\
+{\
+  Timer t;\
+  for (int i = 0; i < FLAGS_test_table_size; ++i) {\
+    op;\
+  }\
+  fprintf(stderr, "%s: %d inserts in %.3f seconds; %.0f/s %.0f cycles\n",\
+          #op, FLAGS_test_table_size, t.elapsed(), t.rate(FLAGS_test_table_size), t.cycle_rate(FLAGS_test_table_size));\
+}
+
 static void TestHashMapSpeed() {
-  HashMap<int, double> h(kHashSize);
-  Timer t;
-  for (int i = 0; i < kTestSize; ++i) {
-    h.put(i, i);
-  }
-  fprintf(stderr, "Hash: %d inserts in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
+  HashMap<int, double> h(FLAGS_test_table_size * 2);
+  unordered_map<int, double> umap(FLAGS_test_table_size * 2);
+  vector<double> array_test(FLAGS_test_table_size * 2);
 
-  t.Reset();
-  for (int i = 0; i < kTestSize; ++i) {
-    h.put(i, i);
+  vector<int> source(FLAGS_test_table_size);
+  for (int i = 0; i < source.size(); ++i) {
+    source[i] = random() % FLAGS_test_table_size;
   }
-  fprintf(stderr, "Hash: %d replaces in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
 
-  t.Reset();
-  for (int i = 0; i < kTestSize; ++i) {
-    h.get(i);
-  }
-  fprintf(stderr, "Hash: %d gets in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
-
-  vector<double> array_test(kHashSize);
-  t.Reset();
-  for (int i = 0; i < kTestSize; ++i) {
-    array_test[random() % kTestSize] = 1;
-  }
-  fprintf(stderr, "Array: %d random puts in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
-
-  t.Reset();
-  for (int i = 0; i < kTestSize; ++i) {
-    array_test[data::hash<int>(i) % kTestSize] = 1;
-  }
-  fprintf(stderr, "Array: %d hashed puts in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
+  TEST_PERF(HashPut, h.put(source[i], i));
+  TEST_PERF(HashReplace, h.put(source[i], i));
+  TEST_PERF(HashGet, h.get(source[i]));
+  TEST_PERF(STLHashPut, umap[source[i]] = i);
+  TEST_PERF(ArrayPut, array_test[source[i]] = i);
+  TEST_PERF(ArrayPut, array_test[data::hash<int>(i) % FLAGS_test_table_size] = i);
 
   optimizer_hack = 0;
-  t.Reset();
-  for (int i = 0; i < kTestSize; ++i) {
-    optimizer_hack += array_test[data::hash<int>(i) % kTestSize];
-  }
-  fprintf(stderr, "Array: %d hashed gets in %.3f seconds; %.0f/s %.0f cycles\n",
-          kTestSize, t.elapsed(), t.rate(kTestSize), t.cycle_rate(kTestSize));
+  TEST_PERF(ArrayPut, optimizer_hack += array_test[data::hash<int>(i) % FLAGS_test_table_size]);
 }
 
 REGISTER_TEST(HashMapSpeed, TestHashMapSpeed());
