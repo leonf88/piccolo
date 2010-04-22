@@ -120,13 +120,17 @@ void Histogram::add(double val) {
 
 void DumpProfile() {
 #ifdef CPUPROF
-ProfilerFlush();
+  ProfilerFlush();
 #endif
 
 #ifdef HEAPPROF
-string heap_prof;
-MallocExtension::instance()->GetHeapSample(&heap_prof);
-File::Dump(StringPrintf("heap.profile.%d", getpid()), heap_prof);
+  char buf[100];
+  gethostname(buf, 100);
+  
+  string heap_prof;
+  MallocExtension::instance()->GetHeapSample(&heap_prof);
+
+  File::Dump(StringPrintf("profile/heap.%s.%d", buf, getpid()), heap_prof);
 #endif
 }
 
@@ -263,7 +267,7 @@ void Init(int argc, char** argv) {
     mkdir("profile/", 0755);
     char buf[100];
     gethostname(buf, 100);
-    ProfilerStart(StringPrintf("profile/worker.%s.%d", buf, getpid()).c_str());
+    ProfilerStart(StringPrintf("profile/cpu.%s.%d", buf, getpid()).c_str());
   }
 #endif
 

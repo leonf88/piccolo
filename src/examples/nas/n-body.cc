@@ -26,6 +26,16 @@ namespace dsm { namespace data {
   }
 } }
 
+namespace std {  namespace tr1 {
+template <>
+struct hash<pos> : public unary_function<pos, size_t> {
+  size_t operator()(const pos& k) const {
+    return dsm::data::hash(k);
+  }
+};
+}}
+
+
 static void append_merge(string* a, const string& b) {
   a->append(b);
 }

@@ -41,15 +41,15 @@ struct WorkerState : private boost::noncopyable {
 
   bool checkpointing;
 
-  bool alive() {
+  bool alive() const {
     return dead_workers.find(id) == dead_workers.end();
   }
 
-  bool is_assigned(int table, int shard) {
+  bool is_assigned(int table, int shard) const {
     return assigned.find(MP(table, shard)) != assigned.end();
   }
 
-  int num_finished() {
+  int num_finished() const {
     return assigned.size() - pending.size() - active.size();
   }
 
@@ -60,10 +60,10 @@ struct WorkerState : private boost::noncopyable {
   bool idle(double avg_completion_time) {
     return pending.empty() &&
            active.empty() &&
-           Now() - last_ping_time > 1.0 + avg_completion_time / 2;
+           Now() - last_ping_time > 5.0 + avg_completion_time * 3 / 4;
   }
 
-  bool full() { return assigned.size() >= slots; }
+  bool full() const { return assigned.size() >= slots; }
 
   void set_serves(int shard, bool should_service) {
     Registry::TableMap &tables = Registry::get_tables();
@@ -77,7 +77,7 @@ struct WorkerState : private boost::noncopyable {
     }
   }
 
-  bool serves(int table, int shard) {
+  bool serves(int table, int shard) const {
     return shards.find(MP(table, shard)) != shards.end();
   }
 
@@ -362,14 +362,15 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
     return;
   }
 
-  // Find a worker with an idle task.
+  // Find a worker with an idle task; preferring workers that have made the 
+  // least progress through their queue.
   int busy_worker = -1;
-  int t_count = 0;
+  int slowest = 0;
   for (int i = 0; i < workers_.size(); ++i) {
     const WorkerState &w = *workers_[i];
-    if (w.pending.size() > t_count) {
+    if (w.pending.size() > slowest) {
       busy_worker = i;
-      t_count = w.pending.size();
+      slowest = w.pending.size();
     }
   }
 

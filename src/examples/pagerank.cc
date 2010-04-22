@@ -9,10 +9,10 @@
 using namespace dsm;
 using namespace std;
 
-static double TOTALRANK = 0;
+static float TOTALRANK = 0;
 static int NUM_WORKERS = 2;
 
-static const double kPropagationFactor = 0.8;
+static const float kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
 static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
@@ -44,12 +44,21 @@ template<>
 }
 }
 
+namespace std {  namespace tr1 {
+template <>
+struct hash<PageId> : public unary_function<PageId, size_t> {
+  size_t operator()(const PageId& k) const {
+    return dsm::data::hash(k);
+  }
+};
+}}
+
 static int SiteSharding(const PageId& p, int nshards) {
   return p.site % nshards;
 }
 
-static double powerlaw_random(double dmin, double dmax, double n) {
-  double r = (double)random() / RAND_MAX;
+static float powerlaw_random(float dmin, float dmax, float n) {
+  float r = (float)random() / RAND_MAX;
   return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
 }
 
@@ -97,7 +106,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   //pclose(lzo);
 }
 
-static double random_restart_seed() {
+static float random_restart_seed() {
   return (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes);
 }
 
@@ -105,12 +114,12 @@ class PRKernel : public DSMKernel {
 public:
   int iter;
   vector<Page> nodes;
-  TypedGlobalTable<PageId, double>* curr_pr_hash;
-  TypedGlobalTable<PageId, double>* next_pr_hash;
+  TypedGlobalTable<PageId, float>* curr_pr_hash;
+  TypedGlobalTable<PageId, float>* next_pr_hash;
 
   void Init() {
-    curr_pr_hash = this->get_table<PageId, double>(0);
-    next_pr_hash = this->get_table<PageId, double>(1);
+    curr_pr_hash = this->get_table<PageId, float>(0);
+    next_pr_hash = this->get_table<PageId, float>(1);
     iter = 0;
   }
 
@@ -135,8 +144,8 @@ public:
   }
 
   void Initialize() {
-    next_pr_hash->resize(FLAGS_nodes);
-    curr_pr_hash->resize(FLAGS_nodes);
+    next_pr_hash->resize((int)(2 * FLAGS_nodes));
+    curr_pr_hash->resize((int)(2 * FLAGS_nodes));
   }
 
   void WriteStatus() {
@@ -154,8 +163,8 @@ public:
     while (r->read(&n)) {
       next_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
 
-      double v = curr_pr_hash->get_local(P(n.site(), n.id()));
-      double contribution = kPropagationFactor * v / n.target_site_size();
+      float v = curr_pr_hash->get_local(P(n.site(), n.id()));
+      float contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
         next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);
       }
@@ -188,8 +197,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  Registry::create_table<PageId, double>(0, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
-  Registry::create_table<PageId, double>(1, FLAGS_shards, &SiteSharding, &Accumulator<double>::sum);
+  Registry::create_table<PageId, float>(0, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
+  Registry::create_table<PageId, float>(1, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
