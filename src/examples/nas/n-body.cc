@@ -8,10 +8,19 @@ using namespace dsm;
 static const int kEdgeSize = 64;
 
 struct pos {
-  int x, y, z;
+  double x, y, z;
 
   static int sharding(const pos& p, int shard) {
-    return (p.x >> 3) | ((p.y >> 3) << 8) | ((p.z >> 3) << 8);
+    return (int)(p.x * 1000000 + p.y * 10000 + p.z);
+  }
+
+  static pos Create(int x, int y, int z) {
+    pos p = { x, y, z};
+    return p;
+  }
+
+  pos get_bucket() {
+
   }
 };
 
@@ -22,62 +31,56 @@ static bool operator==(const pos& a, const pos& b) {
 namespace dsm { namespace data {
   template <>
   uint32_t hash(pos p) {
-    return hash(p.x | (p.y << 10) | (p.z << 20));
+    return (int)(p.x * 1000000 + p.y * 10000 + p.z);
   }
 } }
-
-namespace std {  namespace tr1 {
-template <>
-struct hash<pos> : public unary_function<pos, size_t> {
-  size_t operator()(const pos& k) const {
-    return dsm::data::hash(k);
-  }
-};
-}}
-
 
 static void append_merge(string* a, const string& b) {
   a->append(b);
 }
 
-static TypedGlobalTable<pos, string> *a = NULL;
-static TypedGlobalTable<pos, string> *b = NULL;
-
 class NBodyKernel : public DSMKernel {
 public:
+  TypedGlobalTable<pos, string> *curr;
+  TypedGlobalTable<pos, string> *next;
+
   void Init() {
+    for (int i = 0; i < FLAGS_particles; ++i) {
+      pos pt = pos::Create(rand_double(), rand_double(), rand_double());
+      curr->put(pt.get_bucket(), string((char*)&pt, sizeof(pt)));
+    }
   }
 
   void update_particle(pos bucket, pos particle) {
-    // iterate over points in the surrounding boxes, and add their contribution
-    // to our particle.
+    // iterate over points in the surrounding boxes, and compute a
+    // new position.
     for (int dx = -1; dx <= 1; ++dx) {
       for (int dy = -1; dy <= 1; ++dy) {
         for (int dz = -1; dz <= 1; ++dz) {
-          pos bk = bucket;
-          bk.x = (bk.x + dx) % kEdgeSize;
-          bk.y = (bk.y + dy) % kEdgeSize;
-          bk.z = (bk.z + dz) % kEdgeSize;
-          const string& b = a->get(bk);
+//          pos bk = bucket;
+//          bk.x = (bk.x + dx) % kEdgeSize;
+//          bk.y = (bk.y + dy) % kEdgeSize;
+//          bk.z = (bk.z + dz) % kEdgeSize;
+//          const string& b = curr->get(bk);
         }
       }
     }
   }
 
   void SimulateRound() {
-    TypedTable<pos, string>::Iterator* it = a->get_typed_iterator(current_shard());
+    TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
     while (!it->done()) {
-      const pos& p = it->key();
-      const string& b = it->value();
-      for (int i = 0; i < b.size() / sizeof(pos); i += sizeof(pos)) {
-        update_particle(p, *(pos*)(b.data() + i));
+      const pos& bucket_pos = it->key();
+      const pos* points = (pos*)it->value().data();
+      for (int i = 0; i < it->value().size() / sizeof(pos); ++i) {
+        update_particle(bucket_pos, points[i]);
       }
       it->Next();
     }
     delete it;
 
-    a->clear(current_shard());
-    swap(a, b);
+    curr->clear(current_shard());
+    swap(curr, next);
   }
 };
 REGISTER_KERNEL(NBodyKernel);
@@ -85,7 +88,8 @@ REGISTER_METHOD(NBodyKernel, Init);
 REGISTER_METHOD(NBodyKernel, SimulateRound);
 
 int NBody(ConfigData& conf) {
-  a = Registry::create_table<pos, string>(0, conf.num_workers(), &pos::sharding, &append_merge);
+  Registry::create_table<pos, string>(0, conf.num_workers(), &pos::sharding, &append_merge);
+  Registry::create_table<pos, string>(1, conf.num_workers(), &pos::sharding, &append_merge);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);

@@ -8,9 +8,15 @@ find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
 
-set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2 -DCPUPROF")
+set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2")
 if ($ENV{TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHEAPPROF")
+endif()
+
+if ($ENV{OPROFILE})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+else()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCPUPROF")
 endif()
 
 set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
