@@ -25,10 +25,6 @@ static TypedGlobalTable<int, Point> *points;
 static TypedGlobalTable<int, Distribution> *dists;
 static TypedGlobalTable<int, Distribution> *actual;
 
-double rand_double() {
-  return double(random()) / RAND_MAX;
-}
-
 class KMeansKernel : public DSMKernel {
 public:
   void initialize_world() {

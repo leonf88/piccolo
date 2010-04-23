@@ -44,15 +44,6 @@ template<>
 }
 }
 
-namespace std {  namespace tr1 {
-template <>
-struct hash<PageId> : public unary_function<PageId, size_t> {
-  size_t operator()(const PageId& k) const {
-    return dsm::data::hash(k);
-  }
-};
-}}
-
 static int SiteSharding(const PageId& p, int nshards) {
   return p.site % nshards;
 }

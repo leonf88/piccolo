@@ -19,8 +19,22 @@ struct HashPutCoder {
   HashPut *h_;
 };
 
+static void SerializePartial(HashPut& r, Table::Iterator *it) {
+  int bytes_used = 0;
+  HashPutCoder h(&r);
+  string k, v;
+  for (; !it->done() && bytes_used < kMaxNetworkChunk; it->Next()) {
+    it->key_str(&k);
+    it->value_str(&v);
+    h.add_pair(k, v);
+    bytes_used += k.size() + v.size();
+  }
 
-GlobalTable::GlobalTable(const dsm::TableDescriptor &info) : Table(info) {
+  r.set_done(it->done());
+}
+
+void GlobalTable::Init(const dsm::TableDescriptor &info) {
+  Table::Init(info);
   partitions_.resize(info.num_shards);
 }
 
@@ -63,6 +77,9 @@ int GlobalTable::get_owner(int shard) {
 }
 
 bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
+  if (get_cache_[shard]->contains_str(k)) {
+    return true;//get_cache_[shard]
+  }
   HashGet req;
   HashPut resp;
 
@@ -164,7 +181,7 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(w_->epoch());
 
-        TableShard::SerializePartial(put, it);
+        SerializePartial(put, it);
         w_->Send(get_owner(i), MTYPE_PUT_REQUEST, put);
       } while(!it->done());
       delete it;
@@ -264,20 +281,6 @@ void TableShard::ApplyUpdates(const HashPut& req) {
   for (int i = 0; i < h.size(); ++i) {
     put_str(h.key(i), h.value(i));
   }
-}
-
-void TableShard::SerializePartial(HashPut& r, Table::Iterator *it) {
-  int bytes_used = 0;
-  HashPutCoder h(&r);
-  string k, v;
-  for (; !it->done() && bytes_used < kMaxNetworkChunk; it->Next()) {
-    it->key_str(&k);
-    it->value_str(&v);
-    h.add_pair(k, v);
-    bytes_used += k.size() + v.size();
-  }
-
-  r.set_done(it->done());
 }
 
 }

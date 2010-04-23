@@ -264,6 +264,10 @@ namespace data {
   }\
 }
 
+static double rand_double() {
+  return double(random()) / RAND_MAX;
+}
+
 #define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 

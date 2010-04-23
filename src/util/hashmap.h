@@ -31,13 +31,70 @@ namespace dsm {
 template <class K, class V>
 class HashMap : private boost::noncopyable {
 public:
-  struct iterator;
   typedef void (*AccumFunction)(V* v1, const V& v2);
   typedef void (*KMarshal)(const K& t, string *out);
   typedef void (*VMarshal)(const V& t, string *out);
 
   KMarshal key_marshaller;
   VMarshal value_marshaller;
+
+  // Construct a hashmap with the given initial size; it will be expanded as necessary.
+  HashMap(int size=1);
+  ~HashMap() {
+    delete end_;
+  }
+
+  V& operator[](const K& k);
+  bool contains(const K& k);
+
+  V& get(const K& k);
+  V& put(const K& k, const V& v);
+
+  void accumulate(const K& k, const V& v, AccumFunction f);
+
+  void rehash(uint32_t size);
+
+  bool empty() { return size() == 0; }
+  int size() { return entries_; }
+
+  void clear() {
+    for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }
+    entries_ = 0;
+  }
+
+#pragma pack(push, 1)
+     struct STLView {
+       K first;
+       V second;
+       bool in_use;
+     };
+#pragma pack(pop)
+
+  struct iterator {
+    iterator(HashMap<K, V>& parent) : pos(-1), parent_(parent) { ++(*this); }
+    iterator(HashMap<K, V>& parent, int p) : pos(p), parent_(parent) {}
+
+     bool operator==(const iterator &o) { return o.pos == pos; }
+     bool operator!=(const iterator &o) { return o.pos != pos; }
+
+     iterator& operator++();
+     STLView* operator->();
+
+     int pos;
+     HashMap<K, V> &parent_;
+  };
+
+  iterator begin() { return iterator(*this); }
+  const iterator& end() { return *end_; }
+
+  iterator find(const K& k) {
+    int b = bucket_for_key(k);
+    if (b == -1) { return *end_; }
+    return iterator(*this, b);
+  }
+
+  void checkpoint(const string& file);
+  void restore(const string& file);
 private:
   static const double kLoadFactor = 0.8;
 
@@ -65,82 +122,33 @@ private:
     return -1;
   }
 
+#pragma pack(push, 1)
   struct Bucket {
     K k;
     V v;
     bool in_use;
   };
+#pragma pack(pop)
 
   vector<Bucket> buckets_;
 
   uint32_t entries_;
   uint32_t size_;
   iterator *end_;
-public:
-  struct iterator {
-    iterator(HashMap<K, V>& parent) : pos(-1), parent_(parent) { ++(*this); }
-    iterator(HashMap<K, V>& parent, int p) : pos(p), parent_(parent) {}
-
-     bool operator==(const iterator &o) { return o.pos == pos; }
-     bool operator!=(const iterator &o) { return o.pos != pos; }
-
-     iterator& operator++() {
-       do { ++pos; } while (pos < parent_.size_ && !parent_.buckets_[pos].in_use);
-       return *this;
-     }
-
-     struct BucketPair {
-       K first;
-       V second;
-     };
-
-     BucketPair* operator->() {
-       return (BucketPair*)&parent_.buckets_[pos];
-     }
-
-     int pos;
-     HashMap<K, V> &parent_;
-  };
-
-  // Construct a hashmap with the given initial size; it will be expanded as necessary.
-  HashMap(int size);
-  ~HashMap() {
-    delete end_;
-  }
-
-  V& operator[](const K& k);
-  bool contains(const K& k);
-
-  V& get(const K& k);
-  V& put(const K& k, const V& v);
-
-  void accumulate(const K& k, const V& v, AccumFunction f);
-
-  void rehash(uint32_t size);
-
-  bool empty() { return size() == 0; }
-  int size() { return entries_; }
-
-  void remove(const K& k) {}
-
-  void clear() {
-    for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }
-    entries_ = 0;
-  }
-
-  iterator find(const K& k) {
-    int b = bucket_for_key(k);
-    if (b == -1) { return *end_; }
-    return iterator(*this, b);
-  }
-
-
-  iterator begin() { return iterator(*this); }
-  const iterator& end() { return *end_; }
-
-  void checkpoint(const string& file);
-  void restore(const string& file);
 };
+
+template <class K, class V>
+typename HashMap<K, V>::iterator& HashMap<K, V>::iterator::operator++() {
+  do {
+    ++pos;
+  } while (pos < parent_.size_ && !parent_.buckets_[pos].in_use);
+  return *this;
+}
+
+template <class K, class V>
+typename HashMap<K, V>::STLView* HashMap<K, V>::iterator::operator->()  {
+  return (STLView*)&parent_.buckets_[pos];
+}
 
 template <class K, class V>
 HashMap<K, V>::HashMap(int size)

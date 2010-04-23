@@ -39,7 +39,6 @@ function run_test_bg() {
  --log_prefix=false \
  --shards=$SHARDS \
  --sleep_time=0.001 \
- --cpu_profile=false \
  --iterations=$ITERATIONS \
  --checkpoint_write_dir=${CHECKPOINT_WRITE_DIR}/${GRAPHSIZE}M/ \
  --checkpoint_read_dir=${CHECKPOINT_READ_DIR}/${GRAPHSIZE}M/ \
