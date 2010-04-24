@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 2.6) 
 project (PICCOLO) 
 
+set(ENV{LANG} "C")
+
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
 find_package(ProtoBuf REQUIRED)
 find_package(SWIG REQUIRED)
@@ -8,7 +10,7 @@ find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
 
-set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2")
+set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2 -Wall -Wno-sign-compare -Wno-unused-function")
 if ($ENV{TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHEAPPROF")
 endif()
