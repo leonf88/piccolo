@@ -93,6 +93,11 @@ public:
     return iterator(*this, b);
   }
 
+  void erase(iterator pos) {
+    pos.in_use = false;
+    --entries_;
+  }
+
   void checkpoint(const string& file);
   void restore(const string& file);
 private:

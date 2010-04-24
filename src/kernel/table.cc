@@ -19,7 +19,7 @@ struct HashPutCoder {
   HashPut *h_;
 };
 
-static void SerializePartial(HashPut& r, Table::Iterator *it) {
+static void SerializePartial(HashPut& r, TableView::Iterator *it) {
   int bytes_used = 0;
   HashPutCoder h(&r);
   string k, v;
@@ -33,8 +33,24 @@ static void SerializePartial(HashPut& r, Table::Iterator *it) {
   r.set_done(it->done());
 }
 
+LocalTable *GlobalTable::get_partition(int shard) {
+  return partitions_[shard];
+}
+
+Table_Iterator* GlobalTable::get_iterator(int shard) {
+  return partitions_[shard]->get_iterator();
+}
+
+bool GlobalTable::is_local_shard(int shard) {
+  return partitions_[shard]->owner == worker_id_;
+}
+
+bool GlobalTable::is_local_key(const StringPiece &k) {
+  return is_local_shard(get_shard_str(k));
+}
+
 void GlobalTable::Init(const dsm::TableDescriptor &info) {
-  Table::Init(info);
+  info_ = info;
   partitions_.resize(info.num_shards);
 }
 
@@ -107,7 +123,7 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
 
 void GlobalTable::start_checkpoint(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableShard *t = partitions_[i];
+    LocalTable *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->start_checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
@@ -127,7 +143,7 @@ void GlobalTable::write_delta(const HashPut& d) {
 
 void GlobalTable::finish_checkpoint() {
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableShard *t = partitions_[i];
+    LocalTable *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->finish_checkpoint();
@@ -137,7 +153,7 @@ void GlobalTable::finish_checkpoint() {
 
 void GlobalTable::restore(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableShard *t = partitions_[i];
+    LocalTable *t = partitions_[i];
 
     if (is_local_shard(i)) {
       t->restore(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
@@ -165,12 +181,12 @@ void GlobalTable::HandlePutRequests() {
 void GlobalTable::SendUpdates() {
   HashPut put;
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableShard *t = partitions_[i];
+    LocalTable *t = partitions_[i];
 
     if (!is_local_shard(i) && (t->dirty || !t->empty())) {
       VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << get_owner(i);
 
-      Table::Iterator *it = t->get_iterator();
+      TableView::Iterator *it = t->get_iterator();
 
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.
@@ -198,7 +214,7 @@ void GlobalTable::SendUpdates() {
 int GlobalTable::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
-    TableShard *t = partitions_[i];
+    LocalTable *t = partitions_[i];
     if (!is_local_shard(i)) {
       s += t->size();
     }
@@ -221,7 +237,7 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
 
-  TableShard *h = partitions_[shard];
+  LocalTable *h = partitions_[shard];
 
   v->assign(h->get_str(k));
 }
@@ -266,7 +282,7 @@ int HashPutCoder::size() {
   return h_->key_offset_size() - 1;
 }
 
-void TableShard::write_delta(const HashPut& req) {
+void LocalTable::write_delta(const HashPut& req) {
   if (!delta_file_) {
     LOG_EVERY_N(ERROR, 100) << "Shard: " << this->info().shard << " is somehow missing it's delta file?";
   } else {
@@ -274,7 +290,7 @@ void TableShard::write_delta(const HashPut& req) {
   }
 }
 
-void TableShard::ApplyUpdates(const HashPut& req) {
+void LocalTable::ApplyUpdates(const HashPut& req) {
   CHECK_EQ(req.key_offset_size(), req.value_offset_size());
   HashPutCoder h(req);
 
