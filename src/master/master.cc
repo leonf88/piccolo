@@ -31,7 +31,7 @@ struct TaskState : private boost::noncopyable {
     FINISHED  = 2
   };
 
-  TaskState(Taskid id) : id(id), status(PENDING) {}
+  TaskState(Taskid id, int64_t size) : id(id), status(PENDING), size(size) {}
 
   static bool IdCompare(TaskState *a, TaskState *b) {
     return a->id < b->id;
@@ -72,6 +72,13 @@ struct WorkerState : private boost::noncopyable {
   double total_runtime;
 
   bool checkpointing;
+
+  // Order by number of pending tasks and last update time.
+  static bool PendingCompare(WorkerState *a, WorkerState* b) {
+    return (a->num_pending() < b->num_pending()) ||
+           (a->num_pending() == b->num_pending() &&
+            a->last_ping_time < b->last_ping_time);
+  }
 
   bool alive() const {
     return dead_workers.find(id) == dead_workers.end();
@@ -366,9 +373,11 @@ WorkerState* Master::worker_for_shard(int table, int shard) {
 
 WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* ws = worker_for_shard(table, shard);
+  int64_t work_size = tables_[table][shard].entries();
+
   if (ws) {
 //    LOG(INFO) << "Worker for shard: " << MP(table, shard, ws->id);
-    ws->assign_task(new TaskState(Taskid(table, shard)));
+    ws->assign_task(new TaskState(Taskid(table, shard), work_size));
     return ws;
   }
 
@@ -390,7 +399,7 @@ WorkerState* Master::assign_worker(int table, int shard) {
 
   VLOG(1) << "Assigning " << MP(table, shard) << " to " << best->id;
   best->assign_shard(shard, true);
-  best->assign_task(new TaskState(Taskid(table, shard)));
+  best->assign_task(new TaskState(Taskid(table, shard), work_size));
   return best;
 }
 
@@ -423,25 +432,18 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
   }
 
   // Find the worker with the largest number of queued tasks.
-  int busy_worker = -1;
-  int slowest = 0;
-  for (int i = 0; i < workers_.size(); ++i) {
-    const WorkerState &w = *workers_[i];
-    if (w.num_pending() > slowest) {
-      busy_worker = i;
-      slowest = w.num_pending();
-    }
+  WorkerState& src = **min_element(workers_.begin(), workers_.end(), &WorkerState::PendingCompare);
+  if (src.num_pending() == 0) {
+    return;
   }
 
-  if (busy_worker == -1) { return; }
-
-  WorkerState& src = *workers_[busy_worker];
   vector<TaskState*> pending = src.pending();
 
   TaskState *task = *max_element(pending.begin(), pending.end(), TaskState::WeightCompare);
   const Taskid& tid = task->id;
 
-  LOG(INFO) << "Worker " << idle_worker << " is stealing task " << tid.shard << " from " << busy_worker;
+  LOG(INFO) << "Worker " << idle_worker << " is stealing task "
+            << MP(tid.shard, task->size) << " from worker " << src.id;
   dst.assign_shard(tid.shard, true);
   src.assign_shard(tid.shard, false);
 
