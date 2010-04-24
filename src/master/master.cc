@@ -431,8 +431,8 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
     return;
   }
 
-  // Find the worker with the largest number of queued tasks.
-  WorkerState& src = **min_element(workers_.begin(), workers_.end(), &WorkerState::PendingCompare);
+  // Find the worker with the largest number of pending tasks.
+  WorkerState& src = **max_element(workers_.begin(), workers_.end(), &WorkerState::PendingCompare);
   if (src.num_pending() == 0) {
     return;
   }

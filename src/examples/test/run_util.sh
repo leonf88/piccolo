@@ -8,7 +8,7 @@ MACHINES=$(awk '{print $1}' mpi_hostfile | sort | uniq | wc -l)
 echo "Running with $MACHINES machines, $NUM_CORES cores"
 
 RESULTS_DIR=results/
-PARALLELISM="71 36 18 10"
+PARALLELISM="71"
 #PARALLELISM="6 12 24 48"
 #strace -c -f -o results/trace.$n.\$BASHPID 
 
