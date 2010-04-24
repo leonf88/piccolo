@@ -5,7 +5,11 @@ DEFINE_int64(particles, 1000000, "");
 
 using namespace dsm;
 
+// Each box is 64*64*64
 static const int kEdgeSize = 64;
+
+// A partition is 8*8*8 boxes.
+static const int kPartitionSize = 8;
 
 struct pos {
   double x, y, z;
@@ -22,7 +26,21 @@ struct pos {
   pos get_bucket() {
 
   }
+
+  pos operator/(double d) { return pos::Create(x / d, y / d, z / d); }
+  double magnitude_squared() { return x * x + y * y + z * z; }
+  double magnitude() { return sqrt(magnitude_squared()); }
 };
+
+#define POS_OP(op)\
+  pos operator op (const pos& a, const pos& b) {\
+    return pos::Create(a.x op b.x, a.y op b.y, a.z op b.z);\
+  }
+
+POS_OP(-)
+POS_OP(+)
+#undef POS_OP
+
 
 static bool operator==(const pos& a, const pos& b) {
   return memcmp(&a, &b, sizeof(pos)) == 0;
@@ -51,29 +69,34 @@ public:
     }
   }
 
-  void update_particle(pos bucket, pos particle) {
+  pos compute_force(pos p1, pos p2) {
+    return (p1 - p2) / (p1 - p2).magnitude_squared();
+  }
+
+  void compute_pos(pos bucket, pos particle) {
     // iterate over points in the surrounding boxes, and compute a
     // new position.
     for (int dx = -1; dx <= 1; ++dx) {
       for (int dy = -1; dy <= 1; ++dy) {
         for (int dz = -1; dz <= 1; ++dz) {
-//          pos bk = bucket;
-//          bk.x = (bk.x + dx) % kEdgeSize;
-//          bk.y = (bk.y + dy) % kEdgeSize;
-//          bk.z = (bk.z + dz) % kEdgeSize;
-//          const string& b = curr->get(bk);
+          pos bk = bucket;
+          bk.x = (bk.x + dx);
+          bk.y = (bk.y + dy);
+          bk.z = (bk.z + dz);
+          const string& b = curr->get(bk);
         }
       }
     }
   }
 
   void SimulateRound() {
+    // Iterate over each bucket in this partition.
     TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
     while (!it->done()) {
       const pos& bucket_pos = it->key();
       const pos* points = (pos*)it->value().data();
       for (int i = 0; i < it->value().size() / sizeof(pos); ++i) {
-        update_particle(bucket_pos, points[i]);
+        compute_pos(bucket_pos, points[i]);
       }
       it->Next();
     }
