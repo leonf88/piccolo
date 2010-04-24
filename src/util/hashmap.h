@@ -110,7 +110,6 @@ private:
   int bucket_for_key(const K& k) {
     int start = bucket_idx(k);
     int b = start;
-    int i = 1;
 
     do {
       if (buckets_[b].in_use) {
@@ -239,7 +238,6 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   int start = bucket_idx(k);
   int b = start;
 
-  int i = 1;
   do {
     if (!buckets_[b].in_use || buckets_[b].k == k) {
       break;
