@@ -8,6 +8,7 @@
 namespace dsm {
 
 class WorkerState;
+class TaskState;
 
 class ParamMap {
 public:
@@ -115,26 +116,7 @@ private:
   // Used for interval checkpointing.
   double last_checkpoint_;
 
-  enum TaskStatus {
-    ASSIGNED  = 0,
-    WORKING   = 1,
-    FINISHED  = 2
-  };
-
-  struct Task {
-    Task() { table = shard = 0; }
-    Task(int t, int sh) : table(t), shard(sh), status(ASSIGNED) {}
-    int table;
-    int shard;
-    int status;
-  };
-
-  typedef pair<int, int> Taskid;
-  typedef map<Taskid, Task*> TaskMap;
-  typedef map<Taskid, bool> ShardMap;
   typedef map<int, map<int, ShardInfo> > TableInfo;
-
-  friend class WorkerState;
 
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -155,10 +137,6 @@ private:
 
   typedef map<string, MethodStats> MethodStatsMap;
   MethodStatsMap method_stats_;
-
-  // The list of tasks that have been stolen already, to avoid
-  // moving things too often.
-  set<Taskid> stolen_;
 };
 
 #define RUN_ONE(m, klass, method, table)\
