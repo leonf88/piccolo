@@ -14,15 +14,6 @@ class HashPut;
 static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
 static int ModSharding(const int& key, int shards) { return key % shards; }
 static int UintModSharding(const uint32_t& key, int shards) { return key % shards; }
-
-template <class V>
-struct Accumulator {
-  static void min(V* a, const V& b) { *a = std::min(*a, b); }
-  static void max(V* a, const V& b) { *a = std::max(*a, b); }
-  static void sum(V* a, const V& b) { *a = *a + b; }
-  static void replace(V* a, const V& b) { *a = b; }
-};
-
 class Worker;
 
 struct TableDescriptor {
