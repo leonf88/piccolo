@@ -77,7 +77,7 @@ struct WorkerState : private boost::noncopyable {
   static bool PendingCompare(WorkerState *a, WorkerState* b) {
     return (a->num_pending() < b->num_pending()) ||
            (a->num_pending() == b->num_pending() &&
-            a->last_ping_time < b->last_ping_time);
+            a->last_ping_time > b->last_ping_time);
   }
 
   bool alive() const {
@@ -609,4 +609,17 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
 
+static void TestTaskSort() {
+  vector<TaskState*> t;
+  for (int i = 0; i < 100; ++i) {
+    t.push_back(new TaskState(Taskid(0, i), rand()));
+  }
+
+  sort(t.begin(), t.end(), &TaskState::WeightCompare);
+  for (int i = 1; i < 100; ++i) {
+    CHECK_LE(t[i-1]->size, t[i]->size);
+  }
+}
+
+REGISTER_TEST(TaskSort, TestTaskSort());
 }

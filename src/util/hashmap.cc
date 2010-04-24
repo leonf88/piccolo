@@ -9,7 +9,7 @@ using namespace dsm;
 
 int optimizer_hack;
 
-DEFINE_int32(test_table_size, 1000000, "");
+DEFINE_int32(test_table_size, 100000, "");
 #define TEST_PERF(name, op)\
 {\
   Timer t;\
@@ -39,6 +39,18 @@ static void TestHashMapSpeed() {
 
   optimizer_hack = 0;
   TEST_PERF(ArrayPut, optimizer_hack += array_test[data::hash<int>(i) % FLAGS_test_table_size]);
+
+
+  h.clear();
+  for (int i = 0; i < FLAGS_test_table_size; ++i) {
+    h.put(i, i);
+    h.accumulate(-1, 1, &Accumulator<double>::sum);
+  }
+
+  for (int i = 0; i < FLAGS_test_table_size; ++i) {
+    CHECK_EQ(h.get(i), i);
+  }
+  CHECK_EQ(h.get(-1), FLAGS_test_table_size);
 }
 
 REGISTER_TEST(HashMapSpeed, TestHashMapSpeed());
