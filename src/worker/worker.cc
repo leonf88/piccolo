@@ -317,7 +317,7 @@ void Worker::KernelLoop() {
       d = helper->create();
       kernels_[id] = d;
       d->initialize_internal(this, k.table(), k.shard());
-      d->Init();
+      d->InitKernel();
     }
 
     if (MPI::COMM_WORLD.Get_rank() == 1 && FLAGS_sleep_hack > 0) {
