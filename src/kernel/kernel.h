@@ -16,7 +16,7 @@ class Worker;
 class DSMKernel {
 public:
   // Called upon creation of this kernel.
-  virtual void Init() {}
+  virtual void InitKernel() {}
 
   // Called before worker begins writing checkpoint data for the table
   // this kernel is working on.  Values stored in 'params' will be made
