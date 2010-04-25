@@ -93,9 +93,9 @@ int GlobalTable::get_owner(int shard) {
 }
 
 bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
-  if (get_cache_[shard]->contains_str(k)) {
-    return true;//get_cache_[shard]
-  }
+//  if (get_cache_[shard]->contains_str(k)) {
+//    return true;
+//  }
   HashGet req;
   HashPut resp;
 
