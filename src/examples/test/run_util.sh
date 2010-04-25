@@ -44,6 +44,11 @@ function run_command() {
 	              LD_LIBRARY_PATH=/home/power/share/lib \
 	              bin/$BUILD_TYPE/examples/example-dsm \
 	        			--runner=$runner \
-	        			$2 $3 $4 $5 $6 $7 " 2> $RESULTS_DIR/$runner.n_$n
+	        			$2 $3 $4 $5 $6 $7 " 2>&1 |
+      while read line 
+      do
+        echo $line
+        echo $line >> $RESULTS_DIR/$runner.n_$n
+      done
   done
 }

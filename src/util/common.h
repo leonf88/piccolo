@@ -276,12 +276,21 @@ struct tuple3 {
   A a_; B b_; C c_;
   tuple3(const A& a, const B& b, const C& c) : a_(a), b_(b), c_(c) {}
 };
+
+template <class A, class B, class C, class D>
+struct tuple4 {
+  A a_; B b_; C c_; D d_;
+  tuple4(const A& a, const B& b, const C& c, const D& d) : a_(a), b_(b), c_(c), d_(d) {}
+};
+
 template<class A, class B>
 inline pair<A, B> MP(A x, B y) { return pair<A, B>(x, y); }
 
 template<class A, class B, class C>
 inline tuple3<A, B, C> MP(A x, B y, C z) { return tuple3<A, B, C>(x, y, z); }
 
+template<class A, class B, class C, class D>
+inline tuple4<A, B, C, D> MP(A x, B y, C z, D a) { return tuple4<A, B, C, D>(x, y, z, a); }
 }
 
 template<class A>
@@ -347,6 +356,12 @@ static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
 template <class A, class B, class C>
 static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
   out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
+  return out;
+}
+
+template <class A, class B, class C, class D>
+static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
+  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << "," << p.d_ << ")";
   return out;
 }
 }
