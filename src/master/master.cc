@@ -390,6 +390,8 @@ WorkerState* Master::assign_worker(int table, int shard) {
     }
   }
 
+  CHECK(best != NULL) << "Ran out of workers!  Increase the number of partitions per worker!";
+
 //  LOG(INFO) << "Assigned " << MP(table, shard, best->id);
   CHECK(best->alive());
 
