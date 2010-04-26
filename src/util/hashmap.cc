@@ -20,7 +20,14 @@ DEFINE_int32(test_table_size, 100000, "");
           #op, FLAGS_test_table_size, t.elapsed(), t.rate(FLAGS_test_table_size), t.cycle_rate(FLAGS_test_table_size));\
 }
 
-static void TestHashMapSpeed() {
+static void TestHashMap() {
+  {
+    HashMap<int, int> h(1);
+    h.put(1, 1);
+    h.put(2, 2);
+    CHECK_EQ(h.get(1), 1);
+    CHECK_EQ(h.get(2), 2);
+  }
   HashMap<int, double> h(FLAGS_test_table_size * 2);
   unordered_map<int, double> umap(FLAGS_test_table_size * 2);
   vector<double> array_test(FLAGS_test_table_size * 2);
@@ -53,4 +60,4 @@ static void TestHashMapSpeed() {
   CHECK_EQ(h.get(-1), FLAGS_test_table_size);
 }
 
-REGISTER_TEST(HashMapSpeed, TestHashMapSpeed());
+REGISTER_TEST(HashMap, TestHashMap());

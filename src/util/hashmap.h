@@ -247,20 +247,24 @@ template <class K, class V>
 V& HashMap<K, V>::put(const K& k, const V& v) {
   int start = bucket_idx(k);
   int b = start;
-
+  bool found = false;
   do {
-    if (!buckets_[b].in_use || buckets_[b].k == k) {
+    if (!buckets_[b].in_use) {
       break;
     }
 
-//    b = (b + i * i + i) % size_;
-//    ++i;
+    if (buckets_[b].k == k) {
+      found = true;
+      break;
+    }
+
     b = (b + 1) % size_;
   } while(b != start);
 
-  if (!buckets_[b].in_use) {
+  // Inserting a new entry:
+  if (!found) {
     if (entries_ > size_ * kLoadFactor) {
-      rehash((int)(size_ / kLoadFactor));
+      rehash((int)(1 + size_ / kLoadFactor));
       put(k, v);
     } else {
       buckets_[b].in_use = 1;
@@ -269,6 +273,7 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
       ++entries_;
     }
   } else {
+    // Replacing an existing entry
     buckets_[b].v = v;
   }
 
