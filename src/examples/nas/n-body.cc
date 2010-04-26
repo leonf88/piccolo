@@ -14,7 +14,7 @@ static const int kBoxSize = (int)ceil(kCutoffRadius);
 static const int kPartitionSize = 4;
 
 // World is a cube of boxes.
-static const int kWorldSize = 16;
+static const int kWorldSize = 20;
 
 static const int kNumPartitions = kWorldSize / (kPartitionSize * kBoxSize);
 
@@ -130,7 +130,7 @@ public:
     for (int dx = 0; dx < kPartitionSize; ++dx) {
       for (int dy = 0; dy < kPartitionSize; ++dy) {
         for (int dz = 0; dz < kPartitionSize; ++dz) {
-          int num_points = max(1, int(FLAGS_particles / pow(kBoxSize, 3) / pow(kPartitionSize, 3)));
+          int num_points = max(1, int(FLAGS_particles / pow(kWorldSize, 3)));
           pos b = ul + pos(dx, dy, dz) * kBoxSize;
           for (int i = 0; i < num_points; ++i) {
             pos pt = b + pos(rand_double() * kBoxSize, 
@@ -164,51 +164,58 @@ public:
     // iterate over points in the surrounding boxes, and compute a
     // new position.
 
+    string neighbors;
+    for (int dx = -1; dx <= 1; ++dx) {
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dz = -1; dz <= 1; ++dz) {
+          pos bk = box + pos(dx, dy, dz);
+          bk = bk.get_box();
+          if (bk.out_of_bounds()) {
+            continue;
+          }
+
+//          LOG_EVERY_N(INFO, 1000)
+//            << "Fetched: " << MP(dx, dy, dz) << " : " << bk;
+
+          neighbors += curr->get(bk);
+        }
+      }
+    }
+
     for (int i = 0; i < count; ++i) {
       pos a = points[i];
       pos a_force = kZero;
-      for (int dx = -1; dx <= 1; ++dx) {
-        for (int dy = -1; dy <= 1; ++dy) {
-          for (int dz = -1; dz <= 1; ++dz) {
-            pos bk = box + pos(dx, dy, dz);
-            bk = bk.get_box();
-            if (bk.out_of_bounds()) {
-              continue; 
-            }
 
-            string pstring = curr->get(bk);
-            const pos* pb = (pos*)pstring.data();
-            
-            //LOG(INFO) << "Fetched: " << bk << " size: " << pstring.size() / sizeof(pos);
-
-            for (int j = 0; j < pstring.size() / sizeof(pos); ++j) {
-              const pos& b = pb[j];
-              a_force += compute_force(a, b);
-            }
-          }
-        }
+      const pos* pb = (pos*) neighbors.data();
+      for (int j = 0; j < neighbors.size() / sizeof(pos); ++j) {
+        const pos& b = pb[j];
+        a_force += compute_force(a, b);
       }
 
       a = a + (a_force * kTimestep);
-      next->update(a.get_box(), string((char*)&a, sizeof(pos)));
+      next->update(a.get_box(), string((char*) &a, sizeof(pos)));
     }
   }
 
   void Simulate() {
     // Iterate over each box in this partition.
     TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
-    while (!it->done()) {
+//    int total = curr->get_partition(current_shard())->size();
+
+    for (int count = 0; !it->done(); ++count) {
       interaction_count = 0;
       const pos& box_pos = it->key();
       const pos* points = (pos*)it->value().data();
       compute_update(box_pos, points, it->value().size() / sizeof(pos));
-//      LOG(INFO) << "Scanned: " << box_pos
+//      LOG(INFO) << "Scanned: " << count << " of " << total
 //                << " local points: " << it->value().size() / sizeof(pos)
 //                << " interactions: " << interaction_count;
       it->Next();
     }
     delete it;
+  }
 
+  void Swap() {
     curr->clear(current_shard());
     swap(curr, next);
   }
@@ -218,6 +225,7 @@ public:
 REGISTER_KERNEL(NBodyKernel);
 REGISTER_METHOD(NBodyKernel, CreatePoints);
 REGISTER_METHOD(NBodyKernel, Simulate);
+REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
   conf.set_slots(256);
