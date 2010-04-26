@@ -84,19 +84,11 @@ int MatrixMultiplication(ConfigData& conf) {
   matrix_b = Registry::create_table<int, Block>(1, conf.num_workers(), &ModSharding, &block_sum);
   matrix_c = Registry::create_table<int, Block>(2, conf.num_workers(), &ModSharding, &block_sum);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
-    Master m(conf);
+  StartWorker(conf);
+  Master m(conf);
 
-    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", 0));
-    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", 0));
-  } else {
-    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
-    Worker w(conf);
-    w.Run();
-
-    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
-  }
-
+  m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", 0));
+  m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", 0));
   return 0;
 }
 REGISTER_RUNNER(MatrixMultiplication);

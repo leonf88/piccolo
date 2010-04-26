@@ -630,4 +630,14 @@ void Worker::CheckForMasterUpdates() {
   }
 }
 
+bool StartWorker(const ConfigData& conf) {
+  if (MPI::COMM_WORLD.Get_rank() == 0)
+    return false;
+
+  Worker w(conf);
+  w.Run();
+  LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
+  exit(0);
+}
+
 } // end namespace

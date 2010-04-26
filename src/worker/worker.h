@@ -14,6 +14,10 @@ using boost::shared_ptr;
 
 namespace dsm {
 
+// If this node is the master, return false immediately.  Otherwise
+// start a worker and exit when the computation is finished.
+bool StartWorker(const ConfigData& conf);
+
 class Worker : private boost::noncopyable {
 struct Stub;
 public:
