@@ -38,7 +38,9 @@ private:
 
 
 RPCHelper* get_rpc_helper() {
-  return new MPIHelper();
+  static RPCHelper* helper = NULL;
+  if (!helper) { helper = new MPIHelper(); }
+  return helper;
 }
 
 #define rpc_log(logmsg, src, target, method) VLOG_IF(2, FLAGS_rpc_log) << StringPrintf("source %d target: %d rpc: %d %s", src, target, method, string((logmsg)).c_str());
