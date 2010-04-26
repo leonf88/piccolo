@@ -7,14 +7,25 @@ MAKE := $(MAKE) --no-print-directory
 
 all: release debug
 
-release:
-	mkdir -p bin/release
-	cd bin/release && $(CMAKE) -DCMAKE_BUILD_TYPE=Release ../../src && $(MAKE) example-dsm
+bin/release/Makefile:
+	@mkdir -p bin/release
+	@cd bin/release && $(CMAKE) -DCMAKE_BUILD_TYPE=Release ../../src
+	
+bin/debug/Makefile:
+	@mkdir -p bin/debug
+	@cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug ../../src
 
-debug:
-	mkdir -p bin/debug
-	cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug ../../src && $(MAKE) example-dsm
+
+release: bin/release/Makefile
+	@cd bin/release && $(MAKE) example-dsm
+
+debug: bin/debug/Makefile
+	@cd bin/debug  && $(MAKE) example-dsm
 
 clean:
 	rm -rf bin/*
 
+.DEFAULT: bin/debug/Makefile bin/release/Makefile
+	@cd bin/release && $(MAKE) $@
+	@cd bin/debug && $(MAKE) $@
+	

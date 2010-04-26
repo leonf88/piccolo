@@ -81,7 +81,7 @@ public:
 
   NetworkThread(RPCHelper* rpc) {
     rpc_ = rpc;
-    world_ = rpc->world();
+    world_ = &MPI::COMM_WORLD;
     running = 1;
   }
 
@@ -221,8 +221,6 @@ Worker::Worker(const ConfigData &c) {
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
-  world_ = MPI::COMM_WORLD;
-
   num_peers_ = config_.num_workers();
   peers_.resize(num_peers_);
   for (int i = 0; i < num_peers_; ++i) {
@@ -237,7 +235,7 @@ Worker::Worker(const ConfigData &c) {
     i->second->set_worker(this);
   }
 
-  the_network = new NetworkThread(new RPCHelper(&world_));
+  the_network = new NetworkThread(get_rpc_helper());
 }
 
 int Worker::peer_for_shard(int table, int shard) const {

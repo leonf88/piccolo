@@ -6,42 +6,35 @@
 #include <boost/thread.hpp>
 #include <google/protobuf/message.h>
 #include <mpi.h>
+
 namespace dsm {
 
 typedef google::protobuf::Message Message;
 
-class RPCHelper : private boost::noncopyable {
+class RPCHelper {
 public:
-  RPCHelper(MPI::Comm *mpi) :
-    mpi_world_(mpi), my_rank_(mpi->Get_rank()) {
-  }
-
-  // Try to read a message from the given peer and rpc channel; return false if no
+  // Try to read a message from the given peer and rpc channel = 0; return false if no
   // message is immediately available.
-  bool TryRead(int target, int method, Message *msg);
-  bool HasData(int target, int method);
-  bool HasData(int target, int method, MPI::Status &status);
+  virtual bool TryRead(int target, int method, Message *msg) = 0;
+  virtual bool HasData(int target, int method) = 0;
+  virtual bool HasData(int target, int method, MPI::Status &status) = 0;
 
-  int Read(int src, int method, Message *msg);
-  int ReadAny(int *src, int method, Message *msg);
-  void Send(int target, int method, const Message &msg);
-  void SyncSend(int target, int method, const Message &msg);
+  virtual int Read(int src, int method, Message *msg) = 0;
+  virtual int ReadAny(int *src, int method, Message *msg) = 0;
+  virtual void Send(int target, int method, const Message &msg) = 0;
+  virtual void SyncSend(int target, int method, const Message &msg) = 0;
 
-  void SendData(int peer_id, int rpc_id, const string& data);
-  MPI::Request ISendData(int peer_id, int rpc_id, const string& data);
+  virtual void SendData(int peer_id, int rpc_id, const string& data) = 0;
+  virtual MPI::Request ISendData(int peer_id, int rpc_id, const string& data) = 0;
 
   // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
   // here.
-  void Broadcast(int method, const Message &msg);
-  void SyncBroadcast(int method, const Message &msg);
-
-  MPI::Comm *world() { return mpi_world_; }
-private:
-  boost::recursive_mutex mpi_lock_;
-
-  MPI::Comm *mpi_world_;
-  int my_rank_;
+  virtual void Broadcast(int method, const Message &msg) = 0;
+  virtual void SyncBroadcast(int method, const Message &msg) = 0;
 };
+
+RPCHelper *get_rpc_helper();
+
 }
 
 #endif // UTIL_RPC_H

@@ -63,8 +63,6 @@ private:
   mutable boost::recursive_mutex state_lock_;
   boost::thread *table_thread_, *kernel_thread_;
 
-  MPI::Intracomm world_;
-
   // The current epoch this worker is running within.
   int epoch_;
 
