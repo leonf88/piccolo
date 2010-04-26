@@ -11,10 +11,10 @@ static const double kTimestep = 1e-6;
 static const int kBoxSize = (int)ceil(kCutoffRadius);
 
 // A partition is 8*8*8 boxes.
-static const int kPartitionSize = 1;
+static const int kPartitionSize = 4;
 
 // World is a cube of boxes.
-static const int kWorldSize = 1;
+static const int kWorldSize = 16;
 
 static const int kNumPartitions = kWorldSize / (kPartitionSize * kBoxSize);
 
@@ -22,10 +22,10 @@ struct pos {
   double x, y, z;
 
   pos() : x(0), y(0), z(0) {}
-  pos(double x, double y, double z) : x(x), y(y), z(z) {}
+  pos(double nx, double ny, double nz) : x(nx), y(ny), z(nz) {}
   pos(const pos& b) : x(b.x), y(b.y), z(b.z) {}
 
-  // Find the partition corresponding to this box.
+  // Find the partition corresponding to this point
   static int shard_for_pos(const pos& p) {
     const pos& grid = p.get_box() / kPartitionSize;
     return int(grid.z) * kNumPartitions * kNumPartitions +
@@ -41,14 +41,11 @@ struct pos {
     return pos(x, y, z) * kPartitionSize;
   }
 
-  static int hash(const pos& p) {
-    const pos& grid = p.get_box();
-    return grid.z * kWorldSize * kWorldSize +
-           grid.y * kWorldSize +
-           grid.x;
+  uint32_t hash() const {
+    return uint32_t(z * kWorldSize * kWorldSize) +
+           uint32_t(y * kWorldSize) +
+           uint32_t(x);
   }
-
-  static int sharding(const pos& p, int shards) { return shard_for_pos(p); }
 
   // Return the upper left corner of the box containing this position.
   pos get_box() const {
@@ -57,16 +54,21 @@ struct pos {
                int(z / kBoxSize) * kBoxSize);
   }
 
-  void clip() {
-    if (x < 0) { x = kWorldSize + x; }
-    if (y < 0) { y = kWorldSize + y; }
-    if (z < 0) { z = kWorldSize + z; }
-    if (x > kWorldSize) { x -= kWorldSize; } 
-    if (y > kWorldSize) { y -= kWorldSize; } 
-    if (z > kWorldSize) { z -= kWorldSize; } 
+  bool out_of_bounds() {
+    return x < 0 || y < 0 || z < 0 || 
+           x >= kWorldSize || 
+           y >= kWorldSize ||
+           z >= kWorldSize;
   }
 
-  bool operator==(const pos& b) const { return x == b.x && y == b.y && z == b.z; }
+  bool operator==(const pos& b) const {
+    return x == b.x && y == b.y && z == b.z;
+  }
+
+  bool operator!=(const pos& b) const {
+    return !(*this == b);
+  }
+
   pos operator*(double d) { return pos(x * d, y * d, z * d); }
   pos operator/(double d) { return pos(x / d, y / d, z / d); }
   pos& operator+= (const pos& b) { x += b.x; y += b.y; z += b.z; return *this; }
@@ -77,16 +79,19 @@ struct pos {
 
   double magnitude_squared() { return x * x + y * y + z * z; }
   double magnitude() { return sqrt(magnitude_squared()); }
-
-  tuple4<int, double, double, double> as_tuple() { return MP(shard_for_pos(*this), x,y,z); }
 };
 
-static pos kZero(0, 0, 0);
-
+namespace std {
+static ostream & operator<< (ostream &out, const pos& p) {
+  out << MP(p.x, p.y, p.z);
+  return out;
+}
+}
+  
 namespace dsm { namespace data {
 template <>
 uint32_t hash(pos p) {
-  return pos::hash(p);
+  return p.hash();
 }
 
 template <>
@@ -101,6 +106,12 @@ void unmarshal(const StringPiece& s, pos* t) {
 
 } }
 
+static int sharding(const pos& p, int shards) { 
+  return pos::shard_for_pos(p); 
+}
+
+static pos kZero(0, 0, 0);
+
 static void append_merge(string* a, const string& b) {
   a->append(b);
 }
@@ -110,27 +121,42 @@ public:
   TypedGlobalTable<pos, string> *curr;
   TypedGlobalTable<pos, string> *next;
 
-  void Init() {
+  void CreatePoints() {
     curr = this->get_table<pos, string>(0);
     next = this->get_table<pos, string>(1);
     pos ul = pos::pos_for_shard(current_shard());
-
-    // Create randomly distributed particles inside of this shard.
-    for (int i = 0; i < FLAGS_particles / curr->num_shards(); ++i) {
-      pos pt = ul + pos(rand_double() * kBoxSize * kPartitionSize, 
-                        rand_double() * kBoxSize * kPartitionSize, 
-                        rand_double() * kBoxSize * kPartitionSize);
-
-      LOG_EVERY_N(INFO, 10000) << "Creating: " << pt.as_tuple();
-      curr->update(pt.get_box(), string((char*)&pt, sizeof(pt)));
+    
+    // Create randomly distributed particles for each box inside of this shard
+    for (int dx = 0; dx < kPartitionSize; ++dx) {
+      for (int dy = 0; dy < kPartitionSize; ++dy) {
+        for (int dz = 0; dz < kPartitionSize; ++dz) {
+          int num_points = max(1, int(FLAGS_particles / pow(kBoxSize, 3) / pow(kPartitionSize, 3)));
+          pos b = ul + pos(dx, dy, dz) * kBoxSize;
+          for (int i = 0; i < num_points; ++i) {
+            pos pt = b + pos(rand_double() * kBoxSize, 
+                             rand_double() * kBoxSize, 
+                             rand_double() * kBoxSize);
+            
+            curr->update(pt.get_box(), string((char*)&pt, sizeof(pt)));
+//            LOG(INFO) << "Adding: " << pt << " ; " << pt.get_box();
+//            LOG(INFO) << "Created " <<
+//                      curr->get(pt.get_box()).size() / sizeof(pos) << " at " << b;
+          }
+        }
+      }
     }
   }
 
   pos compute_force(pos p1, pos p2) {
-    LOG(INFO) << "COMPUTING::: " << p1.as_tuple() << " : " << p2.as_tuple();
     double dist = (p1 - p2).magnitude_squared();
     if (dist > kCutoffRadius) { return kZero; }
     if (dist < 1e-8) { return kZero; }
+
+    ++interaction_count;
+    
+//    LOG(INFO) << "COMPUTING::: " 
+//              << p1 << " : " << p2 
+//              << " ;; " << dist;
     return (p1 - p2) / dist;
   }
 
@@ -146,11 +172,14 @@ public:
           for (int dz = -1; dz <= 1; ++dz) {
             pos bk = box + pos(dx, dy, dz);
             bk = bk.get_box();
-            bk.clip();
+            if (bk.out_of_bounds()) {
+              continue; 
+            }
+
             string pstring = curr->get(bk);
             const pos* pb = (pos*)pstring.data();
             
-            LOG(INFO) << "Fetched: " << bk.as_tuple() << " size: " << pstring.size() / sizeof(pos);
+            //LOG(INFO) << "Fetched: " << bk << " size: " << pstring.size() / sizeof(pos);
 
             for (int j = 0; j < pstring.size() / sizeof(pos); ++j) {
               const pos& b = pb[j];
@@ -169,9 +198,13 @@ public:
     // Iterate over each box in this partition.
     TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
     while (!it->done()) {
+      interaction_count = 0;
       const pos& box_pos = it->key();
       const pos* points = (pos*)it->value().data();
       compute_update(box_pos, points, it->value().size() / sizeof(pos));
+//      LOG(INFO) << "Scanned: " << box_pos
+//                << " local points: " << it->value().size() / sizeof(pos)
+//                << " interactions: " << interaction_count;
       it->Next();
     }
     delete it;
@@ -179,23 +212,25 @@ public:
     curr->clear(current_shard());
     swap(curr, next);
   }
+
+  int interaction_count;
 };
 REGISTER_KERNEL(NBodyKernel);
-REGISTER_METHOD(NBodyKernel, Init);
+REGISTER_METHOD(NBodyKernel, CreatePoints);
 REGISTER_METHOD(NBodyKernel, Simulate);
 
 int NBody(ConfigData& conf) {
   conf.set_slots(256);
   Registry::create_table<pos, string>(0, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      &pos::sharding, &append_merge);
+                                      &sharding, &append_merge);
   
   Registry::create_table<pos, string>(1, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      &pos::sharding, &append_merge);
+                                      &sharding, &append_merge);
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    RUN_ALL(m, NBodyKernel, Init, 0);
-    for (int i = 0; i < 100; ++i) {
+    RUN_ALL(m, NBodyKernel, CreatePoints, 0);
+    for (int i = 0; i < FLAGS_iterations; ++i) {
       RUN_ALL(m, NBodyKernel, Simulate, 0);
     }
   } else {
@@ -213,11 +248,25 @@ static void TestPos() {
     int shard = pos::shard_for_pos(p);
     pos ps = pos::pos_for_shard(shard);
     int shard2 = pos::shard_for_pos(ps);
-    CHECK_EQ(shard, 
+    CHECK_EQ(shard,
              (i / kPartitionSize) * kNumPartitions * kNumPartitions +
              (i / kPartitionSize) * kNumPartitions +
              (i / kPartitionSize));
-    CHECK_EQ(shard, shard2) << p.as_tuple() << " : " << ps.as_tuple();
+    CHECK_EQ(shard, shard2) << p << " : " << ps;
+
+    pos pb(i + 0.1, i + 0.1, i + 0.1);
+    CHECK_EQ(pos::shard_for_pos(pb), pos::shard_for_pos(p));
+    CHECK_EQ(pb.get_box(), p);
+    CHECK_EQ(pb.get_box(), p.get_box());
+  }
+
+  HashMap<pos, int> t(1000);
+  for (int i = 0; i < 100; ++i) {
+    t.put(pos(0, 0, i + 0.5), i);
+  }
+
+  for (int i = 0; i < 100; ++i) {
+   CHECK_EQ(t.get(pos(0, 0, i + 0.5)), i);
   }
 }
 REGISTER_TEST(TestPos, TestPos());

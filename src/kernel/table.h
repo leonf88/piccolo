@@ -285,7 +285,8 @@ public:
   void put(const K &k, const V &v) { data_[k] = v; }
 
   void update(const K &k, const V &v) {
-    ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function)(&data_[k], v);
+    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
+//    (&data_[k], v);
   }
 
   void remove(const K &k) { data_.erase(data_.find(k)); }

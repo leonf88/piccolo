@@ -36,6 +36,13 @@ bool operator==(const PageId& a, const PageId& b) {
   return a.site == b.site && a.page == b.page;
 }
 
+namespace std {
+static ostream & operator<< (ostream &out, const PageId& p) {
+  out << MP(p.site, p.page);
+  return out;
+}
+}
+
 namespace dsm { namespace data {
 template<>
   uint32_t hash(PageId p) {

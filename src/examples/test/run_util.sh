@@ -18,8 +18,10 @@ function run_command() {
   runner=$1
   
   for n in $PARALLELISM; do 
-      #pdsh -g muppets -f 100 -l root 'echo 3 > /proc/sys/vm/drop_caches'
-      pdsh -g muppets -f 100 'pkill -9 -f example-dsm' 
+  	  echo "Wiping cache..."
+      #pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'
+      echo "Killing existing workers..."
+      pdsh -f 100 -g muppets 'pkill -9 example-dsm || true' 
       echo > $RESULTS_DIR/$runner.n_$n
       echo "$runner :: $n"
       IFS=$(echo -e '\n')
