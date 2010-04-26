@@ -121,6 +121,8 @@ public:
   TypedGlobalTable<pos, string> *curr;
   TypedGlobalTable<pos, string> *next;
 
+  HashMap<pos, string> cache;
+
   void CreatePoints() {
     curr = this->get_table<pos, string>(0);
     next = this->get_table<pos, string>(1);
@@ -177,7 +179,13 @@ public:
 //          LOG_EVERY_N(INFO, 1000)
 //            << "Fetched: " << MP(dx, dy, dz) << " : " << bk;
 
-          neighbors += curr->get(bk);
+          if (cache.contains(bk)) {
+            neighbors += cache.get(bk);
+          } else {
+            string v = curr->get(bk);
+            neighbors += v;
+            cache.put(bk, v);
+          }
         }
       }
     }
@@ -193,11 +201,15 @@ public:
       }
 
       a = a + (a_force * kTimestep);
+      if (a.get_box().out_of_bounds()) { continue; }
+
       next->update(a.get_box(), string((char*) &a, sizeof(pos)));
     }
   }
 
   void Simulate() {
+    cache.clear();
+
     // Iterate over each box in this partition.
     TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
 //    int total = curr->get_partition(current_shard())->size();
@@ -235,19 +247,17 @@ int NBody(ConfigData& conf) {
   Registry::create_table<pos, string>(1, kNumPartitions * kNumPartitions * kNumPartitions, 
                                       &sharding, &append_merge);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     Master m(conf);
     RUN_ALL(m, NBodyKernel, CreatePoints, 0);
     for (int i = 0; i < FLAGS_iterations; ++i) {
       RUN_ALL(m, NBodyKernel, Simulate, 0);
     }
-  } else {
-    Worker w(conf);
-    w.Run();
   }
 
   return 0;
 }
+
 REGISTER_RUNNER(NBody);
 
 static void TestPos() {
