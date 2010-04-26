@@ -190,7 +190,7 @@ Master::Master(const ConfigData &conf) {
 
   CHECK_GT(world_.Get_size(), 1) << "At least one master and one worker required!";
 
-  rpc_ = new RPCHelper(&world_);
+  rpc_ = get_rpc_helper();
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(new WorkerState(i));
   }
