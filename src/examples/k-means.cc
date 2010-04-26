@@ -167,7 +167,7 @@ static int KMeans(ConfigData& conf) {
   points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
   actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     Master m(conf);
     RUN_ALL(m, KMeansKernel, initialize_world, 0);
     for (int i = 0; i < FLAGS_iterations; i++) {
@@ -176,13 +176,8 @@ static int KMeans(ConfigData& conf) {
       RUN_ALL(m, KMeansKernel, initialize_maximization, 0);
       RUN_ALL(m, KMeansKernel, compute_maximization, 0);
     }
-//    RUN_ONE(m, KMeansKernel, print_results, 0);
-  } else {
-    Worker w(conf);
-    w.Run();
-    LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
+  //    RUN_ONE(m, KMeansKernel, print_results, 0);
   }
-
   return 0;
 }
 REGISTER_RUNNER(KMeans);

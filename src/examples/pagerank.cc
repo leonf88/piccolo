@@ -198,55 +198,51 @@ int Pagerank(ConfigData& conf) {
   Registry::create_table<PageId, float>(0, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
   Registry::create_table<PageId, float>(1, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
-    Master m(conf);
-    if (FLAGS_build_graph) {
-      vector<int> shards;
-      for (int i = 0; i < conf.num_workers(); ++i) {
-        shards.push_back(i);
-      }
+  StartWorker(conf)
 
-      RUN_RANGE(m, PRKernel, BuildGraph, 0, shards);
-      return 0;
+  Master m(conf);
+  if (FLAGS_build_graph) {
+    vector<int> shards;
+    for (int i = 0; i < conf.num_workers(); ++i) {
+      shards.push_back(i);
     }
 
-    
-    int i = 0;
-    ParamMap *pmap = NULL;
+    RUN_RANGE(m, PRKernel, BuildGraph, 0, shards);
+    return 0;
+  }
 
-    if (FLAGS_checkpoint) {
-      pmap = m.restore();
-    }
 
-    if (pmap == NULL) {
-      i = 0;
-      pmap = new ParamMap;
-      RUN_ALL(m, PRKernel, Initialize, 0);
-    } else {
-      i = pmap->get_int("iteration");
-      LOG(INFO) << "Restoring pagerank at iteration: " << i;
-    }
+  int i = 0;
+  ParamMap *pmap = NULL;
 
-    for (; i < FLAGS_iterations; i++) {
-      Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", 0);
-      pmap->set_int("iteration", i);
-      if (FLAGS_checkpoint) {
-        r.checkpoint_type = CP_MASTER_CONTROLLED;
-        // We only need to save the next_pr table, which alternates each iteration.
-        r.checkpoint_tables = MakeVector((i % 2 == 0) ? 1 : 0);
-      } else {
-        r.checkpoint_type = CP_NONE;
-      }
-      r.params = pmap->to_params();
+  if (FLAGS_checkpoint) {
+    pmap = m.restore();
+  }
 
-      m.run_all(r);
-      RUN_ALL(m, PRKernel, ResetTable, 0);
-      RUN_ONE(m, PRKernel, WriteStatus, 0);
-    }
+  if (pmap == NULL) {
+    i = 0;
+    pmap = new ParamMap;
+    RUN_ALL(m, PRKernel, Initialize, 0);
   } else {
-    Worker w(conf);
-    w.Run();
-    LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
+    i = pmap->get_int("iteration");
+    LOG(INFO) << "Restoring pagerank at iteration: " << i;
+  }
+
+  for (; i < FLAGS_iterations; i++) {
+    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", 0);
+    pmap->set_int("iteration", i);
+    if (FLAGS_checkpoint) {
+      r.checkpoint_type = CP_MASTER_CONTROLLED;
+      // We only need to save the next_pr table, which alternates each iteration.
+      r.checkpoint_tables = MakeVector((i % 2 == 0) ? 1 : 0);
+    } else {
+      r.checkpoint_type = CP_NONE;
+    }
+    r.params = pmap->to_params();
+
+    m.run_all(r);
+    RUN_ALL(m, PRKernel, ResetTable, 0);
+    RUN_ONE(m, PRKernel, WriteStatus, 0);
   }
 
   return 0;

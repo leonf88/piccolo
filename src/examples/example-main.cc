@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
-  LOG(INFO) << "Running: " << FLAGS_runner;
+//  LOG(INFO) << "Running: " << FLAGS_runner;
   CHECK_NE(FLAGS_runner, "");
   Registry::get_runner(FLAGS_runner)(conf);
   LOG(INFO) << "Exiting.";

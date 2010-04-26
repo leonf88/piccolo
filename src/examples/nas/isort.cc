@@ -65,18 +65,12 @@ REGISTER_METHOD(SortKernel, Sort);
 int IntegerSort(ConfigData& conf) {
   dst = Registry::create_table<KeyType, ValueType>(0, conf.num_workers(), &UintModSharding, &BucketMerge);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     Master m(conf);
     RUN_ALL(m, SortKernel, Init, 0);
     RUN_ALL(m, SortKernel, Partition, 0);
     RUN_ALL(m, SortKernel, Sort, 0);
-  } else {
-    Worker w(conf);
-    w.Run();
-
-    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
-
   return 0;
 }
 REGISTER_RUNNER(IntegerSort);
