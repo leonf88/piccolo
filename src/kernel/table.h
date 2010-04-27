@@ -369,9 +369,10 @@ public:
     return contains(data::from_string<K>(k));
   }
 
-  const TableDescriptor& info() { return this->info_; }
-
   int get_shard(const K& k) {
+    DCHECK(this != NULL);
+    DCHECK(info().sharding_function != NULL);
+
     ShardingFunction sf = (ShardingFunction)info().sharding_function;
     int shard = sf(k, info().num_shards);
     DCHECK_GE(shard, 0);
