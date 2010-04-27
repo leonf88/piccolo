@@ -8,7 +8,6 @@ checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
 base_size=100
 shards=256
-iterations=5
 
 def cleanup(size):
   print "Removing old checkpoints..."
@@ -39,9 +38,10 @@ def run_pr(fname, size, args):
   runutil.run_command('Pagerank', 
                       n=n,
                       logfile_name=fname,
-                      build_type='debug',
-                      args=['--iterations=%s' % iterations,
+#                      build_type='debug',
+                      args=['--iterations=%s' % max(2, n/4),
                             '--sleep_time=0.001',
+#                            '--cpu_profile',
 #                            '--sleep_hack=1',
                             '--nodes=%s' % (size * 1000 * 1000),
                             '--shards=%s' % shards,

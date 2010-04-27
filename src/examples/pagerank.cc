@@ -220,7 +220,7 @@ int Pagerank(ConfigData& conf) {
   if (pmap == NULL) {
     i = 0;
     pmap = new ParamMap;
-//    RUN_ALL(m, PRKernel, Initialize, 0);
+    RUN_ALL(m, PRKernel, Initialize, 0);
   } else {
     i = pmap->get_int("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
