@@ -1,60 +1,64 @@
 #!/usr/bin/python
 
+import os
 import sys; sys.path += ['src/examples/test']
 import runutil, math
 
 checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
-graphsize=900
-shards=384
-iterations=10
-#build_type=debug
-build_type=release
+base_size=100
+shards=256
+iterations=5
 
-
-def cleanup():
+def cleanup(size):
   print "Removing old checkpoints..."
-  os.system('pdsh -f20 -g muppets mkdir -p %s/%sM' % (checkpoint_write_dir, graphsize))
-  os.system('pdsh -f20 -g muppets rm -rf %s/%sM' % (checkpoint_write_dir, graphsize))
+  os.system('pdsh -f20 -g muppets mkdir -p %s/%sM' % (checkpoint_write_dir, size))
+  os.system('pdsh -f20 -g muppets rm -rf %s/%sM' % (checkpoint_write_dir, size))
 
-def make_graph():
-  os.system(' '.join(
-                    ['~/share/bin/mpirun'
-                     '-hostfile mpi_hostfile',
-                     '-bynode',
-                     '-n %s' % (runutil.machines + 1),
-                     'bash -c "LD_LIBRARY_PATH=/home/power/share/lib',
-                     'bin/release/examples/example-dsm',
-                     '--runner=Pagerank',
-                     '--build_graph',
-                     '--nodes=%s' % (graphsize * 1000 * 1000),
-                     '--shards=%s' % shards,
-                     '--iterations=0',
-                     '--work_stealing=false',
-                     '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % graphsize]))
+def system(cmd):
+  print cmd
+  os.system(cmd)
 
-#make_graph()
+def make_graph(size):
+  system(' '.join(
+                  ['/home/power/share/bin/mpirun',
+                   '-hostfile mpi_hostfile',
+                   '-bynode',
+                   '-n %s' % (runutil.machines + 1),
+                   'bash -c "LD_LIBRARY_PATH=/home/power/share/lib',
+                   'bin/release/examples/example-dsm',
+                   '--runner=Pagerank',
+                   '--build_graph',
+                   '--nodes=%s' % (size * 1000 * 1000),
+                   '--shards=%s' % shards,
+                   '--iterations=0',
+                   '--work_stealing=false',
+                   '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % size]))
 
-def run_pr(fname, args):
+def run_pr(fname, size, args):
   runutil.run_command('Pagerank', 
                       n=n,
                       logfile_name=fname,
+                      #build_type='debug',
                       args=['--iterations=%s' % iterations,
                             '--sleep_time=0.0001',
-                            '--nodes=%s' % graphsize * 1000 * 1000,
+                            '--nodes=%s' % (size * 1000 * 1000),
                             '--shards=%s' % shards,
-                            '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, graphsize),
-                            '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, graphsize),
+                            '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
+                            '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
                             '--work_stealing=true',
-                            '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (graphsize),
+                            '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
                             ] + args)
 
 for n in runutil.parallelism:
-  cleanup()
-  run_pr('Pagerank.no_checkpoint', ['--checkpoint=false'])
+  graphsize = base_size
+  make_graph(graphsize)
+
+  cleanup(graphsize)
+  run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
   
-  cleanup()
-  run_pr('Pagerank.checkpoint', ['--checkpoint=true'])
+#  cleanup(graphsize)
+#  run_pr('Pagerank.checkpoint', graphsize, ['--checkpoint=true'])
 
 
 # test terminating job and trying to restore from checkpoint
