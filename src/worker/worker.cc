@@ -162,10 +162,14 @@ public:
   }
 
   bool check_queue(int src, int type, Message* data) {
-    boost::recursive_mutex::scoped_lock sl(q_lock[type]);
     CHECK_LT(src, kMaxHosts);
+
     Queue& q = incoming[type][src];
     if (!q.empty()) {
+      boost::recursive_mutex::scoped_lock sl(q_lock[type]);
+      if (q.empty())
+        return false;
+
       data->ParseFromString(q.front());
       q.pop_front();
       return true;
@@ -177,7 +181,6 @@ public:
   void Read(int src, int type, Message* data) {
     while (!TryRead(src, type, data)) {
       sched_yield();
-      //Sleep(FLAGS_sleep_time);
     }
   }
 
