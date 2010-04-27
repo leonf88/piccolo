@@ -251,6 +251,7 @@ int NBody(ConfigData& conf) {
     Master m(conf);
     RUN_ALL(m, NBodyKernel, CreatePoints, 0);
     for (int i = 0; i < FLAGS_iterations; ++i) {
+      LOG(INFO) << "Running iteration: " << MP(i, FLAGS_iterations);
       RUN_ALL(m, NBodyKernel, Simulate, 0);
     }
   }

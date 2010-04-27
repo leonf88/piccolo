@@ -198,7 +198,7 @@ int Pagerank(ConfigData& conf) {
   Registry::create_table<PageId, float>(0, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
   Registry::create_table<PageId, float>(1, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
 
-  StartWorker(conf)
+  StartWorker(conf);
 
   Master m(conf);
   if (FLAGS_build_graph) {
