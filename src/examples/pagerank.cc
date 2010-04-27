@@ -112,6 +112,11 @@ public:
   TypedGlobalTable<PageId, float>* curr_pr_hash;
   TypedGlobalTable<PageId, float>* next_pr_hash;
 
+  void InitKernel() {
+    curr_pr_hash = this->get_table<PageId, float>(0);
+    next_pr_hash = this->get_table<PageId, float>(1);
+  }
+
   void BuildGraph() {
     srand(0);
     for (int i = 0; i < FLAGS_shards; ++i) {
@@ -133,8 +138,6 @@ public:
   }
 
   void Initialize() {
-    curr_pr_hash = this->get_table<PageId, float>(0);
-    next_pr_hash = this->get_table<PageId, float>(1);
     iter = 0;
 
     next_pr_hash->resize((int)(2 * FLAGS_nodes));
@@ -217,7 +220,7 @@ int Pagerank(ConfigData& conf) {
   if (pmap == NULL) {
     i = 0;
     pmap = new ParamMap;
-    RUN_ALL(m, PRKernel, Initialize, 0);
+//    RUN_ALL(m, PRKernel, Initialize, 0);
   } else {
     i = pmap->get_int("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
