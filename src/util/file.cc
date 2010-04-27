@@ -212,22 +212,32 @@ bool LZOFile::read_block() {
 
 RecordFile::RecordFile(const string& path, const string& mode, int compression) : firstWrite(true) {
   path_ = path;
+  mode_ = mode;
+
   if (compression == LZO) {
     path_ += ".lzo";
-    fp = new LZOFile(new LocalFile(path_ + ".tmp", mode), mode);
+  }
+
+  if (mode == "r") {
+    fp = new LocalFile(path_, mode);
   } else {
     fp = new LocalFile(path_ + ".tmp", mode);
   }
+
+  if (compression == LZO) {
+    fp = new LZOFile((LocalFile*)fp, mode);
+  }
+
   Init(mode);
 }
 
 RecordFile::~RecordFile() {
-  fp->sync();
+  if (mode_ != "r") {
+    fp->sync();
+    LOG(INFO) << "Renaming: " << path_;
+    File::Move(StringPrintf("%s.tmp", path_.c_str()), path_);
+  }
   delete fp;
-
-  LOG(INFO) << "Renaming: " << path_;
-
-  File::Move(StringPrintf("%s.tmp", path_.c_str()), path_);
 }
 
 void RecordFile::Init(const string& mode) {
