@@ -251,6 +251,7 @@ private:
   string decomp_buf_;
   string decomp_scratch_;
   string path_;
+  string mode_;
 };
 }
 
