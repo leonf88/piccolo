@@ -176,7 +176,8 @@ public:
   // Blocking read for the given source and message type.
   void Read(int src, int type, Message* data) {
     while (!TryRead(src, type, data)) {
-      Sleep(FLAGS_sleep_time);
+      sched_yield();
+      //Sleep(FLAGS_sleep_time);
     }
   }
 
