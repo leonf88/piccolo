@@ -3,10 +3,17 @@
 import time
 import os, sys, re, subprocess
 
+import signal
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+parallelism = [64, 32, 16, 8, 4, 2]
 num_cores = machines = 0
+mdict = {}
 for l in open('mpi_hostfile').readlines():
   num_cores += int(l.split('=')[1])
-  machines += 1
+  mdict[l.split()[0]] = 1
+machines = len(mdict)
+
 
 def system(*args):
   os.system(*args)
@@ -39,9 +46,9 @@ def run_command(runner,
   log("Wiping cache...")
   #system("pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'")
   log("Killing existing workers...")
-  system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
+  #system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
 
-  affinity = 0 if n == num_cores else 1
+  affinity = 0 if n >= num_cores else 1
 
   log("Runner: %s", runner)
   log("Parallelism: %s", n)
@@ -50,10 +57,11 @@ def run_command(runner,
   cmd = ' '.join(['/home/power/share/bin/mpirun',
                   '-mca mpi_paffinity_alone %s' % affinity,
                   '-hostfile mpi_hostfile',
-                  '-bysocket ',
+                  '-bynode',
+                  '-nooversubscribe',
                   '-display-map ',
                   '-tag-output ',
-                  '-n %s ' % n,
+                  '-n %s ' % (n + 1),
                   'bash -c "',
                   'LD_LIBRARY_PATH=/home/power/share/lib',
                   'bin/%s/examples/example-dsm' % build_type,
