@@ -31,19 +31,23 @@ struct TaskState : private boost::noncopyable {
     FINISHED  = 2
   };
 
-  TaskState(Taskid id, int64_t size) : id(id), status(PENDING), size(size) {}
+  TaskState(Taskid id, int64_t size) : id(id), status(PENDING), size(size), stolen(false) {}
 
   static bool IdCompare(TaskState *a, TaskState *b) {
     return a->id < b->id;
   }
 
   static bool WeightCompare(TaskState *a, TaskState *b) {
+    if (a->stolen && !b->stolen) {
+      return true;
+    }
     return a->size < b->size;
   }
 
   Taskid id;
   int status;
   int size;
+  bool stolen;
 };
 
 typedef map<Taskid, TaskState*> TaskMap;
@@ -97,7 +101,7 @@ struct WorkerState : private boost::noncopyable {
     // using something like the standard deviation, but this works
     // for now.
     return num_finished() == work.size() &&
-           Now() - last_ping_time > 1.0 + avg_completion_time * 3 / 4;
+           Now() - last_ping_time > 0.5 + avg_completion_time * 3 / 4;
   }
 
   bool full() const { return work.size() >= slots; }
@@ -425,27 +429,32 @@ void Master::send_table_assignments() {
   rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
 }
 
-void Master::steal_work(const RunDescriptor& r, int idle_worker) {
+bool Master::steal_work(const RunDescriptor& r, int idle_worker) {
   if (!FLAGS_work_stealing) {
-    return;
+    return false;
   }
 
   WorkerState &dst = *workers_[idle_worker];
 
   if (!dst.alive()) {
-    return;
+    return false;
   }
 
   // Find the worker with the largest number of pending tasks.
   WorkerState& src = **max_element(workers_.begin(), workers_.end(), &WorkerState::PendingCompare);
   if (src.num_pending() == 0) {
-    return;
+    return false;
   }
 
   vector<TaskState*> pending = src.pending();
 
-  TaskState *task = *max_element(pending.begin(), pending.end(), TaskState::WeightCompare);
+  TaskState *task = *min_element(pending.begin(), pending.end(), TaskState::WeightCompare);
+  if (task->stolen) {
+    return false;
+  }
+
   const Taskid& tid = task->id;
+  task->stolen = true;
 
   LOG(INFO) << "Worker " << idle_worker << " is stealing task "
             << MP(tid.shard, task->size) << " from worker " << src.id;
@@ -454,9 +463,7 @@ void Master::steal_work(const RunDescriptor& r, int idle_worker) {
 
   src.remove_task(task);
   dst.assign_task(task);
-
-  // Update the table assignments.
-  send_table_assignments();
+  return true;
 }
 
 void Master::assign_tables() {
@@ -517,7 +524,8 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
   int count = 0;
   while (count < shards.size()) {
-    PERIODIC(5, {
+    PERIODIC(1, {
+       DumpProfile();
        string status;
        for (int k = 0; k < config_.num_workers(); ++k) {
          status += StringPrintf("%d/%d ",
@@ -560,36 +568,31 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
       Sleep(0.001);
     }
 
-    for (int i = 0; i < workers_.size(); ++i) {
-      WorkerState& w = *workers_[i];
-      double avg_completion_time = mstats.total_shard_time() / mstats.shard_invocations();
-      if (w.idle(avg_completion_time) &&
-          !w.full() && !checkpointing_) {
-        steal_work(r, w.id);
+    PERIODIC(0.1, {
+      double avg_completion_time =
+          mstats.total_shard_time() / mstats.shard_invocations();
+
+      bool need_update = false;
+      for (int i = 0; i < workers_.size(); ++i) {
+        WorkerState& w = *workers_[i];
+        if (w.idle(avg_completion_time) && !w.full() && !checkpointing_) {
+          if (steal_work(r, w.id)) {
+            need_update = true;
+          }
+        }
+
+        if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
+            0.7 * shards.size() < count &&
+            w.idle(avg_completion_time) &&
+            !w.checkpointing) {
+          start_worker_checkpoint(w.id, r);
+        }
       }
-
-      if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
-          0.7 * shards.size() < count &&
-          w.idle(avg_completion_time) &&
-          !w.checkpointing) {
-        start_worker_checkpoint(w.id, r);
+      if (need_update) {
+        // Update the table assignments.
+        send_table_assignments();
       }
-
-      // Just restore when the job is restarted by MPI.
-//      if (!w.alive()) {
-//        LOG(FATAL) << "Worker " << i << " died, restoring from last checkpoint.";
-//        exit(1);
-//        restore();
-//
-//        count = 0;
-//        w.shards.clear();
-//        assign_tables();
-//        assign_tasks(r, shards);
-//        send_table_assignments();
-//        break;
-//      }
-    }
-
+    });
     dispatch_work(r);
   }
 
