@@ -78,14 +78,14 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   }
 
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
-  //FILE* lzo = popen(StringPrintf("lzop -f -q -1 -o%s", target.c_str()).c_str(), "w");
 
   if (File::Exists(target + ".lzo")) {
     return;
   }
 
   Page n;
-  RecordFile out(target + ".tmp", "w", RecordFile::LZO);
+  RecordFile out(target, "w", RecordFile::LZO);
+  // Only sites with site_id % nshards == shard are in this shard.
   for (int i = shard; i < site_sizes.size(); i += nshards) {
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
@@ -99,9 +99,6 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
       out.write(n);
     }
   }
-
-  File::Move(StringPrintf("%s.tmp.lzo", target.c_str()), target + ".lzo");
-  //pclose(lzo);
 }
 
 static float random_restart_seed() {
@@ -114,12 +111,6 @@ public:
   vector<Page> nodes;
   TypedGlobalTable<PageId, float>* curr_pr_hash;
   TypedGlobalTable<PageId, float>* next_pr_hash;
-
-  void Init() {
-    curr_pr_hash = this->get_table<PageId, float>(0);
-    next_pr_hash = this->get_table<PageId, float>(1);
-    iter = 0;
-  }
 
   void BuildGraph() {
     srand(0);
@@ -142,6 +133,10 @@ public:
   }
 
   void Initialize() {
+    curr_pr_hash = this->get_table<PageId, float>(0);
+    next_pr_hash = this->get_table<PageId, float>(1);
+    iter = 0;
+
     next_pr_hash->resize((int)(2 * FLAGS_nodes));
     curr_pr_hash->resize((int)(2 * FLAGS_nodes));
   }
