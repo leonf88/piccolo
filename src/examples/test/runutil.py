@@ -3,6 +3,11 @@
 import time
 import os, sys, re, subprocess
 
+num_cores = machines = 0
+for l in open('mpi_hostfile').readlines():
+  num_cores += int(l.split('=')[1])
+  machines += 1
+
 def system(*args):
   os.system(*args)
 
@@ -16,18 +21,16 @@ def run_command(runner,
                 n=64, 
                 build_type='release',
                 results_dir='results',
+                logfile_name=None,
                 args=None):
+  if not logfile_name: logfile_name = runner
+  if not args: args = []
+
   output_dir="%s.%s" % (results_dir, n)
   system('mkdir -p %s' % output_dir)
   global logfile
-  logfile = open('%s/%s' % (output_dir, runner), 'w')
 
-  if not args: args = []
-
-  num_cores = machines = 0
-  for l in open('mpi_hostfile').readlines():
-    num_cores += int(l.split('=')[1])
-    machines += 1
+  logfile = open('%s/%s' % (output_dir, logfile_name), 'w')
 
   log("Running with %s machines, %s cores" % (machines, num_cores))
 
@@ -54,7 +57,8 @@ def run_command(runner,
                   'bash -c "',
                   'LD_LIBRARY_PATH=/home/power/share/lib',
                   'bin/%s/examples/example-dsm' % build_type,
-                  '--runner=%s' % runner] 
+                  '--runner=%s' % runner,
+                  '--log_prefix=false']
                   + args + 
                   ['"'])
   
