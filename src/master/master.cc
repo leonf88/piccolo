@@ -93,8 +93,11 @@ struct WorkerState : private boost::noncopyable {
   }
 
   bool idle(double avg_completion_time) {
+    // Wait a little while before stealing work; should really be
+    // using something like the standard deviation, but this works
+    // for now.
     return num_finished() == work.size() &&
-           Now() - last_ping_time > 5.0 + avg_completion_time * 3 / 4;
+           Now() - last_ping_time > 1.0 + avg_completion_time * 3 / 4;
   }
 
   bool full() const { return work.size() >= slots; }

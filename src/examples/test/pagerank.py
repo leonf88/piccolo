@@ -39,22 +39,22 @@ def run_pr(fname, size, args):
   runutil.run_command('Pagerank', 
                       n=n,
                       logfile_name=fname,
-                      #build_type='debug',
+                      build_type='debug',
                       args=['--iterations=%s' % iterations,
-                            '--sleep_time=0.0001',
+                            '--sleep_time=0.001',
+#                            '--sleep_hack=1',
                             '--nodes=%s' % (size * 1000 * 1000),
                             '--shards=%s' % shards,
+                            '--work_stealing=true',
                             '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
                             '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
-                            '--work_stealing=true',
                             '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
                             ] + args)
 
-for n in runutil.parallelism:
+make_graph(base_size)
+for n in runutil.parallelism[:1]:
   graphsize = base_size
-  make_graph(graphsize)
-
-  cleanup(graphsize)
+  #cleanup(graphsize)
   run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
   
 #  cleanup(graphsize)
