@@ -61,7 +61,7 @@ void File::Dump(const string& f, StringPiece data) {
 }
 
 void File::Move(const string& src, const string&dst) {
-  rename(src.c_str(), dst.c_str());
+  PCHECK(rename(src.c_str(), dst.c_str()) == 0);
 }
 
 bool LocalFile::readLine(string *out) {
@@ -210,19 +210,24 @@ bool LZOFile::read_block() {
   return true;
 }
 
-RecordFile::RecordFile(FILE *stream, const string& mode) : firstWrite(true) {
-  fp = new LocalFile(stream);
+RecordFile::RecordFile(const string& path, const string& mode, int compression) : firstWrite(true) {
+  path_ = path;
+  if (compression == LZO) {
+    path_ += ".lzo";
+    fp = new LZOFile(new LocalFile(path_ + ".tmp", mode), mode);
+  } else {
+    fp = new LocalFile(path_ + ".tmp", mode);
+  }
   Init(mode);
 }
 
-RecordFile::RecordFile(const string& path, const string& mode, int compression) : firstWrite(true) {
-  if (compression == LZO) {
-    fp = new LZOFile(new LocalFile(path + ".lzo", mode), mode);
-  } else {
-    fp = new LocalFile(path, mode);
-  }
+RecordFile::~RecordFile() {
+  fp->sync();
+  delete fp;
 
-  Init(mode);
+  LOG(INFO) << "Renaming: " << path_;
+
+  File::Move(StringPrintf("%s.tmp", path_.c_str()), path_);
 }
 
 void RecordFile::Init(const string& mode) {

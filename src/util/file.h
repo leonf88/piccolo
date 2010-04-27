@@ -224,10 +224,7 @@ public:
   };
 
   RecordFile(const string& path, const string& mode, int compression=NONE);
-  RecordFile(FILE* fp, const string& mode);
-  virtual ~RecordFile() {
-    delete fp;
-  }
+  virtual ~RecordFile();
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
@@ -239,7 +236,6 @@ public:
   const char* name() { return fp->name(); }
 
   bool eof() { return fp->eof(); }
-
   void sync() { fp->sync(); }
 
   File *fp;
@@ -254,6 +250,7 @@ private:
   string buf_;
   string decomp_buf_;
   string decomp_scratch_;
+  string path_;
 };
 }
 
