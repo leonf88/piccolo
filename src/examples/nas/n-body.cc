@@ -249,10 +249,10 @@ int NBody(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    RUN_ALL(m, NBodyKernel, CreatePoints, 0);
+    RUN_ALL(m, NBodyKernel, CreatePoints, Registry::get_table(0));
     for (int i = 0; i < FLAGS_iterations; ++i) {
       LOG(INFO) << "Running iteration: " << MP(i, FLAGS_iterations);
-      RUN_ALL(m, NBodyKernel, Simulate, 0);
+      RUN_ALL(m, NBodyKernel, Simulate, Registry::get_table(0));
     }
   }
 

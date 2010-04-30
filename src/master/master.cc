@@ -190,7 +190,7 @@ struct WorkerState : private boost::noncopyable {
 
     msg->set_kernel(r.kernel);
     msg->set_method(r.method);
-    msg->set_table(r.table);
+    msg->set_table(r.table->id());
     msg->set_shard(best->id.shard);
 
     best->status = TaskState::ACTIVE;
@@ -200,7 +200,8 @@ struct WorkerState : private boost::noncopyable {
   }
 };
 
-Master::Master(const ConfigData &conf) {
+Master::Master(const ConfigData &conf) :
+  tables_(Registry::get_tables()){
   config_.CopyFrom(conf);
   world_ = MPI::COMM_WORLD;
   checkpoint_epoch_ = 0;
@@ -371,7 +372,7 @@ ParamMap* Master::restore() {
 
 void Master::run_all(RunDescriptor r) {
   vector<int> shards;
-  for (int i = 0; i < Registry::get_table(r.table)->info().num_shards; ++i) {
+  for (int i = 0; i < r.table->num_shards(); ++i) {
     shards.push_back(i);
   }
   run_range(r, shards);
@@ -393,7 +394,7 @@ WorkerState* Master::worker_for_shard(int table, int shard) {
 
 WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* ws = worker_for_shard(table, shard);
-  int64_t work_size = tables_[table][shard].entries();
+  int64_t work_size = tables_[table]->shard_size(shard);
 
   if (ws) {
 //    LOG(INFO) << "Worker for shard: " << MP(table, shard, ws->id);
@@ -468,12 +469,11 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker,
   }
 
   double average_size = 0;
-  const map<int, ShardInfo>& t = tables_[r.table];
 
-  for (map<int, ShardInfo>::const_iterator i = t.begin(); i != t.end(); ++i) {
-    average_size += i->second.entries();
+  for (int i = 0; i < r.table->num_shards(); ++i) {
+    average_size += r.table->shard_size(i);
   }
-  average_size /= t.size();
+  average_size /= r.table->num_shards();
 
   // Weight the cost of moving the table versus the time savings.
   double move_cost = max(1.0,
@@ -520,7 +520,7 @@ void Master::assign_tables() {
 
 void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
   for (int i = 0; i < shards.size(); ++i) {
-    assign_worker(r.table, shards[i]);
+    assign_worker(r.table->id(), shards[i]);
   }
 }
 
@@ -545,7 +545,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
   // Fill in the list of tables to checkpoint, if it was left empty.
   if (r.checkpoint_tables.empty()) {
-    for (TableInfo::iterator i = tables_.begin(); i != tables_.end(); ++i) {
+    for (Registry::TableMap::iterator i = tables_.begin(); i != tables_.end(); ++i) {
       r.checkpoint_tables.push_back(i->first);
     }
   }
@@ -599,7 +599,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
       for (int i = 0; i < done_msg.shards_size(); ++i) {
         const ShardInfo &si = done_msg.shards(i);
-        tables_[si.table()][si.shard()].CopyFrom(si);
+        tables_[si.table()]->UpdateShardinfo(si);
       }
 
       w.set_finished(task_id);

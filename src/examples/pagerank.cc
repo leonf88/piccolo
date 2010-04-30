@@ -220,7 +220,7 @@ int Pagerank(ConfigData& conf) {
   if (pmap == NULL) {
     i = 0;
     pmap = new ParamMap;
-    RUN_ALL(m, PRKernel, Initialize, 0);
+    RUN_ALL(m, PRKernel, Initialize, Registry::get_table(0));
   } else {
     i = pmap->get_int("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
@@ -230,7 +230,8 @@ int Pagerank(ConfigData& conf) {
     int curr_pr = (i % 2 == 0) ? 0 : 1;
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
-    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", curr_pr);
+    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter",
+                                                            Registry::get_table(curr_pr));
     pmap->set_int("iteration", i);
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
@@ -242,8 +243,8 @@ int Pagerank(ConfigData& conf) {
     r.params = pmap->to_params();
 
     m.run_all(r);
-    RUN_ALL(m, PRKernel, ResetTable, 0);
-    RUN_ONE(m, PRKernel, WriteStatus, 0);
+    RUN_ALL(m, PRKernel, ResetTable, Registry::get_table(curr_pr));
+    RUN_ONE(m, PRKernel, WriteStatus, Registry::get_table(curr_pr));
   }
 
   return 0;

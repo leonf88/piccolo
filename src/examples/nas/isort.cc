@@ -67,9 +67,9 @@ int IntegerSort(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    RUN_ALL(m, SortKernel, Init, 0);
-    RUN_ALL(m, SortKernel, Partition, 0);
-    RUN_ALL(m, SortKernel, Sort, 0);
+    RUN_ALL(m, SortKernel, Init, dst);
+    RUN_ALL(m, SortKernel, Partition, dst);
+    RUN_ALL(m, SortKernel, Sort, dst);
   }
   return 0;
 }
