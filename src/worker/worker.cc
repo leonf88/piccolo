@@ -130,7 +130,7 @@ public:
   void Run() {
     while (running) {
       MPI::Status st;
-      if (world_->Iprobe(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
+      if (rpc_->HasData(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
         int tag = st.Get_tag();
         int source = st.Get_source();
         int bytes = st.Get_count(MPI::BYTE);
@@ -138,7 +138,8 @@ public:
         string data;
         data.resize(bytes);
 
-        world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
+        rpc_->ReadBytes(source, tag, &data, NULL);
+//        world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
 
         boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
         CHECK_LT(source, kMaxHosts);
@@ -291,15 +292,17 @@ void Worker::KernelLoop() {
   req.set_slots(config_.slots());
   the_network->Send(0, MTYPE_REGISTER_WORKER, req);
  
-  double idle_start = Now();
   while (running_) {
-    if (kernel_queue_.empty()) {
+    Timer idle;
+    while (kernel_queue_.empty()) {
       CheckNetwork();
       Sleep(FLAGS_sleep_time);
-      continue;
-    }
 
-    stats_.set_idle_time(stats_.idle_time() + Now() - idle_start);
+      if (!running_) {
+        return;
+      }
+    }
+    stats_.set_idle_time(stats_.idle_time() + idle.elapsed());
 
     KernelRequest k = kernel_queue_.front();
     kernel_queue_.pop_front();
@@ -334,14 +337,6 @@ void Worker::KernelLoop() {
       i->second->SendUpdates();
     }
 
-    idle_start = Now();
-    while (the_network->pending_bytes()) {
-      CheckNetwork();
-      Sleep(FLAGS_sleep_time);
-    }
-    stats_.set_network_time(stats_.network_time() + Now() - idle_start);
-    idle_start = Now();
-
     KernelDone kd;
     kd.mutable_kernel()->CopyFrom(k);
     Registry::TableMap &tmap = Registry::get_tables();
@@ -357,12 +352,20 @@ void Worker::KernelLoop() {
         }
       }
     }
-
-    kernel_done_.push_back(kd);
+    the_network->Send(config_.master_id(), MTYPE_KERNEL_DONE, kd);
 
     VLOG(1) << "Kernel finished: " << k;
     DumpProfile();
   }
+}
+
+void Worker::Flush() {
+  Timer idle;
+  while (the_network->pending_bytes()) {
+    CheckNetwork();
+    Sleep(FLAGS_sleep_time);
+  }
+  stats_.set_network_time(stats_.network_time() + idle.elapsed());
 }
 
 void Worker::CheckNetwork() {
@@ -596,7 +599,7 @@ void Worker::CheckForMasterUpdates() {
       GlobalTable *t = Registry::get_table(a.table());
       int old_owner = t->get_owner(a.shard());
       t->set_owner(a.shard(), a.new_worker());
-      VLOG(1) << "Setting owner: " << MP(a.shard(), a.new_worker());
+      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
         VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
@@ -604,7 +607,8 @@ void Worker::CheckForMasterUpdates() {
         // Don't consider ourselves canonical for this shard until we receive updates
         // from the old owner.
         if (old_owner != -1) {
-          VLOG(1) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
+          VLOG(1) << "Setting " << MP(a.table(), a.shard())
+                  << " as tainted.  Old owner was: " << old_owner;
           t->set_tainted(a.shard());
         }
       } else if (old_owner == id() && a.new_worker() != id()) {
@@ -626,10 +630,11 @@ void Worker::CheckForMasterUpdates() {
     kernel_queue_.push_back(k);
   }
 
-  if (network_idle()) {
-    while (!kernel_done_.empty()) {
-      the_network->Send(config_.master_id(), MTYPE_KERNEL_DONE, kernel_done_.front());
-      kernel_done_.pop_front();
+  // Check for new kernels to run, and report finished kernels to the master.
+  while (the_network->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &msg)) {
+    while (the_network->pending_bytes() > 0 && pending_kernel_bytes() > 0) {
+      HandlePutRequests();
+      HandleGetRequests();
     }
   }
 }

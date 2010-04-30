@@ -44,6 +44,9 @@ public:
   void HandleGetRequests();
   void HandlePutRequests();
 
+  // Barrier: wait until all table data is transmitted.
+  void Flush();
+
   int peer_for_shard(int table_id, int shard) const;
   int id() const { return config_.worker_id(); };
   int epoch() const { return epoch_; }

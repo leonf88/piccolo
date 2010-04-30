@@ -21,14 +21,13 @@ public:
 
   virtual int Read(int src, int method, Message *msg) = 0;
   virtual int ReadAny(int *src, int method, Message *msg) = 0;
+  virtual int ReadBytes(int desired_src, int method, string* data, int *actual_src) = 0;
   virtual void Send(int target, int method, const Message &msg) = 0;
   virtual void SyncSend(int target, int method, const Message &msg) = 0;
 
   virtual void SendData(int peer_id, int rpc_id, const string& data) = 0;
   virtual MPI::Request ISendData(int peer_id, int rpc_id, const string& data) = 0;
 
-  // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
-  // here.
   virtual void Broadcast(int method, const Message &msg) = 0;
   virtual void SyncBroadcast(int method, const Message &msg) = 0;
 };
