@@ -100,35 +100,6 @@ public:
   virtual void ApplyUpdates(const HashPut& req) = 0;
 };
 
-// Wrapper to convert from string methods to key/value typed methods.
-template <class K, class V, class ParentTable >
-class TypeWrapper : public ParentTable {
-public:
-  bool contains_str(const StringPiece& k) {
-    return contains(data::from_string<K>(k));
-  }
-
-  string get_str(const StringPiece &k) {
-    return data::to_string<V>(get(data::from_string<K>(k)));
-  }
-
-  void put_str(const StringPiece &k, const StringPiece &v) {
-    const K& kt = data::from_string<K>(k);
-    const V& vt = data::from_string<V>(v);
-    put(kt, vt);
-  }
-
-  void remove_str(const StringPiece &k) {
-    remove(data::from_string<K>(k));
-  }
-
-  void update_str(const StringPiece &k, const StringPiece &v) {
-    const K& kt = data::from_string<K>(k);
-    const V& vt = data::from_string<V>(v);
-    update(kt, vt);
-  }
-};
-
 // Operations needed on a local shard of a table.
 class LocalView {
 public:
@@ -261,250 +232,81 @@ protected:
   bool tainted(int shard) { return partitions_[shard]->tainted; }
 };
 
+// Wrapper to add string methods based on key/value typed methods.
+#define WRAPPER_FUNCTION_DECL \
+bool contains_str(const StringPiece& k);\
+string get_str(const StringPiece &k);\
+void put_str(const StringPiece &k, const StringPiece &v);\
+void remove_str(const StringPiece &k);\
+void update_str(const StringPiece &k, const StringPiece &v);
+
 template <class K, class V>
-class TypedLocalTable_ : public LocalTable {
+class TypedLocalTable : public LocalTable, private boost::noncopyable {
 public:
   typedef HashMap<K, V> DataMap;
+  struct Iterator;
 
-  void Init(const TableDescriptor &tinfo) {
-    LocalTable::Init(tinfo);
-    data_.rehash(3);//tinfo.default_shard_size);
-    dirty = false;
-    tainted = false;
-    owner = -1;
-  }
+  void Init(const TableDescriptor &tinfo); 
 
-  bool contains(const K &k) { return data_.find(k) != data_.end(); }
-  bool empty() { return data_.empty(); }
-  int64_t size() { return data_.size(); }
+  bool empty(); 
+  int64_t size(); 
 
-  Iterator* get_iterator() { return new Iterator(this); }
-  Iterator* get_typed_iterator() { return new Iterator(this); }
+  Table_Iterator* get_iterator();
+  Iterator* get_typed_iterator();
 
-  V get(const K &k) { return data_[k]; }
-  void put(const K &k, const V &v) { data_[k] = v; }
+  bool contains(const K &k);
+  V get(const K &k); 
+  void put(const K &k, const V &v); 
+  void update(const K &k, const V &v);
+  void remove(const K &k); 
 
-  void update(const K &k, const V &v) {
-    data_.accumulate(k, v, ((typename TypedTable<K, V>::AccumFunction)this->info_.accum_function));
-//    (&data_[k], v);
-  }
+  void clear(); 
+  void resize(int64_t new_size); 
 
-  void remove(const K &k) { data_.erase(data_.find(k)); }
-  void clear() { data_.clear(); }
-  void resize(int64_t new_size) { data_.rehash(new_size); }
+  void start_checkpoint(const string& f);
+  void finish_checkpoint(); 
+  void restore(const string& f);
 
-  void start_checkpoint(const string& f) {
-    data_.checkpoint(f);
-    delta_file_ = new RecordFile(f + ".delta", "w");
-  }
-
-  void finish_checkpoint() {
-    if (delta_file_) {
-      delete delta_file_;
-      delta_file_ = NULL;
-    }
-  }
-
-  void restore(const string& f) {
-    data_.restore(f);
-
-    // Replay delta log.
-    RecordFile rf(f + ".delta", "r");
-    HashPut p;
-    while (rf.read(&p)) {
-      ApplyUpdates(p);
-    }
-  }
-
-  struct Iterator : public TypedTable<K, V>::Iterator {
-    Iterator(TypedLocalTable_<K, V> *t) : it_(t->data_.begin()) {
-      t_ = t;
-    }
-
-    void key_str(string *out) { data::marshal<K>(key(), out); }
-    void value_str(string *out) { data::marshal<V>(value(), out); }
-
-    bool done() { return  it_ == t_->data_.end(); }
-    void Next() { ++it_; }
-
-    const K& key() { return it_->first; }
-    V& value() { return it_->second; }
-
-    LocalTable* owner() { return t_; }
-
-  private:
-    typename DataMap::iterator it_;
-    TypedLocalTable_<K, V> *t_;
-  };
+  WRAPPER_FUNCTION_DECL;
 
 private:
   DataMap data_;
 };
 
-template <class K, class V>
-class TypedLocalTable : public TypeWrapper<K, V, TypedLocalTable_<K, V>  > {
-public:
-  TypedLocalTable(const TableDescriptor& d) {
-    TypedLocalTable_<K, V>::Init(d);
-  }
-};
-
-
-
 static const int kWriteFlushCount = 100000;
 
 template <class K, class V>
-class TypedGlobalTable_ : public GlobalTable {
+class TypedGlobalTable : public GlobalTable, private boost::noncopyable {
 private:
   static const int32_t kMaxPeers = 8192;
   typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
 protected:
-  LocalTable* create_local(int shard) {
-    TableDescriptor linfo = ((GlobalTable*)this)->info();
-    linfo.shard = shard;
-    return new TypedLocalTable<K, V>(linfo);
-  }
+  LocalTable* create_local(int shard);
 public:
-  bool contains_str(StringPiece k) {
-    return contains(data::from_string<K>(k));
-  }
+  int get_shard(const K& k);
+  int get_shard_str(StringPiece k);
+  V get_local(const K& k);
 
-  int get_shard(const K& k) {
-    DCHECK(this != NULL);
-    DCHECK(info().sharding_function != NULL);
-
-    ShardingFunction sf = (ShardingFunction)info().sharding_function;
-    int shard = sf(k, info().num_shards);
-    DCHECK_GE(shard, 0);
-    DCHECK_LT(shard, num_shards());
-    return shard;
-  }
-
-  int get_shard_str(StringPiece k) {
-    return get_shard(data::from_string<K>(k));
-  }
-
-  V get_local(const K& k) {
-    int shard = this->get_shard(k);
-
-    CHECK(is_local_shard(shard)) << " non-local for shard: " << shard;
-
-    return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
-  }
-
-  void Init(const TableDescriptor& tinfo) {
-    GlobalTable::Init(tinfo);
-    for (int i = 0; i < partitions_.size(); ++i) {
-      TableDescriptor linfo = info();
-      linfo.shard = i;
-      partitions_[i] = new TypedLocalTable<K, V>(linfo);
-    }
-
-    pending_writes_ = 0;
-  }
+  void Init(const TableDescriptor& tinfo);
 
   // Store the given key-value pair in this hash. If 'k' has affinity for a
   // remote thread, the application occurs immediately on the local host,
   // and the update is queued for transmission to the owner.
-  void put(const K &k, const V &v) {
-    LOG(FATAL) << "Need to implement.";
-    int shard = this->get_shard(k);
-
-  //  boost::recursive_mutex::scoped_lock sl(mutex());
-    static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->put(k, v);
-
-    if (!is_local_shard(shard)) {
-      ++pending_writes_;
-    }
-
-    if (pending_writes_ > kWriteFlushCount) {
-      SendUpdates();
-    }
-
-    PERIODIC(0.1, { this->HandlePutRequests(); });
-  }
-
-  void update(const K &k, const V &v) {
-    int shard = this->get_shard(k);
-
-  //  boost::recursive_mutex::scoped_lock sl(mutex());
-    static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->update(k, v);
-
-    if (!is_local_shard(shard)) {
-      ++pending_writes_;
-    }
-
-    if (pending_writes_ > kWriteFlushCount) {
-      SendUpdates();
-    }
-
-    PERIODIC(0.1, { this->HandlePutRequests(); });
-  }
+  void put(const K &k, const V &v);
+  void update(const K &k, const V &v);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
-  V get(const K &k) {
-    int shard = this->get_shard(k);
+  V get(const K &k);
+  bool contains(const K &k);
+  void remove(const K &k);
+  Table_Iterator* get_iterator(int shard);
+  TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
-    // If we received a get for this shard; but we haven't received all of the
-    // data for it yet. Continue reading from other workers until we do.
-    while (tainted(shard)) {
-      sched_yield();
-    }
-
-    PERIODIC(0.1, this->HandlePutRequests());
-
-    if (is_local_shard(shard)) {
-  //    boost::recursive_mutex::scoped_lock sl(mutex());
-      return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->get(k);
-    }
-
-    string v_str;
-    get_remote(shard, data::to_string<K>(k), &v_str);
-    return data::from_string<V>(v_str);
-  }
-
-  bool contains(const K &k) {
-      int shard = this->get_shard(k);
-
-    // If we received a requestfor this shard; but we haven't received all of the
-    // data for it yet. Continue reading from other workers until we do.
-    while (tainted(shard)) {
-      sched_yield();
-    }
-
-    if (is_local_shard(shard)) {
-  //    boost::recursive_mutex::scoped_lock sl(mutex());
-      return static_cast<TypedLocalTable<K, V>*>(partitions_[shard])->contains(k);
-    }
-
-    string v_str;
-    return get_remote(shard, data::to_string<K>(k), &v_str);
-  }
-
-  void remove(const K &k) {
-    LOG(FATAL) << "Not implemented!";
-  }
-
-  Table_Iterator* get_iterator(int shard) {
-    return partitions_[shard]->get_iterator();
-  }
-
-  TypedTable_Iterator<K, V>* get_typed_iterator(int shard) {
-    return (typename TypedTable<K, V>::Iterator*)partitions_[shard]->get_iterator();
-  }
+  WRAPPER_FUNCTION_DECL;
 };
 
-template <class K, class V>
-class TypedGlobalTable : public TypeWrapper<K, V, TypedGlobalTable_<K, V> >, private boost::noncopyable {
-private:
-  TypedGlobalTable() {}
-public:
-  static TypedGlobalTable<K, V>* Create(const TableDescriptor &d) {
-    TypedGlobalTable<K, V>* t = new TypedGlobalTable<K, V>;
-    t->Init(d);
-    return t;
-  }
-};
+
+#include "table-internal.h"
 
 }
 #endif
