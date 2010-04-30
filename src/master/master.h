@@ -126,7 +126,7 @@ private:
   WorkerState* assign_worker(int table, int shard);
 
   void send_table_assignments();
-  bool steal_work(const RunDescriptor& r, int idle_worker);
+  bool steal_work(const RunDescriptor& r, int idle_worker, double avg_time);
   void assign_tables();
   void assign_tasks(const RunDescriptor& r, vector<int> shards);
   void dispatch_work(const RunDescriptor& r);

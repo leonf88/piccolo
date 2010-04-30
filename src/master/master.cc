@@ -27,11 +27,12 @@ struct Taskid {
 struct TaskState : private boost::noncopyable {
   enum Status {
     PENDING  = 0,
-    WORKING   = 1,
+    ACTIVE   = 1,
     FINISHED  = 2
   };
 
-  TaskState(Taskid id, int64_t size) : id(id), status(PENDING), size(size), stolen(false) {}
+  TaskState(Taskid id, int64_t size)
+    : id(id), status(PENDING), size(size), stolen(false) {}
 
   static bool IdCompare(TaskState *a, TaskState *b) {
     return a->id < b->id;
@@ -79,9 +80,8 @@ struct WorkerState : private boost::noncopyable {
 
   // Order by number of pending tasks and last update time.
   static bool PendingCompare(WorkerState *a, WorkerState* b) {
-    return (a->num_pending() < b->num_pending()) ||
-           (a->num_pending() == b->num_pending() &&
-            a->last_ping_time > b->last_ping_time);
+//    return (a->pending_size() < b->pending_size());
+    return a->num_pending() < b->num_pending();
   }
 
   bool alive() const {
@@ -96,12 +96,14 @@ struct WorkerState : private boost::noncopyable {
     last_ping_time = Now();
   }
 
-  bool idle(double avg_completion_time) {
+  double idle_time() {
     // Wait a little while before stealing work; should really be
     // using something like the standard deviation, but this works
     // for now.
-    return num_finished() == work.size() &&
-           Now() - last_ping_time > 0.5 + avg_completion_time * 3 / 4;
+    if (num_finished() != work.size())
+      return 0;
+
+    return Now() - last_ping_time;
   }
 
   bool full() const { return work.size() >= slots; }
@@ -137,32 +139,43 @@ struct WorkerState : private boost::noncopyable {
   void set_finished(const Taskid& id) {
     CHECK(work.find(id) != work.end());
     TaskState *t = work[id];
-    CHECK(t->status == TaskState::WORKING);
+    CHECK(t->status == TaskState::ACTIVE);
     t->status = TaskState::FINISHED;
   }
 
-  vector<TaskState*> pending() const {
-    vector<TaskState*> out;
+#define COUNT_TASKS(name, type)\
+  int num_ ## name() const {\
+    int c = 0;\
+    for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i)\
+      if (i->second->status == TaskState::type) { ++c; }\
+    return c;\
+  }\
+  int64_t name ## _size() const {\
+      int64_t c = 0;\
+      for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i)\
+        if (i->second->status == TaskState::type) { c += i->second->size; }\
+      return c;\
+  }\
+  vector<TaskState*> name() const {\
+    vector<TaskState*> out;\
+    for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i)\
+      if (i->second->status == TaskState::type) { out.push_back(i->second); }\
+    return out;\
+  }
+
+  COUNT_TASKS(pending, PENDING)
+  COUNT_TASKS(active, ACTIVE)
+  COUNT_TASKS(finished, FINISHED)
+#undef COUNT_TASKS
+
+  int num_assigned() const { return work.size(); }
+  int64_t total_size() const {
+    int64_t out = 0;
     for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i) {
-      if (i->second->status == TaskState::PENDING) {
-        out.push_back(i->second);
-      }
+      out += 1 + i->second->size;
     }
     return out;
   }
-
-#define COUNT_TASKS(type)\
-  int c = 0;\
-  for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i)\
-    if (i->second->status == TaskState::type) { ++c; }\
-  return c;
-
-  int num_pending() const { COUNT_TASKS(PENDING); }
-  int num_active() const { COUNT_TASKS(WORKING); }
-  int num_finished() const { COUNT_TASKS(FINISHED); }
-  int num_assigned() const { return work.size(); }
-
-#undef COUNT_TASKS
 
   // Order pending tasks by our guess of how large they are
   bool get_next(const Master::RunDescriptor& r,
@@ -180,7 +193,7 @@ struct WorkerState : private boost::noncopyable {
     msg->set_table(r.table);
     msg->set_shard(best->id.shard);
 
-    best->status = TaskState::WORKING;
+    best->status = TaskState::ACTIVE;
     last_task_start = Now();
 
     return true;
@@ -429,7 +442,8 @@ void Master::send_table_assignments() {
   rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
 }
 
-bool Master::steal_work(const RunDescriptor& r, int idle_worker) {
+bool Master::steal_work(const RunDescriptor& r, int idle_worker,
+                        double avg_completion_time) {
   if (!FLAGS_work_stealing) {
     return false;
   }
@@ -448,8 +462,31 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker) {
 
   vector<TaskState*> pending = src.pending();
 
-  TaskState *task = *min_element(pending.begin(), pending.end(), TaskState::WeightCompare);
+  TaskState *task = *max_element(pending.begin(), pending.end(), TaskState::WeightCompare);
   if (task->stolen) {
+    return false;
+  }
+
+  double average_size = 0;
+  const map<int, ShardInfo>& t = tables_[r.table];
+
+  for (map<int, ShardInfo>::const_iterator i = t.begin(); i != t.end(); ++i) {
+    average_size += i->second.entries();
+  }
+  average_size /= t.size();
+
+  // Weight the cost of moving the table versus the time savings.
+  double move_cost = max(1.0,
+                         2 * task->size * avg_completion_time / average_size);
+  double eta = 0;
+  for (int i = 0; i < pending.size(); ++i) {
+    TaskState *p = pending[i];
+    eta += max(1.0, p->size * avg_completion_time / average_size);
+  }
+
+//  LOG(INFO) << "ETA: " << eta << " move cost: " << move_cost;
+
+  if (eta <= move_cost) {
     return false;
   }
 
@@ -520,7 +557,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
   send_table_assignments();
   dispatch_work(r);
 
-  KernelDone k_done;
+  KernelDone done_msg;
 
   int count = 0;
   while (count < shards.size()) {
@@ -544,20 +581,28 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
     if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
       int w_id = 0;
-      rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &k_done);
+      rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &done_msg);
       w_id -= 1;
 
-      Taskid task_id(k_done.kernel().table(), k_done.kernel().shard());
+      WorkerState& w = *workers_[w_id];
 
-      VLOG(1) << "Finished: " << MP(task_id.table, task_id.shard);
+      Taskid task_id(done_msg.kernel().table(), done_msg.kernel().shard());
+      TaskState* task = w.work[task_id];
+
+//      LOG(INFO) << "TASK_FINISHED "
+//                << r.method << " "
+//                << task_id.table << " " << task_id.shard << " on "
+//                << w_id << " in "
+//                << Now() - w.last_task_start << " size "
+//                << task->size <<
+//                " worker " << w.total_size();
       ++count;
 
-      for (int i = 0; i < k_done.shards_size(); ++i) {
-        const ShardInfo &si = k_done.shards(i);
+      for (int i = 0; i < done_msg.shards_size(); ++i) {
+        const ShardInfo &si = done_msg.shards(i);
         tables_[si.table()][si.shard()].CopyFrom(si);
       }
 
-      WorkerState& w = *workers_[w_id];
       w.set_finished(task_id);
 
       w.total_runtime += Now() - w.last_task_start;
@@ -575,15 +620,21 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
       bool need_update = false;
       for (int i = 0; i < workers_.size(); ++i) {
         WorkerState& w = *workers_[i];
-        if (w.idle(avg_completion_time) && !w.full() && !checkpointing_) {
-          if (steal_work(r, w.id)) {
+
+        // Don't try to steal tasks if the payoff is too small.
+        if (mstats.shard_invocations() > 10 &&
+            avg_completion_time > 1.0 &&
+            !checkpointing_ &&
+            !w.full() &&
+            w.idle_time() > 0.5) {
+          if (steal_work(r, w.id, avg_completion_time)) {
             need_update = true;
           }
         }
 
         if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
             0.7 * shards.size() < count &&
-            w.idle(avg_completion_time) &&
+            w.idle_time() > 0 &&
             !w.checkpointing) {
           start_worker_checkpoint(w.id, r);
         }
@@ -593,6 +644,8 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
         send_table_assignments();
       }
     });
+
+
     dispatch_work(r);
   }
 
@@ -613,6 +666,9 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
     flush_checkpoint(r.params);
   }
+
+  EmptyMessage empty;
+  rpc_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
   kernel_epoch_++;
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
