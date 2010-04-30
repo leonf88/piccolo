@@ -7,7 +7,7 @@ import runutil, math
 checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
 base_size=100
-shards=256
+shards=512
 
 def cleanup(size):
   print "Removing old checkpoints..."
@@ -35,11 +35,12 @@ def make_graph(size):
                    '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % size]))
 
 def run_pr(fname, size, args):
-  runutil.run_command('Pagerank', 
+  try:
+    runutil.run_command('Pagerank', 
                       n=n,
                       logfile_name=fname,
-#                      build_type='debug',
-                      args=['--iterations=%s' % max(2, n/4),
+                      build_type='debug',
+                      args=['--iterations=%s' % max(5, n/4),
                             '--sleep_time=0.001',
 #                            '--cpu_profile',
 #                            '--sleep_hack=1',
@@ -50,10 +51,13 @@ def run_pr(fname, size, args):
                             '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
                             '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
                             ] + args)
+  except:
+    print 'Argh!!!!'
+    return
 
-make_graph(base_size)
-for n in runutil.parallelism[:1]:
+for n in runutil.parallelism:
   graphsize = base_size
+  make_graph(graphsize)
   #cleanup(graphsize)
   run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
   

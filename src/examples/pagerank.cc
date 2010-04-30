@@ -227,12 +227,15 @@ int Pagerank(ConfigData& conf) {
   }
 
   for (; i < FLAGS_iterations; i++) {
-    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", 0);
+    int curr_pr = (i % 2 == 0) ? 0 : 1;
+    int next_pr = (i % 2 == 0) ? 1 : 0;
+
+    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter", curr_pr);
     pmap->set_int("iteration", i);
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
       // We only need to save the next_pr table, which alternates each iteration.
-      r.checkpoint_tables = MakeVector((i % 2 == 0) ? 1 : 0);
+      r.checkpoint_tables = MakeVector(next_pr);
     } else {
       r.checkpoint_type = CP_NONE;
     }
