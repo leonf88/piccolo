@@ -128,11 +128,11 @@ void Worker::KernelLoop() {
     kd.mutable_kernel()->CopyFrom(kreq);
     Registry::TableMap &tmap = Registry::get_tables();
     for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-      GlobalTable* t = i->second;
+      GlobalView* t = i->second;
       for (int j = 0; j < t->num_shards(); ++j) {
         if (t->is_local_shard(j)) {
           ShardInfo *si = kd.add_shards();
-          si->set_entries(t->get_partition(j)->size());
+          si->set_entries(t->shard_size(j));
           si->set_owner(this->id());
           si->set_table(i->first);
           si->set_shard(j);
@@ -228,7 +228,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_chec
   for (int i = 0; i < to_checkpoint.size(); ++i) {
     LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch)
         << " : " << to_checkpoint[i];
-    GlobalTable* table = t[to_checkpoint[i]];
+    GlobalView* table = t[to_checkpoint[i]];
     table->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                                      FLAGS_checkpoint_write_dir.c_str(),
                                      epoch_, to_checkpoint[i]));
@@ -265,7 +265,7 @@ void Worker::FinishCheckpoint() {
   }
 
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-     GlobalTable* t = i->second;
+     GlobalView* t = i->second;
      t->finish_checkpoint();
   }
 
@@ -280,7 +280,7 @@ void Worker::Restore(int epoch) {
 
   Registry::TableMap &t = Registry::get_tables();
   for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
-    GlobalTable* t = i->second;
+    GlobalView* t = i->second;
     t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                             FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
   }
@@ -300,8 +300,7 @@ void Worker::HandlePutRequests() {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
-    GlobalTable *t = Registry::get_table(put.table());
-    boost::recursive_mutex::scoped_lock sl(t->mutex());
+    GlobalView *t = Registry::get_table(put.table());
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
@@ -335,9 +334,7 @@ void Worker::HandleGetRequests() {
     get_resp.set_epoch(epoch_);
 
     {
-      GlobalTable* t = Registry::get_table(get_req.table());
-      boost::recursive_mutex::scoped_lock sl(t->mutex());
-
+      GlobalView * t = Registry::get_table(get_req.table());
       t->handle_get(get_req.key(), &get_resp);
     }
 
@@ -381,11 +378,11 @@ void Worker::CheckForMasterUpdates() {
   }
 
   ShardAssignmentRequest shard_req;
-  set<GlobalTable*> dirty_tables;
+  set<GlobalView*> dirty_tables;
   while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
-      GlobalTable *t = Registry::get_table(a.table());
+      GlobalView *t = Registry::get_table(a.table());
       int old_owner = t->get_owner(a.shard());
       t->set_owner(a.shard(), a.new_worker());
       VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
@@ -409,7 +406,7 @@ void Worker::CheckForMasterUpdates() {
     }
 
     // Flush any tables we no longer own.
-    for (set<GlobalTable*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
+    for (set<GlobalView*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
       (*i)->SendUpdates();
     }
   }

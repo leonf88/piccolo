@@ -9,10 +9,10 @@ namespace dsm {
 class GlobalTable;
 
 namespace Registry {
-typedef map<int, GlobalTable*> TableMap;
+typedef map<int, GlobalView*> TableMap;
 
 TableMap& get_tables();
-GlobalTable* get_table(int id);
+GlobalView* get_table(int id);
 
 template<class K, class V>
 TypedGlobalTable<K, V>* create_table(

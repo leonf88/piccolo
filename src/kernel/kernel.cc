@@ -13,7 +13,7 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
 }
 
 GlobalTable* DSMKernel::get_table(int id) {
-  return Registry::get_table(id);
+  return (GlobalTable*)Registry::get_table(id);
 }
 
 namespace Registry {

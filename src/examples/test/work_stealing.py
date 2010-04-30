@@ -12,35 +12,38 @@ class Bucket:
         self.shards = []
         self.bad = 0
 
-    def cutoff(self, other):
-        cutoff = sum(self.shards)
-        b = 0
-        i = 0
-        while b < cutoff:
-            b += other.shards[i]
-            i += 1
-
-        if i >= len(other.shards) - 1:
-            return -1
-        return i
-
-    def __lt__(self, other):
-        if self.bad and not other.bad: return 0
-        if self.cutoff(other) == -1: return 0
+    def cutoff(self, limit):
+        self.shards.sort()
+        self.shards.reverse()
         
-        # sort on the largest pending shard
+        b = 0
+        for i in range(len(self.shards) - 1):
+            if b >= limit:
+                return i
+            b += self.shards[i]
+        return -1
+    
+    def biggest(self, fs):
+        i = self.cutoff(fs)
+#        print fs, sum(self.shards), i
+        if i == -1: return -1
+        return self.shards[i + 1]
+        
+    def __lt__(self, other):
         return sum(self.shards) < sum(other.shards)
     
     def steal(self, other, reverse=0):
-        other.shards.sort()
-        other.shards.reverse()
-                
+        cutoff = other.biggest(sum(self.shards))
+        i = other.shards.index(cutoff)
+
+        print cutoff, i, other.shards
+        
         if reverse:
             self.shards += [other.shards[-1]]
             del other.shards[-1]
         else:
-            self.shards += [other.shards[i + 1]]
-            del other.shards[i + 1]
+            self.shards += [other.shards[i]]
+            del other.shards[i]
         self.bad = 1
         return True
 
@@ -52,10 +55,14 @@ class Bucket:
 
 
 def steal_one(buckets, rev, tries=1):
-    buckets.sort()
-    fastest = buckets[0]
+    fastest = min(buckets, key=lambda b: sum(b.shards))
+    fs = sum(fastest.shards)
+    buckets.sort(key=lambda b: b.biggest(fs))
+    buckets.reverse()
+
     for i in range(tries):
-        slowest = buckets[len(buckets) - i - 1]
+        slowest = buckets[i]
+        if slowest.biggest(fs) == -1: break
         if fastest.steal(slowest, rev): return True
     return False
 
@@ -89,6 +96,15 @@ def TestAssignments(bucket_count):
   fit = sorted([(v - average)/average for v in fit])
   open('preselect.%d.fit' % bucket_count, 'w').write('\n'.join([str(v) for v in fit]))
 
-TestAssignments(4)
-TestAssignments(12)
+#TestAssignments(4)
+#TestAssignments(12)
 TestAssignments(64)
+
+p = os.popen('gnuplot -persist', 'w')
+p.write('''plot './workstealing.64.fit.tries=0' with lines,\
+ './workstealing.64.fit.tries=10' with lines,\
+ './preselect.64.fit' with lines,\
+ './workstealing.12.fit.tries=10' with lines,\
+ './preselect.12.fit' with lines
+ ''')
+p.flush()
