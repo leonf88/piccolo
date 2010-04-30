@@ -76,9 +76,6 @@ public:
   int id() const { return info().table_id; }
   int shard() const { return info().shard; }
   int num_shards() const { return info().num_shards; }
-
-  virtual bool empty() { return size() == 0; }
-  virtual int64_t size() = 0;
 protected:
   TableDescriptor info_;
 };
@@ -93,19 +90,23 @@ public:
 };
 
 // Operations needed on a local shard of a table.
-class LocalView {
+class LocalView : public TableView {
 public:
   virtual TableView::Iterator* get_iterator() = 0;
 };
 
-class GlobalView {
+class GlobalView : public TableView {
 public:
   virtual TableView::Iterator* get_iterator(int shard) = 0;
-  virtual int64_t size() = 0;
-//  virtual int64_t shard_size(int shard) = 0;
+  virtual int64_t shard_size(int shard) = 0;
+
+  virtual void set_owner(int shard, int worker) = 0;
+  virtual int get_owner(int shard) = 0;
+
+  virtual void UpdateShardinfo(const ShardInfo& sinfo) = 0;
 };
 
-class LocalTable : public LocalView, public TableView, public Checkpointable {
+class LocalTable : public LocalView, public Checkpointable {
 public:
   void Init(const TableDescriptor &tinfo) { 
     delta_file_ = NULL;
@@ -117,6 +118,9 @@ public:
 
   virtual void resize(int64_t new_size) = 0;
   virtual void clear() = 0;
+
+  virtual int64_t size() = 0;
+  bool empty() { return size() == 0; }
 
   // Generic routines to fetch and set entries as serialized strings.
 
@@ -135,7 +139,7 @@ protected:
   RecordFile *delta_file_;
 };
 
-class GlobalTable : public GlobalView, public TableView, public Checkpointable {
+class GlobalTable : public GlobalView, public Checkpointable {
 public:
   void Init(const TableDescriptor& tinfo);
   virtual ~GlobalTable();
@@ -160,7 +164,6 @@ public:
   // are *not* cleared.
   void clear(int shard);
   bool empty();
-  int64_t size() { return 1; }
   void resize(int64_t new_size);
 
   void start_checkpoint(const string& f);
@@ -168,13 +171,16 @@ public:
   void finish_checkpoint();
   void restore(const string& f);
 
-  virtual int get_shard_str(StringPiece k) = 0;
+  int64_t shard_size(int shard);
+  void UpdateShardinfo(const ShardInfo& sinfo);
 
+  virtual int get_shard_str(StringPiece k) = 0;
 protected:
   virtual LocalTable* create_local(int shard) = 0;
   boost::recursive_mutex& mutex() { return m_; }
   vector<LocalTable*> partitions_;
-  vector<LocalTable*> get_cache_;
+  vector<LocalTable*> cache_;
+  vector<ShardInfo> shardinfo_;
 
   volatile int pending_writes_;
   boost::recursive_mutex m_;
@@ -271,12 +277,18 @@ public:
 };
 
 // Represents a sharded, on disk table.
-class DiskTable : public GlobalView, public TableView, private boost::noncopyable {
+class DiskTable : public GlobalView, private boost::noncopyable {
 public:
-
+  TableView::Iterator *get_iterator(int shard);
+  int64_t shard_size(int shard);
+  void set_owner(int shard, int worker);
+  int get_owner(int shard);
+  void UpdateShardinfo(const ShardInfo & sinfo);
 };
 
 #include "table-internal.h"
 
 }
+
+
 #endif

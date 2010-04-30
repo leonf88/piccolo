@@ -57,7 +57,17 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
 
 void GlobalTable::Init(const dsm::TableDescriptor &info) {
   TableView::Init(info);
+  worker_id_ = -1;
   partitions_.resize(info.num_shards);
+  shardinfo_.resize(info.num_shards);
+}
+
+void GlobalTable::UpdateShardinfo(const ShardInfo& info) {
+  shardinfo_[info.shard()].CopyFrom(info);
+}
+
+int64_t GlobalTable::shard_size(int shard) {
+  return shardinfo_[shard].entries();
 }
 
 void GlobalTable::clear(int shard) {

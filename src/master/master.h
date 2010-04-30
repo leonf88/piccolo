@@ -4,6 +4,8 @@
 #include "worker/worker.pb.h"
 #include "util/common.h"
 #include "util/rpc.h"
+#include "kernel/table.h"
+#include "kernel/table-registry.h"
 
 namespace dsm {
 
@@ -59,7 +61,7 @@ public:
     string kernel;
     string method;
 
-    int table;
+    GlobalView *table;
     CheckpointType checkpoint_type;
     int checkpoint_interval;
 
@@ -73,7 +75,7 @@ public:
 
     static RunDescriptor Create(const string& kernel,
                                 const string& method,
-                                int table,
+                                GlobalView *table,
                                 CheckpointType c_type=CP_NONE, int c_interval=-1) {
       RunDescriptor r = { kernel, method, table, c_type, c_interval };
       r.params = NULL;
@@ -115,8 +117,6 @@ private:
   // Used for interval checkpointing.
   double last_checkpoint_;
 
-  typedef map<int, map<int, ShardInfo> > TableInfo;
-
   WorkerState* worker_for_shard(int table, int shard);
 
   // Find a worker to run a kernel on the given table and shard.  If a worker
@@ -131,11 +131,10 @@ private:
   void dispatch_work(const RunDescriptor& r);
   vector<WorkerState*> workers_;
 
-  // Global table information, as reported by workers.
-  TableInfo tables_;
-
   typedef map<string, MethodStats> MethodStatsMap;
   MethodStatsMap method_stats_;
+
+  Registry::TableMap& tables_;
 
   NetworkThread* network_;
 };

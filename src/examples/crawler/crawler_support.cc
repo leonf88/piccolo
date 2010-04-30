@@ -76,8 +76,8 @@ int main(int argc, const char* argv[]) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    RUN_ALL(m, PythonKernel, initialize_crawl, 0);
-    RUN_ALL(m, PythonKernel, run_crawl, 0);
+    RUN_ALL(m, PythonKernel, initialize_crawl, Registry::get_table(0));
+    RUN_ALL(m, PythonKernel, run_crawl, Registry::get_table(0));
   } else {
     Worker w(conf);
     w.Run();
