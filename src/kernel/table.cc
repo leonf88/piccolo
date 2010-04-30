@@ -60,11 +60,6 @@ void GlobalTable::Init(const dsm::TableDescriptor &info) {
   partitions_.resize(info.num_shards);
 }
 
-void GlobalTable::set_worker(Worker *w) {
-  w_ = w;
-  worker_id_ = w->id();
-}
-
 void GlobalTable::clear(int shard) {
   if (is_local_shard(shard)) {
     partitions_[shard]->clear();
@@ -98,10 +93,12 @@ int GlobalTable::get_owner(int shard) {
   return partitions_[shard]->owner;
 }
 
+void GlobalTable::set_worker(Worker* w) {
+  w_ = w;
+  worker_id_ = w->id();
+}
+
 bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
-//  if (get_cache_[shard]->contains_str(k)) {
-//    return true;
-//  }
   HashGet req;
   HashPut resp;
 
@@ -115,8 +112,8 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
 
   VLOG(2) << "Sending get request to: " << MP(peer, shard);
-  w_->Send(peer, MTYPE_GET_REQUEST, req);
-  w_->Read(peer, MTYPE_GET_RESPONSE, &resp);
+  NetworkThread::Get()->Send(peer + 1, MTYPE_GET_REQUEST, req);
+  NetworkThread::Get()->Read(peer + 1, MTYPE_GET_RESPONSE, &resp);
 
   if (resp.missing_key()) {
     return false;
@@ -173,7 +170,8 @@ void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
   HashPutCoder h(get_resp);
 
   int shard = get_shard_str(key);
-  CHECK(is_local_shard(shard));
+  CHECK(is_local_shard(shard))
+    << "Not local for shard: " << shard;
 
   LocalTable *t = partitions_[shard];
   if (!t->contains_str(key)) {
@@ -207,7 +205,7 @@ void GlobalTable::SendUpdates() {
         put.set_epoch(w_->epoch());
 
         SerializePartial(put, it);
-        w_->Send(get_owner(i), MTYPE_PUT_REQUEST, put);
+        NetworkThread::Get()->Send(get_owner(i) + 1, MTYPE_PUT_REQUEST, put);
       } while(!it->done());
       delete it;
 

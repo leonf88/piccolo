@@ -8,32 +8,6 @@ enum CheckpointType {
   CP_ROLLING = 2;
 };
 
-enum MessageTypes {
-  MTYPE_RUN_KERNEL = 1;
-  MTYPE_KERNEL_DONE = 2;
-  
-  MTYPE_PUT_REQUEST = 4;  
-  MTYPE_GET_REQUEST = 5;
-  MTYPE_GET_RESPONSE = 6;   
-  
-  MTYPE_SHARD_ASSIGNMENT = 7;
-  
-  MTYPE_WORKER_SHUTDOWN = 8;
-  MTYPE_REGISTER_WORKER = 9;
-  
-  MTYPE_START_CHECKPOINT = 10;
-  MTYPE_FINISH_CHECKPOINT = 11;
-  MTYPE_CHECKPOINT_DONE = 12;
-  
-  MTYPE_RESTORE = 13;
-  MTYPE_RESTORE_DONE = 14;
-  
-  MTYPE_WORKER_FLUSH = 15;
-  
-  MTYPE_MAX = 32;
-};
-
-
 message ConfigData {
   required int32 num_workers = 1;
   required int32 worker_id = 2;
@@ -124,8 +98,6 @@ message HashPut {
   
   optional bool missing_key = 13;
 }
-
-message EmptyMessage {}
 
 message CheckpointRequest {
   required int32 epoch = 1;
