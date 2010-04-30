@@ -13,215 +13,18 @@ DEFINE_string(checkpoint_read_dir, "checkpoints", "");
 
 namespace dsm {
 
-// Represents an active RPC to a remote peer.
-struct SendRequest : private boost::noncopyable {
-  int target;
-  int rpc_type;
-  int failures;
-
-  string payload;
-  MPI::Request mpi_req;
-  MPI::Status status;
-  double start_time;
-
-  SendRequest() {
-    failures = 0;
-  }
-
-  ~SendRequest() {}
-
-  bool finished() {
-    return mpi_req.Test(status);
-  }
-
-  double elapsed() { return Now() - start_time; }
-
-  void Send(RPCHelper* helper) {
-    start_time = Now();
-    mpi_req = helper->ISendData(target, rpc_type, payload);
-  }
-};
-
 struct Worker::Stub : private boost::noncopyable {
   int32_t id;
   int32_t epoch;
 
   Stub(int id) : id(id), epoch(0) { }
-
-  // Send the given message type and data to this peer.
-  SendRequest* CreateRequest(int method, const Message& ureq) {
-    SendRequest* r = new SendRequest();
-    r->target = id;
-    r->rpc_type = method;
-    ureq.AppendToString(&r->payload);
-    return r;
-  }
 };
-
-// Hackery to get around mpi's unhappiness with threads.  This thread
-// simply polls MPI continuously for any kind of update and adds it to
-// a local queue.
-class NetworkThread {
-private:
-  static const int kMaxHosts = 512;
-
-  typedef deque<string> Queue;
-
-  vector<SendRequest*> pending_sends_;
-  unordered_set<SendRequest*> active_sends_;
-
-  Queue incoming[MTYPE_MAX][kMaxHosts];
-
-  RPCHelper *rpc_;
-  MPI::Comm *world_;
-  mutable boost::recursive_mutex send_lock;
-  mutable boost::recursive_mutex q_lock[MTYPE_MAX];
-public:
-  bool running;
-
-  NetworkThread(RPCHelper* rpc) {
-    rpc_ = rpc;
-    world_ = &MPI::COMM_WORLD;
-    running = 1;
-  }
-
-  bool network_active() const {
-    return active_sends_.size() + pending_sends_.size() > 0;
-  }
-
-  int64_t pending_bytes() const {
-    boost::recursive_mutex::scoped_lock sl(send_lock);
-    int64_t t = 0;
-
-    for (unordered_set<SendRequest*>::const_iterator i = active_sends_.begin(); i != active_sends_.end(); ++i) {
-      t += (*i)->payload.size();
-    }
-
-    for (int i = 0; i < pending_sends_.size(); ++i) {
-      t += pending_sends_[i]->payload.size();
-    }
-
-    return t;
-  }
-
-  void CollectActive() {
-    if (active_sends_.empty())
-      return;
-
-    boost::recursive_mutex::scoped_lock sl(send_lock);
-    unordered_set<SendRequest*>::iterator i = active_sends_.begin();
-    while (i != active_sends_.end()) {
-      SendRequest *r = (*i);
-      VLOG(2) << "Pending: " << MP(world_->Get_rank(), MP(r->target, r->rpc_type));
-      if (r->finished()) {
-        if (r->failures > 0) {
-          LOG(INFO) << "Send " << MP(world_->Get_rank(), r->target) << " of size " << r->payload.size()
-                    << " succeeded after " << r->failures << " failures.";
-        }
-        VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
-        delete r;
-        i = active_sends_.erase(i);
-        continue;
-      }
-      ++i;
-    }
-  }
-
-  void Run() {
-    while (running) {
-      MPI::Status st;
-      if (rpc_->HasData(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
-        int tag = st.Get_tag();
-        int source = st.Get_source();
-        int bytes = st.Get_count(MPI::BYTE);
-
-        string data;
-        data.resize(bytes);
-
-        rpc_->ReadBytes(source, tag, &data, NULL);
-//        world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
-
-        boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
-        CHECK_LT(source, kMaxHosts);
-        incoming[tag][source].push_back(data);
-      } else {
-        Sleep(FLAGS_sleep_time);
-      }
-
-      while (!pending_sends_.empty()) {
-        boost::recursive_mutex::scoped_lock sl(send_lock);
-        SendRequest* s = pending_sends_.back();
-        pending_sends_.pop_back();
-        s->Send(rpc_);
-        active_sends_.insert(s);
-      }
-
-      CollectActive();
-
-      PERIODIC(10., { DumpProfile(); });
-    }
-  }
-
-  bool check_queue(int src, int type, Message* data) {
-    CHECK_LT(src, kMaxHosts);
-
-    Queue& q = incoming[type][src];
-    if (!q.empty()) {
-      boost::recursive_mutex::scoped_lock sl(q_lock[type]);
-      if (q.empty())
-        return false;
-
-      data->ParseFromString(q.front());
-      q.pop_front();
-      return true;
-    }
-    return false;
-  }
-
-  // Blocking read for the given source and message type.
-  void Read(int src, int type, Message* data) {
-    while (!TryRead(src, type, data)) {
-      sched_yield();
-    }
-  }
-
-  bool TryRead(int src, int type, Message* data, int *source=NULL) {
-    if (src == MPI::ANY_SOURCE) {
-      for (int i = 0; i < world_->Get_size(); ++i) {
-        if (TryRead(i, type, data, source)) {
-          return true;
-        }
-      }
-    } else {
-      if (check_queue(src, type, data)) {
-        if (source) { *source = src; }
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // Enqueue the given request for transmission.
-  void Send(SendRequest *req) {
-    boost::recursive_mutex::scoped_lock sl(send_lock);
-//    LOG(INFO) << "Sending... " << MP(req->target, req->rpc_type);
-    pending_sends_.push_back(req);
-  }
-
-  void Send(int dst, int method, const Message &msg) {
-    SendRequest *r = new SendRequest();
-    r->target = dst;
-    r->rpc_type = method;
-    msg.AppendToString(&r->payload);
-    Send(r);
-  }
-};
-NetworkThread *the_network;
 
 Worker::Worker(const ConfigData &c) {
   epoch_ = 0;
   active_checkpoint_ = CP_NONE;
+
+  network_ = NetworkThread::Get();
 
   config_.CopyFrom(c);
   config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
@@ -240,7 +43,6 @@ Worker::Worker(const ConfigData &c) {
     i->second->set_worker(this);
   }
 
-  the_network = new NetworkThread(get_rpc_helper());
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -250,9 +52,6 @@ int Worker::peer_for_shard(int table, int shard) const {
 void Worker::Run() {
   kernel_thread_ = new boost::thread(&Worker::KernelLoop, this);
   table_thread_ = new boost::thread(&Worker::TableLoop, this);
-
-  the_network->Run();
-
   table_thread_->join();
   kernel_thread_->join();
 }
@@ -265,17 +64,6 @@ Worker::~Worker() {
   }
 }
 
-void Worker::Send(int peer, int type, const Message& msg) {
-  SendRequest *p = peers_[peer]->CreateRequest(type, msg);
-  the_network->Send(p);
-  stats_.set_bytes_out(stats_.bytes_out() + p->payload.size());
-  stats_.set_put_out(stats_.put_out() + 1);
-}
-
-void Worker::Read(int peer, int type, Message* msg) {
-  the_network->Read(peer + 1, type, msg);
-}
-
 void Worker::TableLoop() {
   while (running_) {
     HandleGetRequests();
@@ -284,13 +72,11 @@ void Worker::TableLoop() {
 }
 
 void Worker::KernelLoop() {
-  MPI::Intracomm world = MPI::COMM_WORLD;
-
   LOG(INFO) << "Worker " << config_.worker_id() << " registering...";
   RegisterWorkerRequest req;
   req.set_id(id());
   req.set_slots(config_.slots());
-  the_network->Send(0, MTYPE_REGISTER_WORKER, req);
+  network_->Send(0, MTYPE_REGISTER_WORKER, req);
 
 
   KernelRequest kreq;
@@ -298,7 +84,7 @@ void Worker::KernelLoop() {
   while (running_) {
     Timer idle;
 
-    while (!the_network->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &kreq)) {
+    while (!network_->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &kreq)) {
       CheckNetwork();
       Sleep(FLAGS_sleep_time);
 
@@ -353,7 +139,7 @@ void Worker::KernelLoop() {
         }
       }
     }
-    the_network->Send(config_.master_id(), MTYPE_KERNEL_DONE, kd);
+    network_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kd);
 
     VLOG(1) << "Kernel finished: " << kreq;
     DumpProfile();
@@ -362,10 +148,13 @@ void Worker::KernelLoop() {
 
 void Worker::Flush() {
   Timer idle;
-  while (the_network->pending_bytes() > 0 && pending_kernel_bytes() > 0) {
-    CheckNetwork();
-    Sleep(FLAGS_sleep_time);
+
+  Registry::TableMap &tmap = Registry::get_tables();
+  for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    i->second->SendUpdates();
   }
+
+  network_->Flush();
   stats_.set_network_time(stats_.network_time() + idle.elapsed());
 }
 
@@ -386,7 +175,7 @@ int64_t Worker::pending_kernel_bytes() const {
 }
 
 bool Worker::network_idle() const {
-  return the_network->pending_bytes() == 0;
+  return network_->pending_bytes() == 0;
 }
 
 bool Worker::has_incoming_data() const {
@@ -457,7 +246,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_chec
     epoch_marker.set_done(true);
     epoch_marker.set_marker(epoch_);
     for (int i = 0; i < peers_.size(); ++i) {
-      the_network->Send(peers_[i]->CreateRequest(MTYPE_PUT_REQUEST, epoch_marker));
+      network_->Send(i + 1, MTYPE_PUT_REQUEST, epoch_marker);
     }
   }
 
@@ -481,7 +270,7 @@ void Worker::FinishCheckpoint() {
   }
 
   EmptyMessage req;
-  the_network->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
+  network_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
 }
 
 void Worker::Restore(int epoch) {
@@ -497,12 +286,12 @@ void Worker::Restore(int epoch) {
   }
 
   EmptyMessage req;
-  the_network->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
+  network_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
 }
 
 void Worker::HandlePutRequests() {
   HashPut put;
-  while (the_network->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
+  while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     if (put.marker() != -1) {
       UpdateEpoch(put.source(), put.marker());
       continue;
@@ -532,7 +321,7 @@ void Worker::HandleGetRequests() {
   int source;
   HashGet get_req;
   HashPut get_resp;
-  while (the_network->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
+  while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
 //    LOG(INFO) << "Get request: " << get_req;
 
     stats_.set_get_in(stats_.get_in() + 1);
@@ -552,8 +341,7 @@ void Worker::HandleGetRequests() {
       t->handle_get(get_req.key(), &get_resp);
     }
 
-    SendRequest *r = peers_[source - 1]->CreateRequest(MTYPE_GET_RESPONSE, get_resp);
-    the_network->Send(r);
+    network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
     VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
   }
 }
@@ -564,15 +352,15 @@ void Worker::CheckForMasterUpdates() {
   EmptyMessage msg;
   KernelRequest k;
 
-  if (the_network->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
+  if (network_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
     VLOG(1) << "Shutting down worker " << config_.worker_id();
-    the_network->running = false;
     running_ = false;
+    network_->Shutdown();
     return;
   }
 
   CheckpointRequest checkpoint_msg;
-  while (the_network->TryRead(config_.master_id(), MTYPE_START_CHECKPOINT, &checkpoint_msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_START_CHECKPOINT, &checkpoint_msg)) {
     vector<int> tablev;
     for (int i = 0; i < checkpoint_msg.table_size(); ++i) {
       tablev.push_back(checkpoint_msg.table(i));
@@ -583,18 +371,18 @@ void Worker::CheckForMasterUpdates() {
                     tablev);
   }
   
-  while (the_network->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &msg)) {
     FinishCheckpoint();
   }
 
   StartRestore restore_msg;
-  while (the_network->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
     Restore(restore_msg.epoch());
   }
 
   ShardAssignmentRequest shard_req;
   set<GlobalTable*> dirty_tables;
-  while (the_network->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
       GlobalTable *t = Registry::get_table(a.table());
@@ -627,7 +415,7 @@ void Worker::CheckForMasterUpdates() {
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  while (the_network->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &msg)) {
     Flush();
   }
 }

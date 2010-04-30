@@ -79,7 +79,7 @@ public:
 
   virtual bool empty() { return size() == 0; }
   virtual int64_t size() = 0;
-private:
+protected:
   TableDescriptor info_;
 };
 
@@ -102,7 +102,7 @@ class GlobalView {
 public:
   virtual TableView::Iterator* get_iterator(int shard) = 0;
   virtual int64_t size() = 0;
-  virtual int64_t shard_size(int shard) = 0;
+//  virtual int64_t shard_size(int shard) = 0;
 };
 
 class LocalTable : public LocalView, public TableView, public Checkpointable {
@@ -129,7 +129,6 @@ public:
   virtual bool contains_str(const StringPiece &k) = 0;
 protected:
   friend class GlobalTable;
-  TableDescriptor info_;
   bool dirty;
   bool tainted;
   int16_t owner;
@@ -176,7 +175,6 @@ protected:
   boost::recursive_mutex& mutex() { return m_; }
   vector<LocalTable*> partitions_;
   vector<LocalTable*> get_cache_;
-  TableDescriptor info_;
 
   volatile int pending_writes_;
   boost::recursive_mutex m_;

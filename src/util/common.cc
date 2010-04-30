@@ -260,29 +260,23 @@ void Init(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
-  RunInitializers();
 
-  MPI::Comm *world = NULL;
   if (getenv("OMPI_COMM_WORLD_RANK")) {
     MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
-    world = &MPI::COMM_WORLD;
 
     MPI_Errhandler handler;
     MPI_Errhandler_create(&CrashOnMPIError, &handler);
-    world->Set_errhandler(handler);
+    MPI::COMM_WORLD.Set_errhandler(handler);
   }
+
+  RunInitializers();
 
 #ifdef CPUPROF
   if (FLAGS_cpu_profile) {
     mkdir("profile/", 0755);
     char buf[100];
     gethostname(buf, 100);
-    // Running locally
-    if (!world) {
-      ProfilerStart(StringPrintf("profile/cpu.%s.%d", buf, getpid()).c_str());
-    } else {
-      ProfilerStart(StringPrintf("profile/cpu.%d", MPI::COMM_WORLD.Get_rank()).c_str());
-    }
+    ProfilerStart(StringPrintf("profile/cpu.%d", MPI::COMM_WORLD.Get_rank()).c_str());
   }
 #endif
 
@@ -290,8 +284,6 @@ void Init(int argc, char** argv) {
     RunTests();
     exit(0);
   }
-
-  atexit(&MPI::Finalize);
 
   struct sigaction sig_action;
   bzero(&sig_action, sizeof(sig_action));

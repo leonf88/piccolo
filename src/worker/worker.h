@@ -33,10 +33,6 @@ public:
     return stats_;
   }
 
-  // Non-blocking send and blocking read.
-  void Send(int peer, int type, const Message& msg);
-  void Read(int peer, int type, Message* msg);
-
   void CheckForMasterUpdates();
   void CheckNetwork();
 
@@ -78,6 +74,8 @@ private:
 
   // The status of other workers.
   vector<Stub*> peers_;
+
+  NetworkThread *network_;
 
   struct KernelId {
     string kname_;

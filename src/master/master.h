@@ -105,7 +105,6 @@ private:
   void flush_checkpoint(Params* params);
 
   ConfigData config_;
-  RPCHelper *rpc_;
   MPI::Intracomm world_;
   int checkpoint_epoch_;
   int kernel_epoch_;
@@ -137,6 +136,8 @@ private:
 
   typedef map<string, MethodStats> MethodStatsMap;
   MethodStatsMap method_stats_;
+
+  NetworkThread* network_;
 };
 
 #define RUN_ONE(m, klass, method, table)\

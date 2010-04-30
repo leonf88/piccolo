@@ -1,208 +1,254 @@
 #include "util/rpc.h"
 #include "util/common.h"
+#include "util/common.pb.h"
 
 DECLARE_bool(localtest);
+DECLARE_double(sleep_time);
 DEFINE_bool(rpc_log, false, "");
 
 namespace dsm {
 
-class MPIHelper : public RPCHelper, private boost::noncopyable {
-public:
-  MPIHelper() :
-    mpi_world_(&MPI::COMM_WORLD), my_rank_(MPI::COMM_WORLD.Get_rank()) {
-  }
 
-  // Try to read a message from the given peer and rpc channel = 0; return false if no
-  // message is immediately available.
-  bool TryRead(int src, int method, Message *msg);
-  bool HasData(int src, int method);
-  bool HasData(int src, int method, MPI::Status &status);
-
-  int Read(int src, int method, Message *msg);
-  int ReadAny(int *src, int method, Message *msg);
-  int ReadBytes(int src, int method, string *data, int *actual_src);
-
-  void Send(int target, int method, const Message &msg);
-  void SyncSend(int target, int method, const Message &msg);
-
-  void SendData(int peer_id, int rpc_id, const string& data);
-  MPI::Request ISendData(int peer_id, int rpc_id, const string& data);
-
-  // For whatever reason, MPI doesn't offer tagged broadcasts, we simulate that
-  // here.
-  void Broadcast(int method, const Message &msg);
-  void SyncBroadcast(int method, const Message &msg);
-private:
-  boost::recursive_mutex mpi_lock_;
-  MPI::Comm *mpi_world_;
-  int my_rank_;
-
-  int _Read(int desired_src, int method, Message *msg, int *src);
-  void _SyncSend(int target, int method, const Message& msg);
-  void WaitForReplies(int count);
-
-  struct Header {
-    Header() : rpc_id(0), sync(0), sync_reply(0) {}
-    int rpc_id;
-    bool sync;
-    bool sync_reply;
-  };
-
-  enum MethodTypes {
-    SYNC_REPLY = 255,
-  };
+struct Header {
+  Header() : sync_request(0), sync_reply(0) {}
+  bool sync_request;
+  bool sync_reply;
 };
 
-RPCHelper* get_rpc_helper() {
-  static RPCHelper* helper = NULL;
-  if (!helper) { helper = new MPIHelper(); }
-  return helper;
+// Represents an active RPC to a remote peer.
+struct RPCRequest : private boost::noncopyable {
+  int target;
+  int rpc_type;
+  int failures;
+
+  string payload;
+  MPI::Request mpi_req;
+  MPI::Status status;
+  double start_time;
+
+  RPCRequest(int target, int method, const Message& msg, Header h=Header());
+  ~RPCRequest();
+
+  bool finished();
+  double elapsed();
+};
+
+RPCRequest::~RPCRequest() {}
+
+bool RPCRequest::finished() { return mpi_req.Test(status); }
+double RPCRequest::elapsed() { return Now() - start_time; }
+
+// Send the given message type and data to this peer.
+RPCRequest::RPCRequest(int tgt, int method, const Message& ureq, Header h) {
+  failures = 0;
+  target = tgt;
+  rpc_type = method;
+
+  payload.append((char*)&h, sizeof(Header));
+  ureq.AppendToString(&payload);
 }
 
-#define rpc_log(logmsg, src, target, method) \
-  VLOG_IF(2, FLAGS_rpc_log) << \
-  StringPrintf("source %d target: %d rpc: %d %s", src, target, method, string((logmsg)).c_str());
-
-#define rpc_lock \
-  boost::recursive_mutex::scoped_lock sl(mpi_lock_);
-
-bool MPIHelper::HasData(int src, int method) {
-  MPI::Status st;
-  return HasData(src, method, st);
+NetworkThread::NetworkThread() {
+  world_ = &MPI::COMM_WORLD;
+  running = 1;
+  t_ = new boost::thread(&NetworkThread::Run, this);
 }
 
-bool MPIHelper::HasData(int src, int method, MPI::Status &status) {
-  rpc_lock;
-  return mpi_world_->Iprobe(src, method, status);
+bool NetworkThread::active() const {
+  return active_sends_.size() + pending_sends_.size() > 0;
 }
 
-bool MPIHelper::TryRead(int src, int method, Message *msg) {
-  if (!HasData(src, method)) {
-    return false;
+int64_t NetworkThread::pending_bytes() const {
+  boost::recursive_mutex::scoped_lock sl(send_lock);
+  int64_t t = 0;
+
+  for (unordered_set<RPCRequest*>::const_iterator i = active_sends_.begin(); i != active_sends_.end(); ++i) {
+    t += (*i)->payload.size();
   }
 
-  _Read(src, method, msg, NULL);
-  return true;
-}
-
-int MPIHelper::ReadBytes(int desired_src, int method, string* data, int *src) {
-  rpc_lock;
-
-  MPI::Status probe_result;
-  mpi_world_->Probe(desired_src, method, probe_result);
-
-  int r_size = probe_result.Get_count(MPI::BYTE);
-  int r_src = probe_result.Get_source();
-
-  string scratch;
-  scratch.resize(r_size);
-  mpi_world_->Recv(&scratch[0], r_size, MPI::BYTE, r_src, method, probe_result);
-
-  Header *h = (Header*) scratch.data();
-  data->assign(scratch.begin() + sizeof(Header), scratch.end());
-
-  if (src) { *src = r_src; }
-
-//  LOG(INFO) << StringPrintf("method: %d; sync %d; reply %d", h->sync, h->sync_reply);
-
-  if (h->sync) {
-    Header hreply;
-    hreply.sync_reply = 1;
-    SendData(r_src, SYNC_REPLY, string((char*) &hreply, sizeof(hreply)));
+  for (int i = 0; i < pending_sends_.size(); ++i) {
+    t += pending_sends_[i]->payload.size();
   }
 
-  return r_size;
+  return t;
 }
 
-int MPIHelper::_Read(int desired_src, int method, Message *msg, int *src) {
-  string scratch;
-  ReadBytes(desired_src, method, &scratch, src);
-  msg->ParseFromString(scratch);
-  return scratch.size();
+void NetworkThread::CollectActive() {
+  if (active_sends_.empty())
+    return;
+
+  boost::recursive_mutex::scoped_lock sl(send_lock);
+  unordered_set<RPCRequest*>::iterator i = active_sends_.begin();
+  while (i != active_sends_.end()) {
+    RPCRequest *r = (*i);
+    VLOG(2) << "Pending: " << MP(world_->Get_rank(), MP(r->target, r->rpc_type));
+    if (r->finished()) {
+      if (r->failures > 0) {
+        LOG(INFO) << "Send " << MP(world_->Get_rank(), r->target) << " of size " << r->payload.size()
+                  << " succeeded after " << r->failures << " failures.";
+      }
+      VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
+      delete r;
+      i = active_sends_.erase(i);
+      continue;
+    }
+    ++i;
+  }
 }
 
-int MPIHelper::Read(int src, int method, Message *msg) {
-  return _Read(src, method, msg, NULL);
+void NetworkThread::Run() {
+  while (running) {
+    MPI::Status st;
+
+    if (world_->Iprobe(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
+      int tag = st.Get_tag();
+      int source = st.Get_source();
+      int bytes = st.Get_count(MPI::BYTE);
+
+      string data;
+      data.resize(bytes);
+
+      world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
+
+      Header *h = (Header*)&data[0];
+      if (h->sync_request) {
+        LOG(INFO) << "Got sync packet; replying...";
+        EmptyMessage msg;
+        Send(source, MTYPE_SYNC_REPLY, msg);
+      }
+
+      boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
+      CHECK_LT(source, kMaxHosts);
+      incoming[tag][source].push_back(data);
+    } else {
+      Sleep(FLAGS_sleep_time);
+    }
+
+    while (!pending_sends_.empty()) {
+      boost::recursive_mutex::scoped_lock sl(send_lock);
+      RPCRequest* s = pending_sends_.back();
+      pending_sends_.pop_back();
+      s->start_time = Now();
+      s->mpi_req = world_->Isend(
+          s->payload.data(), s->payload.size(), MPI::BYTE, s->target, s->rpc_type);
+      active_sends_.insert(s);
+    }
+
+    CollectActive();
+
+    PERIODIC(10., { DumpProfile(); });
+  }
 }
 
-int MPIHelper::ReadAny(int *src, int method, Message *msg) {
-  while (!HasData(MPI_ANY_SOURCE, method)) {
-    sched_yield();
+bool NetworkThread::check_queue(int src, int type, Message* data) {
+  CHECK_LT(src, kMaxHosts);
+
+  Queue& q = incoming[type][src];
+  if (!q.empty()) {
+    boost::recursive_mutex::scoped_lock sl(q_lock[type]);
+    if (q.empty())
+      return false;
+
+    const string& s = q.front();
+    if (data) {
+      data->ParseFromArray(s.data() + sizeof(Header), s.size() - sizeof(Header));
+    }
+
+    q.pop_front();
+    return true;
+  }
+  return false;
+}
+
+  // Blocking read for the given source and message type.
+void NetworkThread::Read(int desired_src, int type, Message* data, int *source) {
+  while (!TryRead(desired_src, type, data, source)) {
+    Sleep(FLAGS_sleep_time);
+  }
+}
+
+bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
+  if (src == MPI::ANY_SOURCE) {
+    for (int i = 0; i < world_->Get_size(); ++i) {
+      if (TryRead(i, type, data, source)) {
+        return true;
+      }
+    }
+  } else {
+    if (check_queue(src, type, data)) {
+      if (source) { *source = src; }
+      return true;
+    }
   }
 
-  return _Read(MPI_ANY_SOURCE, method, msg, src);
+  return false;
 }
 
-void MPIHelper::Send(int target, int method, const Message &msg) {
-  string scratch;
-  Header h;
-  scratch.append((char*)&h, sizeof(h));
-
-  msg.AppendToString(&scratch);
-  SendData(target, method, scratch);
+  // Enqueue the given request for transmission.
+void NetworkThread::Send(RPCRequest *req) {
+  boost::recursive_mutex::scoped_lock sl(send_lock);
+//    LOG(INFO) << "Sending... " << MP(req->target, req->rpc_type);
+  pending_sends_.push_back(req);
 }
 
-void MPIHelper::SendData(int target, int method, const string& msg) {
-  rpc_lock;
-  rpc_log("SendData", my_rank_, target, method);
-  mpi_world_->Send(&msg[0], msg.size(), MPI::BYTE, target, method);
+void NetworkThread::Send(int dst, int method, const Message &msg) {
+  RPCRequest *r = new RPCRequest(dst, method, msg);
+  Send(r);
 }
 
-MPI::Request MPIHelper::ISendData(int target, int method, const string& msg) {
-  rpc_lock;
-  rpc_log("ISendData", my_rank_, target, method);
-  Header h;
-  string scratch;
-  scratch.append((char*)&h, sizeof(h));
-  scratch.append(msg);
-  return mpi_world_->Issend(&scratch[0], scratch.size(), MPI::BYTE, target, method);
+void NetworkThread::Shutdown() {
+  Flush();
+  running = false;
 }
 
-void MPIHelper::SyncSend(int target, int method, const Message &msg) {
-  rpc_lock;
-  _SyncSend(target, method, msg);
-  WaitForReplies(1);
+void NetworkThread::Flush() {
+  while (active()) {
+    Sleep(FLAGS_sleep_time);
+  }
 }
 
-void MPIHelper::_SyncSend(int target, int method, const Message& msg) {
-  rpc_lock;
-  rpc_log("SyncSendStart", my_rank_, target, method);
-
-  string scratch;
-  Header h;
-  h.sync = 1;
-  scratch.append((char*)&h, sizeof(h));
-
-  msg.AppendToString(&scratch);
-  SendData(target, method, scratch);
-  rpc_log("SyncSendDone", my_rank_, target, method);
-}
-
-void MPIHelper::Broadcast(int method, const Message &msg) {
-  rpc_lock;
-  for (int i = 1; i < mpi_world_->Get_size(); ++i) {
+void NetworkThread::Broadcast(int method, const Message& msg) {
+  for (int i = 1; i < world_->Get_size(); ++i) {
     Send(i, method, msg);
   }
 }
 
-void MPIHelper::SyncBroadcast(int method, const Message &msg) {
-  rpc_lock;
+void NetworkThread::SyncBroadcast(int method, const Message& msg) {
+  for (int i = 1; i < world_->Get_size(); ++i) {
+    Header h;
+    h.sync_request = 1;
 
-  VLOG(1) << "SyncBroadcast: " << method << "  :: " << msg;
-  for (int i = 1; i < mpi_world_->Get_size(); ++i) {
-    _SyncSend(i, method, msg);
+    RPCRequest *r = new RPCRequest(i, method, msg, h);
+    Send(r);
   }
 
-  WaitForReplies(mpi_world_->Get_size() - 1);
+  WaitForSync(world_->Get_size() - 1);
 }
 
-void MPIHelper::WaitForReplies(int count) {
+void NetworkThread::WaitForSync(int count) {
   while (count > 0) {
-    VLOG(1) << "Waiting for sync: " << count;
-    MPI::Status probe_result;
-    mpi_world_->Probe(MPI_ANY_SOURCE, SYNC_REPLY, probe_result);
+    Read(MPI::ANY_SOURCE, MTYPE_SYNC_REPLY, NULL, NULL);
     --count;
   }
 }
 
+static NetworkThread* net = NULL;
+NetworkThread* NetworkThread::Get() {
+  if (!net) {
+    net = new NetworkThread();
+  }
+  return net;
 }
+
+static void NetworkShutdown() {
+  net->Shutdown();
+}
+
+static void NetworkInit() {
+  NetworkThread::Get();
+  atexit(&NetworkShutdown);
+}
+
+REGISTER_INITIALIZER(NetworkInit, { NetworkInit(); });
+}
+

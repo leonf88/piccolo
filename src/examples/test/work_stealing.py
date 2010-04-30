@@ -12,14 +12,7 @@ class Bucket:
         self.shards = []
         self.bad = 0
 
-    def __lt__(self, other):
-        if self.bad and not other.bad: return 0
-        return sum(self.shards) < sum(other.shards)
-    
-    def steal(self, other, reverse=0):
-        other.shards.sort()
-        other.shards.reverse()
-        
+    def cutoff(self, other):
         cutoff = sum(self.shards)
         b = 0
         i = 0
@@ -28,8 +21,20 @@ class Bucket:
             i += 1
 
         if i >= len(other.shards) - 1:
-            return False
+            return -1
+        return i
+
+    def __lt__(self, other):
+        if self.bad and not other.bad: return 0
+        if self.cutoff(other) == -1: return 0
         
+        # sort on the largest pending shard
+        return sum(self.shards) < sum(other.shards)
+    
+    def steal(self, other, reverse=0):
+        other.shards.sort()
+        other.shards.reverse()
+                
         if reverse:
             self.shards += [other.shards[-1]]
             del other.shards[-1]

@@ -3,6 +3,8 @@
 
 #include "util/common.h"
 #include "util/file.h"
+#include "util/common.pb.h"
+
 #include <boost/thread.hpp>
 #include <google/protobuf/message.h>
 #include <mpi.h>
@@ -11,28 +13,62 @@ namespace dsm {
 
 typedef google::protobuf::Message Message;
 
-class RPCHelper {
+struct RPCRequest;
+
+// XXX
+//stats_.set_bytes_out(stats_.bytes_out() + p->payload.size());
+//stats_.set_put_out(stats_.put_out() + 1);
+
+// Hackery to get around mpi's unhappiness with threads.  This thread
+// simply polls MPI continuously for any kind of update and adds it to
+// a local queue.
+class NetworkThread {
 public:
-  // Try to read a message from the given peer and rpc channel = 0; return false if no
-  // message is immediately available.
-  virtual bool TryRead(int target, int method, Message *msg) = 0;
-  virtual bool HasData(int target, int method) = 0;
-  virtual bool HasData(int target, int method, MPI::Status &status) = 0;
+  bool active() const;
+  int64_t pending_bytes() const;
+  
+  // Blocking read for the given source and message type.
+  void Read(int desired_src, int type, Message* data, int *source=NULL);
+  bool TryRead(int desired_src, int type, Message* data, int *source=NULL);
 
-  virtual int Read(int src, int method, Message *msg) = 0;
-  virtual int ReadAny(int *src, int method, Message *msg) = 0;
-  virtual int ReadBytes(int desired_src, int method, string* data, int *actual_src) = 0;
-  virtual void Send(int target, int method, const Message &msg) = 0;
-  virtual void SyncSend(int target, int method, const Message &msg) = 0;
+  // Enqueue the given request for transmission.
+  void Send(RPCRequest *req);
+  void Send(int dst, int method, const Message &msg);
 
-  virtual void SendData(int peer_id, int rpc_id, const string& data) = 0;
-  virtual MPI::Request ISendData(int peer_id, int rpc_id, const string& data) = 0;
+  void Broadcast(int method, const Message& msg);
+  void SyncBroadcast(int method, const Message& msg);
+  void WaitForSync(int count);
 
-  virtual void Broadcast(int method, const Message &msg) = 0;
-  virtual void SyncBroadcast(int method, const Message &msg) = 0;
+  void Flush();
+  void Shutdown();
+
+  static NetworkThread *Get();
+private:
+  static const int kMaxHosts = 512;
+  static const int kMaxMethods = 32;
+
+  typedef deque<string> Queue;
+
+  bool running;
+
+  vector<RPCRequest*> pending_sends_;
+  unordered_set<RPCRequest*> active_sends_;
+
+  Queue incoming[kMaxMethods][kMaxHosts];
+
+  MPI::Comm *world_;
+  mutable boost::recursive_mutex send_lock;
+  mutable boost::recursive_mutex q_lock[kMaxHosts];
+  mutable boost::thread *t_;
+
+  bool check_queue(int src, int type, Message* data);
+
+  void CollectActive();
+  void Run();
+
+  NetworkThread();
 };
 
-RPCHelper *get_rpc_helper();
 
 }
 

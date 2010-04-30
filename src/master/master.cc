@@ -207,10 +207,10 @@ Master::Master(const ConfigData &conf) {
   kernel_epoch_ = 0;
   last_checkpoint_ = Now();
   checkpointing_ = false;
+  network_ = NetworkThread::Get();
 
   CHECK_GT(world_.Get_size(), 1) << "At least one master and one worker required!";
 
-  rpc_ = get_rpc_helper();
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(new WorkerState(i));
   }
@@ -218,7 +218,7 @@ Master::Master(const ConfigData &conf) {
   for (int i = 0; i < config_.num_workers(); ++i) {
     RegisterWorkerRequest req;
     int src = 0;
-    rpc_->ReadAny(&src, MTYPE_REGISTER_WORKER, &req);
+    network_->Read(MPI::ANY_SOURCE, MTYPE_REGISTER_WORKER, &req, &src);
     workers_[src - 1]->slots = req.slots();
     LOG(INFO) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
@@ -244,7 +244,7 @@ Master::~Master() {
   LOG(INFO) << "Shutting down workers.";
   EmptyMessage msg;
   for (int i = 1; i < world_.Get_size(); ++i) {
-    rpc_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
+    network_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
 }
 
@@ -295,7 +295,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
     req.add_table(r.checkpoint_tables[i]);
   }
 
-  rpc_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
+  network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
 }
 
 void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
@@ -303,13 +303,13 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
 
   if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
     EmptyMessage req;
-    rpc_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
+    network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
 
   LOG(INFO) << "Waiting for " << worker_id << " to finish checkpointing.";
 
   EmptyMessage resp;
-  rpc_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
+  network_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
 
   workers_[worker_id]->checkpointing = false;
 }
@@ -358,12 +358,12 @@ ParamMap* Master::restore() {
 
   StartRestore req;
   req.set_epoch(epoch);
-  rpc_->Broadcast(MTYPE_RESTORE, req);
+  network_->Broadcast(MTYPE_RESTORE, req);
 
   for (int i = 0; i < config_.num_workers(); ++i) {
     EmptyMessage resp;
     LOG(INFO) << "Waiting for restore to finish... " << i + 1 << " of " << config_.num_workers();
-    rpc_->ReadAny(NULL, MTYPE_RESTORE_DONE, &resp);
+    network_->Read(MPI::ANY_SOURCE, MTYPE_RESTORE_DONE, &resp, NULL);
   }
 
   return ParamMap::from_params(params);
@@ -439,7 +439,7 @@ void Master::send_table_assignments() {
     }
   }
 
-  rpc_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  network_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
 }
 
 bool Master::steal_work(const RunDescriptor& r, int idle_worker,
@@ -530,7 +530,7 @@ void Master::dispatch_work(const RunDescriptor& r) {
     WorkerState& w = *workers_[i];
     if (w.num_pending() > 0 && w.num_active() == 0) {
       w.get_next(r, &w_req);
-      rpc_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
+      network_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }
   }
 }
@@ -579,9 +579,8 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
       checkpoint(r);
     }
 
-    if (rpc_->HasData(MPI_ANY_SOURCE, MTYPE_KERNEL_DONE)) {
-      int w_id = 0;
-      rpc_->ReadAny(&w_id, MTYPE_KERNEL_DONE, &done_msg);
+    int w_id = 0;
+    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
       w_id -= 1;
 
       WorkerState& w = *workers_[w_id];
@@ -668,7 +667,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
   }
 
   EmptyMessage empty;
-  rpc_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
+  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
   kernel_epoch_++;
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
