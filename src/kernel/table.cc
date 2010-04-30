@@ -33,6 +33,20 @@ static void SerializePartial(HashPut& r, TableView::Iterator *it) {
   r.set_done(it->done());
 }
 
+void GlobalView::set_dirty(int shard) { partinfo_[shard].dirty = true; }
+bool GlobalView::dirty(int shard) { return partinfo_[shard].dirty; }
+
+void GlobalView::set_tainted(int shard) { partinfo_[shard].tainted = true; }
+void GlobalView::clear_tainted(int shard) { partinfo_[shard].tainted = false; }
+bool GlobalView::tainted(int shard) { return partinfo_[shard].tainted; }
+
+void GlobalView::set_owner(int shard, int worker) { partinfo_[shard].owner = worker; }
+int GlobalView::get_owner(int shard) { return partinfo_[shard].owner; }
+
+void GlobalView::UpdateShardinfo(const ShardInfo& info) {
+  partinfo_[info.shard()].sinfo.CopyFrom(info);
+}
+
 GlobalTable::~GlobalTable() {
   for (int i = 0; i < partitions_.size(); ++i) {
     delete partitions_[i];
@@ -48,7 +62,7 @@ Table_Iterator* GlobalTable::get_iterator(int shard) {
 }
 
 bool GlobalTable::is_local_shard(int shard) {
-  return partitions_[shard]->owner == worker_id_;
+  return get_owner(shard) == worker_id_;
 }
 
 bool GlobalTable::is_local_key(const StringPiece &k) {
@@ -56,18 +70,17 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
 }
 
 void GlobalTable::Init(const dsm::TableDescriptor &info) {
-  TableView::Init(info);
+  GlobalView::Init(info);
   worker_id_ = -1;
   partitions_.resize(info.num_shards);
-  shardinfo_.resize(info.num_shards);
-}
-
-void GlobalTable::UpdateShardinfo(const ShardInfo& info) {
-  shardinfo_[info.shard()].CopyFrom(info);
 }
 
 int64_t GlobalTable::shard_size(int shard) {
-  return shardinfo_[shard].entries();
+  if (is_local_shard(shard)) {
+    return partitions_[shard]->size();
+  } else {
+    return partinfo_[shard].sinfo.entries();
+  }
 }
 
 void GlobalTable::clear(int shard) {
@@ -93,14 +106,6 @@ void GlobalTable::resize(int64_t new_size) {
       partitions_[i]->resize(new_size / partitions_.size());
     }
   }
-}
-
-void GlobalTable::set_owner(int shard, int w) {
-  partitions_[shard]->owner = w;
-}
-
-int GlobalTable::get_owner(int shard) {
-  return partitions_[shard]->owner;
 }
 
 void GlobalTable::set_worker(Worker* w) {
@@ -177,6 +182,8 @@ void GlobalTable::restore(const string& f) {
 }
 
 void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
+  boost::recursive_mutex::scoped_lock sl(mutex());
+
   HashPutCoder h(get_resp);
 
   int shard = get_shard_str(key);
@@ -200,7 +207,7 @@ void GlobalTable::SendUpdates() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
-    if (!is_local_shard(i) && (t->dirty || !t->empty())) {
+    if (!is_local_shard(i) && (dirty(i) || !t->empty())) {
       VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << get_owner(i);
 
       TableView::Iterator *it = t->get_iterator();
@@ -241,6 +248,8 @@ int GlobalTable::pending_write_bytes() {
 }
 
 void GlobalTable::ApplyUpdates(const dsm::HashPut& req) {
+  boost::recursive_mutex::scoped_lock sl(mutex());
+
   if (!is_local_shard(req.shard())) {
     LOG_EVERY_N(INFO, 1000)
         << "Forwarding push request from: " << MP(id(), req.shard())
@@ -315,5 +324,16 @@ void LocalTable::ApplyUpdates(const HashPut& req) {
     put_str(h.key(i), h.value(i));
   }
 }
+
+TableView::Iterator *DiskTable::get_iterator(int shard) {
+  return NULL;
+}
+
+int64_t DiskTable::shard_size(int shard) {
+return 0;
+}
+
+void DiskTable::UpdateShardinfo(const ShardInfo & sinfo) {}
+
 
 }

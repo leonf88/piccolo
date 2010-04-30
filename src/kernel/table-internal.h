@@ -4,8 +4,6 @@ template<class K, class V>
 void TypedLocalTable<K, V>::Init(const TableDescriptor &tinfo) {
   LocalTable::Init(tinfo);
   data_.rehash(3);//tinfo.default_shard_size);
-  dirty = false;
-  tainted = false;
   owner = -1;
 }
 

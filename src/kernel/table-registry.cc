@@ -10,12 +10,12 @@ static TableMap *tables = NULL;
 
 TableMap& get_tables() {
   if (tables == NULL) {
-    tables = new map<int, GlobalTable*>;
+    tables = new map<int, GlobalView*>;
   }
   return *tables;
 }
 
-GlobalTable* get_table(int id) {
+GlobalView* get_table(int id) {
   return get_tables()[id];
 }
 }

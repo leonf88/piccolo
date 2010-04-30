@@ -90,23 +90,52 @@ public:
 };
 
 // Operations needed on a local shard of a table.
-class LocalView : public TableView {
+class LocalView : public TableView, public Checkpointable {
 public:
   virtual TableView::Iterator* get_iterator() = 0;
 };
 
-class GlobalView : public TableView {
+class GlobalView : public TableView, public Checkpointable {
 public:
+  void Init(const TableDescriptor& info) {
+    TableView::Init(info);
+    partinfo_.resize(num_shards());
+  }
+
+  void clear_tainted(int shard);
+  void set_tainted(int shard);
+  bool tainted(int shard);
+  bool dirty(int shard);
+  void set_dirty(int shard);
+  void set_owner(int shard, int worker);
+  int get_owner(int shard);
+  void UpdateShardinfo(const ShardInfo& sinfo);
+
   virtual TableView::Iterator* get_iterator(int shard) = 0;
   virtual int64_t shard_size(int shard) = 0;
+  virtual int pending_write_bytes() = 0;
 
-  virtual void set_owner(int shard, int worker) = 0;
-  virtual int get_owner(int shard) = 0;
+  virtual void ApplyUpdates(const HashPut& req) = 0;
+  virtual void SendUpdates() = 0;
 
-  virtual void UpdateShardinfo(const ShardInfo& sinfo) = 0;
+  virtual bool is_local_shard(int shard) = 0;
+  virtual void handle_get(const StringPiece& key, HashPut* resp) = 0;
+  virtual void set_worker(Worker* w) = 0;
+
+
+protected:
+  struct PartitionInfo {
+    PartitionInfo() : dirty(false), tainted(false), owner(-1) {}
+    bool dirty;
+    bool tainted;
+    int owner;
+    ShardInfo sinfo;
+  };
+
+  vector<PartitionInfo> partinfo_;
 };
 
-class LocalTable : public LocalView, public Checkpointable {
+class LocalTable : public LocalView {
 public:
   void Init(const TableDescriptor &tinfo) { 
     delta_file_ = NULL;
@@ -133,13 +162,11 @@ public:
   virtual bool contains_str(const StringPiece &k) = 0;
 protected:
   friend class GlobalTable;
-  bool dirty;
-  bool tainted;
   int16_t owner;
   RecordFile *delta_file_;
 };
 
-class GlobalTable : public GlobalView, public Checkpointable {
+class GlobalTable : public GlobalView {
 public:
   void Init(const TableDescriptor& tinfo);
   virtual ~GlobalTable();
@@ -148,8 +175,6 @@ public:
   Table_Iterator* get_iterator(int shard);
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
-  void set_owner(int shard, int worker);
-  int get_owner(int shard);
 
   // Fill in a response from a remote worker for the given key.
   void handle_get(const StringPiece& key, HashPut* resp);
@@ -180,7 +205,6 @@ protected:
   boost::recursive_mutex& mutex() { return m_; }
   vector<LocalTable*> partitions_;
   vector<LocalTable*> cache_;
-  vector<ShardInfo> shardinfo_;
 
   volatile int pending_writes_;
   boost::recursive_mutex m_;
@@ -191,13 +215,6 @@ protected:
 
   void set_worker(Worker *w);
   void HandlePutRequests();
-
-  void set_dirty(int shard) { partitions_[shard]->dirty = true; }
-  bool dirty(int shard) { return partitions_[shard]->dirty || !partitions_[shard]->empty(); }
-
-  void set_tainted(int shard) { partitions_[shard]->tainted = true; }
-  void clear_tainted(int shard) { partitions_[shard]->tainted = false; }
-  bool tainted(int shard) { return partitions_[shard]->tainted; }
 
   // Fetch the given key, using only local information.
   void get_local(const StringPiece &k, string *v);
@@ -281,9 +298,9 @@ class DiskTable : public GlobalView, private boost::noncopyable {
 public:
   TableView::Iterator *get_iterator(int shard);
   int64_t shard_size(int shard);
-  void set_owner(int shard, int worker);
-  int get_owner(int shard);
   void UpdateShardinfo(const ShardInfo & sinfo);
+private:
+  HashMap<int, int> owner_map_;
 };
 
 #include "table-internal.h"
