@@ -1,3 +1,5 @@
+static const int kWriteFlushCount = 100000;
+
 template<class K, class V>
 void TypedLocalTable<K, V>::Init(const TableDescriptor &tinfo) {
   LocalTable::Init(tinfo);
