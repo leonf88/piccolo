@@ -33,6 +33,12 @@ static void SerializePartial(HashPut& r, TableView::Iterator *it) {
   r.set_done(it->done());
 }
 
+GlobalTable::~GlobalTable() {
+  for (int i = 0; i < partitions_.size(); ++i) {
+    delete partitions_[i];
+  }
+}
+
 LocalTable *GlobalTable::get_partition(int shard) {
   return partitions_[shard];
 }
@@ -50,7 +56,7 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
 }
 
 void GlobalTable::Init(const dsm::TableDescriptor &info) {
-  info_ = info;
+  TableView::Init(info);
   partitions_.resize(info.num_shards);
 }
 
@@ -165,12 +171,15 @@ void GlobalTable::restore(const string& f) {
 
 void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
   HashPutCoder h(get_resp);
-  if (!contains_str(key)) {
+
+  int shard = get_shard_str(key);
+  CHECK(is_local_shard(shard));
+
+  LocalTable *t = partitions_[shard];
+  if (!t->contains_str(key)) {
     get_resp->set_missing_key(true);
   } else {
-    string v;
-    get_local(key, &v);
-    h.add_pair(key.AsString(), v);
+    h.add_pair(key.AsString(), t->get_str(key));
   }
 }
 

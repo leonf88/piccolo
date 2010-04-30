@@ -159,7 +159,7 @@ public:
     while (r->read(&n)) {
       next_pr_hash->update(P(n.site(), n.id()), random_restart_seed());
 
-      float v = curr_pr_hash->get_local(P(n.site(), n.id()));
+      float v = curr_pr_hash->get(P(n.site(), n.id()));
       float contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
         next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);

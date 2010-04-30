@@ -68,12 +68,55 @@ class TableView {
 public:
   typedef Table_Iterator Iterator;
   
-  virtual const TableDescriptor& info() const = 0;
-  virtual void set_info(const TableDescriptor& t) = 0;
+  void Init(const TableDescriptor& info) { info_ = info; }
+
+  const TableDescriptor& info() const { return info_; }
+  void set_info(const TableDescriptor& t) { info_ = t; }
 
   int id() const { return info().table_id; }
   int shard() const { return info().shard; }
   int num_shards() const { return info().num_shards; }
+
+  virtual bool empty() { return size() == 0; }
+  virtual int64_t size() = 0;
+private:
+  TableDescriptor info_;
+};
+
+class Checkpointable {
+public:
+  // Checkpoint and restoration.
+  virtual void start_checkpoint(const string& f) = 0;
+  virtual void write_delta(const HashPut& put) = 0;
+  virtual void finish_checkpoint() = 0;
+  virtual void restore(const string& f) = 0;
+};
+
+// Operations needed on a local shard of a table.
+class LocalView {
+public:
+  virtual TableView::Iterator* get_iterator() = 0;
+};
+
+class GlobalView {
+public:
+  virtual TableView::Iterator* get_iterator(int shard) = 0;
+  virtual int64_t size() = 0;
+  virtual int64_t shard_size(int shard) = 0;
+};
+
+class LocalTable : public LocalView, public TableView, public Checkpointable {
+public:
+  void Init(const TableDescriptor &tinfo) { 
+    delta_file_ = NULL;
+    TableView::Init(tinfo);
+  }
+
+  void ApplyUpdates(const HashPut& req);
+  void write_delta(const HashPut& put);
+
+  virtual void resize(int64_t new_size) = 0;
+  virtual void clear() = 0;
 
   // Generic routines to fetch and set entries as serialized strings.
 
@@ -84,41 +127,6 @@ public:
   virtual void put_str(const StringPiece &k, const StringPiece& v) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece& v) = 0;
   virtual bool contains_str(const StringPiece &k) = 0;
-
-  virtual bool empty() = 0;
-  virtual int64_t size() = 0;
-
-  virtual void resize(int64_t new_size) = 0;
-
-  // Checkpoint and restoration.
-  virtual void start_checkpoint(const string& f) = 0;
-  virtual void write_delta(const HashPut& put) = 0;
-  virtual void finish_checkpoint() = 0;
-  virtual void restore(const string& f) = 0;
- 
-  // Handle incoming network data. 
-  virtual void ApplyUpdates(const HashPut& req) = 0;
-};
-
-// Operations needed on a local shard of a table.
-class LocalView {
-public:
-  virtual void ApplyUpdates(const HashPut& up) = 0;
-  virtual TableView::Iterator* get_iterator() = 0;
-  virtual void clear() = 0;
-};
-
-class LocalTable : public LocalView, public TableView {
-public:
-  void Init(const TableDescriptor &tinfo) { 
-    info_ = tinfo; 
-    delta_file_ = NULL;
-  }
-
-  const TableDescriptor& info() const { return info_; }
-  void set_info(const TableDescriptor& info) { info_ = info; }
-  void ApplyUpdates(const HashPut& req);
-  void write_delta(const HashPut& put);
 protected:
   friend class GlobalTable;
   TableDescriptor info_;
@@ -128,50 +136,10 @@ protected:
   RecordFile *delta_file_;
 };
 
-class GlobalView {
-public:
-  virtual LocalTable *get_partition(int shard) = 0;
-  virtual TableView::Iterator* get_iterator(int shard) = 0;
-  virtual bool is_local_shard(int shard) = 0;
-  virtual bool is_local_key(const StringPiece &k) = 0;
-  virtual void set_owner(int shard, int worker) = 0;
-  virtual int get_owner(int shard) = 0;
-
-  virtual int get_shard_str(StringPiece k) = 0;
-
-  // Fetch the given key, using only local information.
-  virtual void get_local(const StringPiece &k, string *v) = 0;
-
-  // Fetch key k from the node owning it.  Returns true if the key exists.
-  virtual bool get_remote(int shard, const StringPiece &k, string* v) = 0;
-
-  // Fill in a response from a remote worker for the given key.
-  virtual void handle_get(const StringPiece& key, HashPut* resp) = 0;
-
-  // Transmit any buffered update data to remote peers.
-  virtual void SendUpdates() = 0;
-
-  virtual int pending_write_bytes() = 0;
-
-  // Clear any local data for which this table has ownership.  Pending updates
-  // are *not* cleared.
-  virtual void clear(int shard) = 0;
-  virtual bool empty() = 0;
-  virtual int64_t size() = 0;
-  virtual void resize(int64_t new_size) = 0;
-};
-
-class GlobalTable : public GlobalView, public TableView {
+class GlobalTable : public GlobalView, public TableView, public Checkpointable {
 public:
   void Init(const TableDescriptor& tinfo);
-  const TableDescriptor& info() const { return info_; }
-  void set_info(const TableDescriptor& info) { info_ = info; }
-
-  virtual ~GlobalTable() {
-    for (int i = 0; i < partitions_.size(); ++i) {
-      delete partitions_[i];
-    }
-  }
+  virtual ~GlobalTable();
 
   LocalTable *get_partition(int shard);
   Table_Iterator* get_iterator(int shard);
@@ -179,12 +147,6 @@ public:
   bool is_local_key(const StringPiece &k);
   void set_owner(int shard, int worker);
   int get_owner(int shard);
-
-  // Fetch the given key, using only local information.
-  void get_local(const StringPiece &k, string *v);
-
-  // Fetch key k from the node owning it.  Returns true if the key exists.
-  bool get_remote(int shard, const StringPiece &k, string* v);
 
   // Fill in a response from a remote worker for the given key.
   void handle_get(const StringPiece& key, HashPut* resp);
@@ -206,6 +168,8 @@ public:
   void write_delta(const HashPut& d);
   void finish_checkpoint();
   void restore(const string& f);
+
+  virtual int get_shard_str(StringPiece k) = 0;
 
 protected:
   virtual LocalTable* create_local(int shard) = 0;
@@ -230,6 +194,12 @@ protected:
   void set_tainted(int shard) { partitions_[shard]->tainted = true; }
   void clear_tainted(int shard) { partitions_[shard]->tainted = false; }
   bool tainted(int shard) { return partitions_[shard]->tainted; }
+
+  // Fetch the given key, using only local information.
+  void get_local(const StringPiece &k, string *v);
+
+  // Fetch key k from the node owning it.  Returns true if the key exists.
+  bool get_remote(int shard, const StringPiece &k, string* v);
 };
 
 // Wrapper to add string methods based on key/value typed methods.
@@ -259,13 +229,13 @@ public:
   void put(const K &k, const V &v); 
   void update(const K &k, const V &v);
   void remove(const K &k); 
-
-  void clear(); 
   void resize(int64_t new_size); 
 
   void start_checkpoint(const string& f);
   void finish_checkpoint(); 
   void restore(const string& f);
+
+  void clear();
 
   WRAPPER_FUNCTION_DECL;
 
@@ -273,12 +243,9 @@ private:
   DataMap data_;
 };
 
-static const int kWriteFlushCount = 100000;
-
 template <class K, class V>
 class TypedGlobalTable : public GlobalTable, private boost::noncopyable {
 private:
-  static const int32_t kMaxPeers = 8192;
   typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
 protected:
   LocalTable* create_local(int shard);
@@ -305,6 +272,11 @@ public:
   WRAPPER_FUNCTION_DECL;
 };
 
+// Represents a sharded, on disk table.
+class DiskTable : public GlobalView, public TableView, private boost::noncopyable {
+public:
+
+};
 
 #include "table-internal.h"
 
