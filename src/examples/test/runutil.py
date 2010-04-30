@@ -60,6 +60,7 @@ def run_command(runner,
                   '-bynode',
                   '-nooversubscribe',
                   '-tag-output ',
+                  '-display-map',
                   '-n %s ' % (n + 1),
                   'bash -c "',
                   'LD_LIBRARY_PATH=/home/power/share/lib',
@@ -79,7 +80,10 @@ def run_command(runner,
   while handle.returncode == None:
     handle.poll()
     l = handle.stdout.readline().strip()
-    log(l)
+    if l: log(l)
 
   end = time.time()
   log('Finished in: %s', end - start)
+
+  if handle.returncode != 0:
+    raise SystemError, 'Command failed'
