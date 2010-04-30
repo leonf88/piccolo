@@ -291,10 +291,14 @@ void Worker::KernelLoop() {
   req.set_id(id());
   req.set_slots(config_.slots());
   the_network->Send(0, MTYPE_REGISTER_WORKER, req);
- 
+
+
+  KernelRequest kreq;
+
   while (running_) {
     Timer idle;
-    while (kernel_queue_.empty()) {
+
+    while (!the_network->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &kreq)) {
       CheckNetwork();
       Sleep(FLAGS_sleep_time);
 
@@ -304,24 +308,21 @@ void Worker::KernelLoop() {
     }
     stats_.set_idle_time(stats_.idle_time() + idle.elapsed());
 
-    KernelRequest k = kernel_queue_.front();
-    kernel_queue_.pop_front();
+    VLOG(1) << "Received run request for " << kreq;
 
-    VLOG(1) << "Received run request for " << k;
-
-    if (peer_for_shard(k.table(), k.shard()) != config_.worker_id()) {
-      LOG(FATAL) << "Received a shard I can't work on! : " << k.shard()
-                 << " : " << peer_for_shard(k.table(), k.shard());
+    if (peer_for_shard(kreq.table(), kreq.shard()) != config_.worker_id()) {
+      LOG(FATAL) << "Received a shard I can't work on! : " << kreq.shard()
+                 << " : " << peer_for_shard(kreq.table(), kreq.shard());
     }
 
-    KernelInfo *helper = Registry::get_kernel(k.kernel());
-    KernelId id(k.kernel(), k.table(), k.shard());
+    KernelInfo *helper = Registry::get_kernel(kreq.kernel());
+    KernelId id(kreq.kernel(), kreq.table(), kreq.shard());
     DSMKernel* d = kernels_[id];
 
     if (!d) {
       d = helper->create();
       kernels_[id] = d;
-      d->initialize_internal(this, k.table(), k.shard());
+      d->initialize_internal(this, kreq.table(), kreq.shard());
       d->InitKernel();
     }
 
@@ -329,7 +330,7 @@ void Worker::KernelLoop() {
       Sleep(FLAGS_sleep_hack);
     }
 
-    helper->Run(d, k.method());
+    helper->Run(d, kreq.method());
 
     // Flush any table updates leftover.
     for (Registry::TableMap::iterator i = Registry::get_tables().begin();
@@ -338,7 +339,7 @@ void Worker::KernelLoop() {
     }
 
     KernelDone kd;
-    kd.mutable_kernel()->CopyFrom(k);
+    kd.mutable_kernel()->CopyFrom(kreq);
     Registry::TableMap &tmap = Registry::get_tables();
     for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
       GlobalTable* t = i->second;
@@ -354,14 +355,14 @@ void Worker::KernelLoop() {
     }
     the_network->Send(config_.master_id(), MTYPE_KERNEL_DONE, kd);
 
-    VLOG(1) << "Kernel finished: " << k;
+    VLOG(1) << "Kernel finished: " << kreq;
     DumpProfile();
   }
 }
 
 void Worker::Flush() {
   Timer idle;
-  while (the_network->pending_bytes()) {
+  while (the_network->pending_bytes() > 0 && pending_kernel_bytes() > 0) {
     CheckNetwork();
     Sleep(FLAGS_sleep_time);
   }
@@ -626,16 +627,8 @@ void Worker::CheckForMasterUpdates() {
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  while (the_network->TryRead(config_.master_id(), MTYPE_RUN_KERNEL, &k)) {
-    kernel_queue_.push_back(k);
-  }
-
-  // Check for new kernels to run, and report finished kernels to the master.
   while (the_network->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &msg)) {
-    while (the_network->pending_bytes() > 0 && pending_kernel_bytes() > 0) {
-      HandlePutRequests();
-      HandleGetRequests();
-    }
+    Flush();
   }
 }
 
