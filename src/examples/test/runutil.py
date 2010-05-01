@@ -7,12 +7,15 @@ import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 parallelism = [64, 32, 16, 8, 4, 2]
-num_cores = machines = 0
-mdict = {}
-for l in open('mpi_hostfile').readlines():
-  num_cores += int(l.split('=')[1])
-  mdict[l.split()[0]] = 1
-machines = len(mdict)
+
+def hostfile_info(f):
+  cores = machines = 0
+  mdict = {}
+  for l in open(f).readlines():
+    cores += int(l.split('=')[1])
+    mdict[l.split()[0]] = 1
+    machines = len(mdict)
+  return cores, machines
 
 
 def system(*args):
@@ -28,6 +31,7 @@ def run_command(runner,
                 n=64, 
                 build_type='release',
                 results_dir='results',
+                hostfile='fast_hostfile',
                 logfile_name=None,
                 args=None):
   if not logfile_name: logfile_name = runner
@@ -39,7 +43,8 @@ def run_command(runner,
 
   logfile = open('%s/%s' % (output_dir, logfile_name), 'w')
 
-  log("Running with %s machines, %s cores" % (machines, num_cores))
+  machines, cores = hostfile_info(hostfile)
+  log("Running with %s machines, %s cores" % (machines, cores))
 
   system('rm -f profile/*')
   log("Writing output to: %s", output_dir)
@@ -48,7 +53,7 @@ def run_command(runner,
   log("Killing existing workers...")
   #system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
 
-  affinity = 0 if n >= num_cores else 1
+  affinity = 0 if n >= cores else 1
 
   log("Runner: %s", runner)
   log("Parallelism: %s", n)
@@ -56,7 +61,7 @@ def run_command(runner,
 
   cmd = ' '.join(['/home/power/share/bin/mpirun',
                   '-mca mpi_paffinity_alone %s' % affinity,
-                  '-hostfile mpi_hostfile',
+                  '-hostfile %s' % hostfile,
                   '-bynode',
                   '-nooversubscribe',
                   '-tag-output ',

@@ -1,6 +1,7 @@
 #ifndef PYTHON_SUPPORT_H
 #define PYTHON_SUPPORT_H
 
+#ifndef SWIG
 #include <google/protobuf/message.h>
 #include "util/common.pb.h"
 #include "examples.h"
@@ -8,6 +9,7 @@
 
 using namespace google::protobuf;
 using namespace std;
+#endif
 
 dsm::DSMKernel* kernel();
 
@@ -24,26 +26,27 @@ static int DomainSharding(const string& in, int num_shards) {
 %module python_support
 
 %{
-#include "python_support.i"
+#include "examples/python_support.i"
 %}
 
 #define GOOGLE_PROTOBUF_VERSION 2003000
 #define LIBPROTOBUF_EXPORT
 
+%include "google/protobuf/message.h"
+
 typedef google::protobuf::int32_t int32_t;
 
 %include "std_string.i"
-
-%include "google/protobuf/message_lite.h"
 
 %include "util/common.pb.h"
 %include "examples.pb.h"
 
 %include "util/common.h"
 %include "util/file.h"
-%include "python_support.i"
+
+%include "kernel/kernel.h"
 %include "kernel/table.h"
-%include "kernel/kernel-registry.h"
+%include "kernel/table-registry.h"
 
 using namespace dsm;
 using namespace std;

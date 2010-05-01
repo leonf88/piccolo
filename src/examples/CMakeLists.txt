@@ -28,12 +28,34 @@ endif()
 target_link_libraries(example-dsm -Wl,-Bstatic ${MPILIBS} ${STATICLIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
 target_link_libraries(example-dsm ${DYNAMICLIBS})		      
 
-swig_add_module(python_support python python_support.i)
-swig_link_libraries(python_support ${PYTHON_LIBRARIES})
 
-add_executable(dsm-crawler crawler/crawler_support.cc)
+GET_DIRECTORY_PROPERTY(cmake_include_directories INCLUDE_DIRECTORIES)
+SET(swig_include_dirs)
+FOREACH(it ${cmake_include_directories})
+  SET(swig_include_dirs ${swig_include_dirs} "-I${it}")
+ENDFOREACH(it)
+
+
+ADD_CUSTOM_COMMAND(
+ OUTPUT python_support_wrap.cc
+ COMMAND swig
+ ARGS 
+ -python 
+ -ignoremissing 
+ -O 
+ -c++ 
+ -outdir ${CMAKE_CURRENT_BINARY_DIR} 
+ ${swig_include_dirs}
+ -o ${CMAKE_CURRENT_BINARY_DIR}/python_support_wrap.cc
+ ${CMAKE_CURRENT_SOURCE_DIR}/python_support.i
+ DEPENDS python_support.i)
+ 
+add_executable(dsm-crawler 
+			   python_support_wrap.cc
+			   crawler/crawler_support.cc
+			   ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
 
 target_link_libraries(dsm-crawler -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
 target_link_libraries(dsm-crawler -Wl,-Bstatic ${STATICLIBS} ${MPILIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
 target_link_libraries(dsm-crawler ${DYNAMICLIBS})
-target_link_libraries(dsm-crawler boost_python-mt ${PYTHON_LIBRARIES})
+target_link_libraries(dsm-crawler boost_python-mt-py26 ${PYTHON_LIBRARIES})

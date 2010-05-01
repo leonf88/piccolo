@@ -248,6 +248,7 @@ static void ShutdownMPI() {
 }
 
 static void NetworkInit() {
+  LOG(INFO) << "Initializing network...";
   NetworkThread::Get();
   atexit(&ShutdownMPI);
 }
