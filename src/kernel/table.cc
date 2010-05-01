@@ -321,7 +321,7 @@ void LocalTable::ApplyUpdates(const HashPut& req) {
   HashPutCoder h(req);
 
   for (int i = 0; i < h.size(); ++i) {
-    put_str(h.key(i), h.value(i));
+    update_str(h.key(i), h.value(i));
   }
 }
 
