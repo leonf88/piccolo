@@ -15,17 +15,16 @@ static TypedGlobalTable<int, string>* string_hash = NULL;
 class TableKernel : public DSMKernel {
 public:
   void TestPut() {
-    Pair p;
     for (int i = 0; i < FLAGS_table_size; ++i) {
       LOG_EVERY_N(INFO, 100000) << "Writing... " << LOG_OCCURRENCES;
-      min_hash->put(i, i);
-      max_hash->put(i, i);
-      sum_hash->put(i, 1);
-      replace_hash->put(i, i);
-      string_hash->put(i, StringPrintf("%d", i));
+      min_hash->update(i, i);
+      max_hash->update(i, i);
+      sum_hash->update(i, 1);
+      replace_hash->update(i, i);
+      string_hash->update(i, StringPrintf("%d", i));
 //      p.set_key(StringPrintf("%d", i));
 //      p.set_value(StringPrintf("%d", i));
-//      pair_hash->put(i, p);
+//      pair_hash->update(i, p);
     }
   }
 
@@ -33,7 +32,7 @@ public:
     int num_shards = min_hash->num_shards();
 
     for (int i = 0; i < FLAGS_table_size; ++i) {
-      PERIODIC(1, LOG(INFO) << "Fetching... " << i; );
+      LOG_EVERY_N(INFO, 100) << "Fetching... " << i;
       CHECK_EQ(min_hash->get(i), i) << " i= " << i;
       CHECK_EQ(max_hash->get(i), i) << " i= " << i;
       CHECK_EQ(replace_hash->get(i), i) << " i= " << i;
@@ -49,6 +48,7 @@ public:
 
     while (!it->done()) {
       const int& k = it->key();
+      CHECK_EQ(min_hash->get_shard(k), current_shard());
       CHECK_EQ(min_hash->get(k), k) << " k= " << k;
       CHECK_EQ(max_hash->get(k), k) << " k= " << k;
       CHECK_EQ(replace_hash->get(k), k) << " k= " << k;
@@ -85,16 +85,17 @@ static int TestTables(ConfigData &conf) {
 
   if (MPI::COMM_WORLD.Get_rank() == 0) {
     Master m(conf);
-    m.run_all(Master::RunDescriptor::C("TableKernel", "TestPut", 0, 0));
+    RUN_ALL(m, TableKernel, TestPut, min_hash);
     //m.checkpoint();
 
     // wipe all the tables and then restore from the previous checkpoint.
     // m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
-    //m.restore();
 
-    m.run_all(Master::RunDescriptor::C("TableKernel", "TestGetLocal", 0, 0));
+    //m.restore();
+    RUN_ALL(m, TableKernel, TestGetLocal, min_hash);
+
     //m.checkpoint();
-    m.run_all(Master::RunDescriptor::C("TableKernel", "TestGet", 0, 0));
+    RUN_ALL(m, TableKernel, TestGet, min_hash);
   } else {
     conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
     Worker w(conf);
