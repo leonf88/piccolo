@@ -537,8 +537,9 @@ void Master::dispatch_work(const RunDescriptor& r) {
 
 void Master::run_range(RunDescriptor r, vector<int> shards) {
   KernelInfo *k = Registry::get_kernel(r.kernel);
-  CHECK(k != NULL) << "Invalid kernel class " << r.kernel;
-  CHECK(k->has_method(r.method)) << "Invalid method: " << MP(r.kernel, r.method);
+  CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
+  CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
+  CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
 
   MethodStats &mstats = method_stats_[r.kernel + ":" + r.method];
   mstats.set_invocations(mstats.invocations() + 1);
@@ -622,7 +623,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
         // Don't try to steal tasks if the payoff is too small.
         if (mstats.shard_invocations() > 10 &&
-            avg_completion_time > 1.0 &&
+            avg_completion_time > 0.2 &&
             !checkpointing_ &&
             !w.full() &&
             w.idle_time() > 0.5) {
