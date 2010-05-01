@@ -205,7 +205,7 @@ int Pagerank(ConfigData& conf) {
       shards.push_back(i);
     }
 
-    RUN_RANGE(m, PRKernel, BuildGraph, 0, shards);
+    RUN_RANGE(m, PRKernel, BuildGraph, Registry::get_table(0), shards);
     return 0;
   }
 

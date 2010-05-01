@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import traceback
 import os
 import sys; sys.path += ['src/examples/test']
 import runutil, math
@@ -18,12 +19,12 @@ def system(cmd):
   print cmd
   os.system(cmd)
 
-def make_graph(size):
+def make_graph(size, hostfile='fast_hostfile'):
   system(' '.join(
                   ['/home/power/share/bin/mpirun',
-                   '-hostfile mpi_hostfile',
+                   '-hostfile %s' % hostfile,
                    '-bynode',
-                   '-n %s' % (runutil.machines + 1),
+                   '-n %s' % runutil.hostfile_info(hostfile)[1],
                    'bash -c "LD_LIBRARY_PATH=/home/power/share/lib',
                    'bin/release/examples/example-dsm',
                    '--runner=Pagerank',
@@ -34,12 +35,12 @@ def make_graph(size):
                    '--work_stealing=false',
                    '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % size]))
 
-def run_pr(fname, size, args):
+def run_pr(fname, size, args=None, **kw):
   try:
     runutil.run_command('Pagerank', 
                       n=n,
                       logfile_name=fname,
-                      build_type='debug',
+                      build_type='release',
                       args=['--iterations=%s' % max(5, n/4),
                             '--sleep_time=0.001',
 #                            '--cpu_profile',
@@ -50,16 +51,22 @@ def run_pr(fname, size, args):
                             '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
                             '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
                             '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
-                            ] + args)
-  except:
-    print 'Argh!!!!'
+                            ] + args,
+                      **kw)
+  except SystemError:
+    traceback.print_exc()
     return
 
 for n in runutil.parallelism:
   graphsize = base_size
-  make_graph(graphsize)
+  #make_graph(graphsize)
   #cleanup(graphsize)
-  run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
+  #run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
+  #make_graph(graphsize, hostfile='slow_hostfile')
+  run_pr('Pagerank.with_stealing', 
+         graphsize, 
+         hostfile='slow_hostfile',
+         args=['--checkpoint=false', '--work_stealing=true'])
   
 #  cleanup(graphsize)
 #  run_pr('Pagerank.checkpoint', graphsize, ['--checkpoint=true'])
