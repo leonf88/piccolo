@@ -195,7 +195,6 @@ public:
   void restore(const string& f);
 
   int64_t shard_size(int shard);
-  void UpdateShardinfo(const ShardInfo& sinfo);
 
   virtual int get_shard_str(StringPiece k) = 0;
 protected:
