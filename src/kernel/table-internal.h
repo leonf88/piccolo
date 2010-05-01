@@ -210,6 +210,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   // If we received a get for this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
   while (tainted(shard)) {
+    this->HandlePutRequests();
     sched_yield();
   }
 
@@ -232,6 +233,7 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   // If we received a requestfor this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
   while (tainted(shard)) {
+    this->HandlePutRequests();
     sched_yield();
   }
 
