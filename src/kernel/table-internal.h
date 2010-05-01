@@ -1,8 +1,7 @@
 static const int kWriteFlushCount = 100000;
 
 template<class K, class V>
-void TypedLocalTable<K, V>::Init(const TableDescriptor &tinfo) {
-  LocalTable::Init(tinfo);
+TypedLocalTable<K, V>::TypedLocalTable(const TableDescriptor &tinfo) : LocalTable(tinfo) {
   data_.rehash(3);//tinfo.default_shard_size);
   owner = -1;
 }
@@ -42,8 +41,7 @@ void TypedLocalTable<K, V>::put(const K &k, const V &v) {
   data_[k] = v;
 }
 
-template<class K, class V> void TypedLocalTable<K, V>::update(const K &k,
-                                                               const V &v) {
+template<class K, class V> void TypedLocalTable<K, V>::update(const K &k, const V &v) {
   data_.accumulate(k, v,
                    ((typename TypedTable<K, V>::AccumFunction) this->info_.accum_function));
 }
@@ -153,8 +151,7 @@ V TypedGlobalTable<K, V>::get_local(const K& k) {
 }
 
 template<class K, class V>
-void TypedGlobalTable<K, V>::Init(const TableDescriptor& tinfo) {
-  GlobalTable::Init(tinfo);
+TypedGlobalTable<K, V>::TypedGlobalTable(const TableDescriptor& tinfo) : GlobalTable(tinfo) {
   for (int i = 0; i < partitions_.size(); ++i) {
     partitions_[i] = (TypedLocalTable<K, V>*)create_local(i);
   }
@@ -261,8 +258,7 @@ template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
   TableDescriptor linfo = ((GlobalTable*) this)->info();
   linfo.shard = shard;
-  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>();
-  t->Init(linfo);
+  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>(linfo);
   return t;
 }
 
