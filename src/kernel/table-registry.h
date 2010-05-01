@@ -26,8 +26,7 @@ TypedGlobalTable<K, V>* create_table(
   info.sharding_function = (void*) sharding;
   info.table_id = id;
 
-  TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>;
-  t->Init(info);
+  TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
   get_tables().insert(make_pair(id, t));
   return t;
 }

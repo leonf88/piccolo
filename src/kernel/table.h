@@ -67,8 +67,7 @@ public:
 class TableView {
 public:
   typedef Table_Iterator Iterator;
-  
-  void Init(const TableDescriptor& info) { info_ = info; }
+  TableView(const TableDescriptor& info) : info_(info) {}
 
   const TableDescriptor& info() const { return info_; }
   void set_info(const TableDescriptor& t) { info_ = t; }
@@ -92,13 +91,13 @@ public:
 // Operations needed on a local shard of a table.
 class LocalView : public TableView, public Checkpointable {
 public:
+  LocalView(const TableDescriptor &info) : TableView(info) {}
   virtual TableView::Iterator* get_iterator() = 0;
 };
 
 class GlobalView : public TableView, public Checkpointable {
 public:
-  void Init(const TableDescriptor& info) {
-    TableView::Init(info);
+  GlobalView(const TableDescriptor& info) : TableView(info) {
     partinfo_.resize(num_shards());
   }
 
@@ -137,9 +136,8 @@ protected:
 
 class LocalTable : public LocalView {
 public:
-  void Init(const TableDescriptor &tinfo) { 
+  LocalTable(const TableDescriptor &tinfo) : LocalView(tinfo) {
     delta_file_ = NULL;
-    TableView::Init(tinfo);
   }
 
   void ApplyUpdates(const HashPut& req);
@@ -168,7 +166,7 @@ protected:
 
 class GlobalTable : public GlobalView {
 public:
-  void Init(const TableDescriptor& tinfo);
+  GlobalTable(const TableDescriptor& tinfo);
   virtual ~GlobalTable();
 
   LocalTable *get_partition(int shard);
@@ -237,7 +235,7 @@ public:
   typedef HashMap<K, V> DataMap;
   struct Iterator;
 
-  void Init(const TableDescriptor &tinfo); 
+  TypedLocalTable(const TableDescriptor &tinfo);
 
   bool empty(); 
   int64_t size(); 
@@ -266,16 +264,11 @@ private:
 
 template <class K, class V>
 class TypedGlobalTable : public GlobalTable, private boost::noncopyable {
-private:
-  typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
-protected:
-  LocalTable* create_local(int shard);
 public:
+  TypedGlobalTable(const TableDescriptor& tinfo);
   int get_shard(const K& k);
   int get_shard_str(StringPiece k);
   V get_local(const K& k);
-
-  void Init(const TableDescriptor& tinfo);
 
   // Store the given key-value pair in this hash. If 'k' has affinity for a
   // remote thread, the application occurs immediately on the local host,
@@ -291,6 +284,10 @@ public:
   TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
 
   WRAPPER_FUNCTION_DECL;
+private:
+  typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
+protected:
+  LocalTable* create_local(int shard);
 };
 
 // Represents a sharded, on disk table.

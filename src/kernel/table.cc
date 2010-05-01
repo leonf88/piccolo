@@ -69,8 +69,7 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
   return is_local_shard(get_shard_str(k));
 }
 
-void GlobalTable::Init(const dsm::TableDescriptor &info) {
-  GlobalView::Init(info);
+GlobalTable::GlobalTable(const dsm::TableDescriptor &info) : GlobalView(info) {
   worker_id_ = -1;
   partitions_.resize(info.num_shards);
 }
