@@ -17,10 +17,10 @@ bin/debug/Makefile:
 
 
 release: bin/release/Makefile
-	@cd bin/release && $(MAKE) example-dsm
+	@cd bin/release && $(MAKE) 
 
 debug: bin/debug/Makefile
-	@cd bin/debug  && $(MAKE) example-dsm
+	@cd bin/debug  && $(MAKE) 
 
 clean:
 	rm -rf bin/*

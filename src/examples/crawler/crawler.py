@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import json, os, re, socket, sys, time, types
+import json, os, re, socket, sys, time, types, traceback
 import urllib, cgi, httplib, urllib2
 
 from urlparse import urlparse, urljoin 
@@ -123,8 +123,12 @@ class Page(object):
     def key(self): return key_from_url(self.url)
 
 try:
-    import crawler_support as cs
-except: pass
+  import python_support as cs
+except:
+  print 'Failed to import crawler support module!'
+  traceback.print_exc()
+  sys.exit(1)
+    
 
 fetch_table = None
 crawltime_table = None
@@ -137,7 +141,7 @@ def initialize():
     crawltime_table = cs.kernel().crawl_table(1)
     robots_table = cs.kernel().robots_table(2)
     domain_counts = cs.kernel().crawl_table(3)
-    fetch_table.update(key_from_url(urlparse("http://www.rjpower.org/crawlstart.html")), 
+    fetch_table.update(key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")), 
                     FetchStatus.SHOULD_FETCH)
     return 0
 
@@ -301,9 +305,9 @@ def crawl():
     last_t = time.time()
         
     while 1:
-        it = fetch_table.get_typed_iterator(cs.kernel().current_shard())
+        it = fetch_table.get_typed_iterator(cs.kernel().current_shard())        
         fetch_table.SendUpdates()
-        fetch_table.CheckForUpdates()
+        #fetch_table.CheckForUpdates()
         
         time.sleep(0.1)
          
@@ -332,7 +336,7 @@ def check_url(url, status):
     if not robots_table.contains(rkey):
         info('Fetching robots: %s', site)
         robots_table.update(rkey, RobotStatus.FETCHING)
-        robots_queue.update(site)
+        robots_queue.put(site)
         if robots_table.get(rkey) != RobotStatus.FETCHING:
             fatal("WTF????")
             exit(1)
@@ -356,7 +360,7 @@ def check_url(url, status):
         debug('Waiting for politeness: %s, %d', url_s, now() - last_crawl)
     else:
         debug('Queueing: %s', url_s)
-        crawl_queue.update(Page.create(url))
+        crawl_queue.put(Page.create(url))
         fetch_table.update(key_from_url(url), FetchStatus.FETCHING)
         domain_counts.update(domain, 1)
         crawltime_table.update(domain, int(now()))
