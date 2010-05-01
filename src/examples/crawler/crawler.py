@@ -307,7 +307,7 @@ def crawl():
     while 1:
         it = fetch_table.get_typed_iterator(cs.kernel().current_shard())        
         fetch_table.SendUpdates()
-        #fetch_table.CheckForUpdates()
+        fetch_table.HandlePutRequests()
         
         time.sleep(0.1)
          
