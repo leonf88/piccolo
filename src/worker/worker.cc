@@ -297,6 +297,9 @@ void Worker::HandlePutRequests() {
       continue;
     }
 
+    VLOG(2) << "Read put request of size: "
+            << put.key_data().size() << " for " << MP(put.table(), put.shard());
+
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
@@ -352,7 +355,6 @@ void Worker::CheckForMasterUpdates() {
   if (network_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
     VLOG(1) << "Shutting down worker " << config_.worker_id();
     running_ = false;
-    network_->Shutdown();
     return;
   }
 
@@ -385,7 +387,7 @@ void Worker::CheckForMasterUpdates() {
       GlobalView *t = Registry::get_table(a.table());
       int old_owner = t->get_owner(a.shard());
       t->set_owner(a.shard(), a.new_worker());
-      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
+//      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
         VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
@@ -393,8 +395,7 @@ void Worker::CheckForMasterUpdates() {
         // Don't consider ourselves canonical for this shard until we receive updates
         // from the old owner.
         if (old_owner != -1) {
-          VLOG(1) << "Setting " << MP(a.table(), a.shard())
-                  << " as tainted.  Old owner was: " << old_owner;
+          LOG(INFO) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
           t->set_tainted(a.shard());
         }
       } else if (old_owner == id() && a.new_worker() != id()) {

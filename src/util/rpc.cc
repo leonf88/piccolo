@@ -112,7 +112,7 @@ void NetworkThread::Run() {
 
       Header *h = (Header*)&data[0];
       if (h->sync_request) {
-        LOG(INFO) << "Got sync packet; replying...";
+//        LOG(INFO) << "Got sync packet; replying...";
         EmptyMessage msg;
         Send(source, MTYPE_SYNC_REPLY, msg);
       }
@@ -197,8 +197,11 @@ void NetworkThread::Send(int dst, int method, const Message &msg) {
 }
 
 void NetworkThread::Shutdown() {
-  Flush();
-  running = false;
+  if (running) {
+    Flush();
+    running = false;
+    MPI_Finalize();
+  }
 }
 
 void NetworkThread::Flush() {
@@ -240,13 +243,13 @@ NetworkThread* NetworkThread::Get() {
   return net;
 }
 
-static void NetworkShutdown() {
-  net->Shutdown();
+static void ShutdownMPI() {
+  NetworkThread::Get()->Shutdown();
 }
 
 static void NetworkInit() {
   NetworkThread::Get();
-  atexit(&NetworkShutdown);
+  atexit(&ShutdownMPI);
 }
 
 REGISTER_INITIALIZER(NetworkInit, { NetworkInit(); });
