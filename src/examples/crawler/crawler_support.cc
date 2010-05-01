@@ -15,6 +15,10 @@ public:
       object sys_module = import("sys");
       object sys_ns = sys_module.attr("__dict__");
       exec("path += ['src/examples/crawler']", sys_ns, sys_ns);
+      exec("path += ['bin/release/examples/crawler']", sys_ns, sys_ns);
+      exec("path += ['bin/release/examples/']", sys_ns, sys_ns);
+      exec("path += ['bin/debug/examples/crawler']", sys_ns, sys_ns);
+      exec("path += ['bin/debug/examples/']", sys_ns, sys_ns);
       exec("print path", sys_ns, sys_ns);
 
       crawl_module_ = import("crawler");

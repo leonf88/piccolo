@@ -116,6 +116,7 @@ public:
 
   virtual void ApplyUpdates(const HashPut& req) = 0;
   virtual void SendUpdates() = 0;
+  virtual void HandlePutRequests() = 0;
 
   virtual bool is_local_shard(int shard) = 0;
   virtual void handle_get(const StringPiece& key, HashPut* resp) = 0;
