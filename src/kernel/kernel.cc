@@ -13,7 +13,9 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
 }
 
 GlobalTable* DSMKernel::get_table(int id) {
-  return (GlobalTable*)Registry::get_table(id);
+  GlobalTable* t = (GlobalTable*)Registry::get_table(id);
+  CHECK_NE(t, (void*)NULL);
+  return t;
 }
 
 namespace Registry {

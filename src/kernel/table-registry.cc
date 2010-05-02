@@ -16,6 +16,7 @@ TableMap& get_tables() {
 }
 
 GlobalView* get_table(int id) {
+  CHECK(get_tables().find(id) != get_tables().end());
   return get_tables()[id];
 }
 }
