@@ -1,6 +1,7 @@
 #include "util/rpc.h"
 #include "util/common.h"
 #include "util/common.pb.h"
+#include <signal.h>
 
 DECLARE_bool(localtest);
 DECLARE_double(sleep_time);
@@ -8,6 +9,16 @@ DEFINE_bool(rpc_log, false, "");
 
 namespace dsm {
 
+static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
+  static dsm::SpinLock l;
+  l.lock();
+
+  char buffer[1024];
+  int size = 1024;
+  MPI_Error_string(*errorCode, buffer, &size);
+  LOG(ERROR) << "MPI function failed: " << buffer;
+  raise(SIGINT);
+}
 
 struct Header {
   Header() : sync_request(0), sync_reply(0) {}
@@ -49,13 +60,31 @@ RPCRequest::RPCRequest(int tgt, int method, const Message& ureq, Header h) {
 }
 
 NetworkThread::NetworkThread() {
+  if (!getenv("OMPI_COMM_WORLD_RANK")) {
+    world_ = NULL;
+    id_ = -1;
+    running = false;
+    return;
+  }
+
+  MPI::Init_thread(MPI_THREAD_SINGLE);
+
+  MPI_Errhandler handler;
+  MPI_Errhandler_create(&CrashOnMPIError, &handler);
+  MPI::COMM_WORLD.Set_errhandler(handler);
+
   world_ = &MPI::COMM_WORLD;
   running = 1;
   t_ = new boost::thread(&NetworkThread::Run, this);
+  id_ = world_->Get_rank();
 }
 
 bool NetworkThread::active() const {
   return active_sends_.size() + pending_sends_.size() > 0;
+}
+
+int NetworkThread::size() const {
+  return world_->Get_size();
 }
 
 int64_t NetworkThread::pending_bytes() const {
@@ -81,10 +110,10 @@ void NetworkThread::CollectActive() {
   unordered_set<RPCRequest*>::iterator i = active_sends_.begin();
   while (i != active_sends_.end()) {
     RPCRequest *r = (*i);
-    VLOG(2) << "Pending: " << MP(world_->Get_rank(), MP(r->target, r->rpc_type));
+    VLOG(2) << "Pending: " << MP(id(), MP(r->target, r->rpc_type));
     if (r->finished()) {
       if (r->failures > 0) {
-        LOG(INFO) << "Send " << MP(world_->Get_rank(), r->target) << " of size " << r->payload.size()
+        LOG(INFO) << "Send " << MP(id(), r->target) << " of size " << r->payload.size()
                   << " succeeded after " << r->failures << " failures.";
       }
       VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
@@ -248,7 +277,7 @@ static void ShutdownMPI() {
 }
 
 static void NetworkInit() {
-  LOG(INFO) << "Initializing network...";
+  VLOG(1) << "Initializing network...";
   NetworkThread::Get();
   atexit(&ShutdownMPI);
 }

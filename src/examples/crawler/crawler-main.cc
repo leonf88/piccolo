@@ -6,6 +6,8 @@
 using namespace dsm;
 using namespace boost::python;
 
+DECLARE_bool(work_stealing);
+
 static DSMKernel *the_kernel;
 
 class PythonKernel : public DSMKernel {
@@ -42,6 +44,7 @@ public:
   void run_crawl() {
     the_kernel = this;
     try {
+      LOG(INFO) << "Starting crawler...";
       exec("crawl()\n", crawl_ns_, crawl_ns_);
     } catch (error_already_set e) {
       PyErr_Print();
@@ -64,12 +67,13 @@ DSMKernel* kernel() {
 extern "C" void init_python_support();
 int main(int argc, const char* argv[]) {
   Init(argc, (char**)argv);
+  FLAGS_work_stealing = false;
 
   Py_Initialize();
   init_python_support();
 
   ConfigData conf;
-  conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
+  conf.set_num_workers(NetworkThread::Get()->size() - 1);
   conf.set_slots(1);
 
   // Fetch, crawltime, robots, and counts
@@ -77,13 +81,11 @@ int main(int argc, const char* argv[]) {
   Registry::create_table<string, int>(1, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
   Registry::create_table<string, string>(2, conf.num_workers(), &DomainSharding, &Accumulator<string>::replace);
   Registry::create_table<string, int>(3, conf.num_workers(), &StringSharding, &Accumulator<int>::sum);
+  Registry::create_table<string, int>(4, 1, &StringSharding, &Accumulator<int>::sum);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     Master m(conf);
     RUN_ALL(m, PythonKernel, initialize_crawl, Registry::get_table(0));
     RUN_ALL(m, PythonKernel, run_crawl, Registry::get_table(0));
-  } else {
-    Worker w(conf);
-    w.Run();
   }
 }

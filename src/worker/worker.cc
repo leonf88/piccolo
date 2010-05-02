@@ -27,7 +27,7 @@ Worker::Worker(const ConfigData &c) {
   network_ = NetworkThread::Get();
 
   config_.CopyFrom(c);
-  config_.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
+  config_.set_worker_id(network_->id() - 1);
 
   num_peers_ = config_.num_workers();
   peers_.resize(num_peers_);
@@ -112,7 +112,7 @@ void Worker::KernelLoop() {
       d->InitKernel();
     }
 
-    if (MPI::COMM_WORLD.Get_rank() == 1 && FLAGS_sleep_hack > 0) {
+    if (this->id() == 1 && FLAGS_sleep_hack > 0) {
       Sleep(FLAGS_sleep_hack);
     }
 
@@ -419,7 +419,7 @@ void Worker::CheckForMasterUpdates() {
 }
 
 bool StartWorker(const ConfigData& conf) {
-  if (MPI::COMM_WORLD.Get_rank() == 0)
+  if (NetworkThread::Get()->id() == 0)
     return false;
 
   Worker w(conf);

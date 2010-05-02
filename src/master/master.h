@@ -107,7 +107,6 @@ private:
   void flush_checkpoint(Params* params);
 
   ConfigData config_;
-  MPI::Intracomm world_;
   int checkpoint_epoch_;
   int kernel_epoch_;
 
