@@ -42,6 +42,9 @@ public:
   void Flush();
   void Shutdown();
 
+  int id() { return id_; }
+  int size() const;
+
   static NetworkThread *Get();
 private:
   static const int kMaxHosts = 512;
@@ -60,6 +63,7 @@ private:
   mutable boost::recursive_mutex send_lock;
   mutable boost::recursive_mutex q_lock[kMaxHosts];
   mutable boost::thread *t_;
+  int id_;
 
   bool check_queue(int src, int type, Message* data);
 

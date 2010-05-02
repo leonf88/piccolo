@@ -203,14 +203,13 @@ struct WorkerState : private boost::noncopyable {
 Master::Master(const ConfigData &conf) :
   tables_(Registry::get_tables()){
   config_.CopyFrom(conf);
-  world_ = MPI::COMM_WORLD;
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
   last_checkpoint_ = Now();
   checkpointing_ = false;
   network_ = NetworkThread::Get();
 
-  CHECK_GT(world_.Get_size(), 1) << "At least one master and one worker required!";
+  CHECK_GT(network_->size(), 1) << "At least one master and one worker required!";
 
   for (int i = 0; i < config_.num_workers(); ++i) {
     workers_.push_back(new WorkerState(i));
@@ -244,7 +243,7 @@ Master::~Master() {
 
   LOG(INFO) << "Shutting down workers.";
   EmptyMessage msg;
-  for (int i = 1; i < world_.Get_size(); ++i) {
+  for (int i = 1; i < network_->size(); ++i) {
     network_->Send(i, MTYPE_WORKER_SHUTDOWN, msg);
   }
 }

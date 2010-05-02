@@ -87,7 +87,7 @@ int ShortestPath(ConfigData& conf) {
 
   distance = Registry::create_table<int, double>(0, FLAGS_shards, &ModSharding, &Accumulator<double>::min);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);
 
     Master m(conf);
@@ -99,14 +99,7 @@ int ShortestPath(ConfigData& conf) {
     if (FLAGS_dump_output) {
       RUN_ONE(m, ShortestPathKernel, DumpDistances, 0);
     }
-  } else {
-    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
-    Worker w(conf);
-    w.Run();
-
-    LOG(INFO) << "Worker " << conf.worker_id() << " :: " << w.get_stats();
   }
-
   return 0;
 }
 REGISTER_RUNNER(ShortestPath);

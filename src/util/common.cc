@@ -210,17 +210,6 @@ void SpinLock::unlock() volatile {
   d = 0;
 }
 
-static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
-  static dsm::SpinLock l;
-  l.lock();
-
-  char buffer[1024];
-  int size = 1024;
-  MPI_Error_string(*errorCode, buffer, &size);
-  LOG(ERROR) << "MPI function failed: " << buffer;
-  raise(SIGINT);
-}
-
 static void FatalSignalHandler(int sig) {
   fprintf(stderr, "Fatal error; signal %d occurred.\n", sig);
   static SpinLock lock;
@@ -261,14 +250,6 @@ void Init(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 
-  if (getenv("OMPI_COMM_WORLD_RANK")) {
-    MPI::Init_thread(argc, argv, MPI_THREAD_MULTIPLE);
-
-    MPI_Errhandler handler;
-    MPI_Errhandler_create(&CrashOnMPIError, &handler);
-    MPI::COMM_WORLD.Set_errhandler(handler);
-  }
-
   RunInitializers();
 
 #ifdef CPUPROF
@@ -276,7 +257,7 @@ void Init(int argc, char** argv) {
     mkdir("profile/", 0755);
     char buf[100];
     gethostname(buf, 100);
-    ProfilerStart(StringPrintf("profile/cpu.%d", MPI::COMM_WORLD.Get_rank()).c_str());
+    ProfilerStart(StringPrintf("profile/cpu.%s.%d", buf, getpid()).c_str());
   }
 #endif
 

@@ -83,7 +83,7 @@ static int TestTables(ConfigData &conf) {
   replace_hash = Registry::create_table<int, int>(3, FLAGS_shards, &ModSharding, &Accumulator<int>::replace);
   string_hash = Registry::create_table<int, string>(4, FLAGS_shards, &ModSharding, &Accumulator<string>::replace);
 
-  if (MPI::COMM_WORLD.Get_rank() == 0) {
+  if (!StartWorker(conf)) {
     Master m(conf);
     RUN_ALL(m, TableKernel, TestPut, min_hash);
     //m.checkpoint();
@@ -96,12 +96,7 @@ static int TestTables(ConfigData &conf) {
 
     //m.checkpoint();
     RUN_ALL(m, TableKernel, TestGet, min_hash);
-  } else {
-    conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
-    Worker w(conf);
-    w.Run();
   }
-
   return 0;
 }
 REGISTER_RUNNER(TestTables);
