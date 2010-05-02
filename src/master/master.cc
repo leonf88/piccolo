@@ -111,11 +111,13 @@ struct WorkerState : private boost::noncopyable {
   void assign_shard(int shard, bool should_service) {
     Registry::TableMap &tables = Registry::get_tables();
     for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
-      Taskid t(i->first, shard);
-      if (should_service) {
-        shards.insert(t);
-      } else {
-        shards.erase(shards.find(t));
+      if (shard < i->second->num_shards()) {
+        Taskid t(i->first, shard);
+        if (should_service) {
+          shards.insert(t);
+        } else {
+          shards.erase(shards.find(t));
+        }
       }
     }
   }
@@ -581,13 +583,15 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
     int w_id = 0;
     if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
+      ++count;
+
       w_id -= 1;
 
       WorkerState& w = *workers_[w_id];
 
       Taskid task_id(done_msg.kernel().table(), done_msg.kernel().shard());
-      TaskState* task = w.work[task_id];
-
+//      TaskState* task = w.work[task_id];
+//
 //      LOG(INFO) << "TASK_FINISHED "
 //                << r.method << " "
 //                << task_id.table << " " << task_id.shard << " on "
@@ -595,7 +599,6 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 //                << Now() - w.last_task_start << " size "
 //                << task->size <<
 //                " worker " << w.total_size();
-      ++count;
 
       for (int i = 0; i < done_msg.shards_size(); ++i) {
         const ShardInfo &si = done_msg.shards(i);
