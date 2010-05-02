@@ -3,7 +3,8 @@
 
 #ifndef SWIG
 #include <google/protobuf/message.h>
-#include "util/common.pb.h"
+#include <mpi.h>
+
 #include "examples.h"
 #include "client.h"
 
@@ -39,10 +40,11 @@ typedef google::protobuf::int32_t int32_t;
 %include "std_string.i"
 
 %include "util/common.pb.h"
-%include "examples.pb.h"
-
 %include "util/common.h"
 %include "util/file.h"
+%include "util/rpc.h"
+
+%include "examples.pb.h"
 
 %include "kernel/kernel.h"
 %include "kernel/table.h"

@@ -1,13 +1,10 @@
 #!/usr/bin/python
 
-import json, os, re, socket, sys, time, types, traceback
-import urllib, cgi, httplib, urllib2
+import json, os, re, socket, sys, time, types, threading, traceback
+import urllib, cgi, httplib, urllib2, cStringIO
 
 from urlparse import urlparse, urljoin 
-
 from collections import defaultdict
-
-import cStringIO
 
 from lxml import etree
 html_parser = etree.HTMLParser()
@@ -15,7 +12,6 @@ html_parser = etree.HTMLParser()
 href_xpath = etree.XPath('//a/@href')
 base_xpath = etree.XPath('//base/@href')
 
-import threading
 from threading import Thread, Lock
 from Queue import PriorityQueue, Queue, Empty, Full  
 
@@ -23,11 +19,19 @@ import logging
 logging.basicConfig(filename='logs/crawl.log.%s.%d' % (socket.gethostname(), os.getpid()), 
                     level=logging.INFO)
 
-console = logging.StreamHandler()
-console.setLevel(logging.WARN)
-logging.getLogger('').addHandler(console)
+#console = logging.StreamHandler()
+#console.setLevel(logging.WARN)
+#logging.getLogger('').addHandler(console)
 
 from tlds import domain_from_site
+
+try:
+  import python_support as cs
+except:
+  print 'Failed to import crawler support module!'
+  traceback.print_exc()
+  sys.exit(1)
+    
 
 def now(): return time.time()
 
@@ -36,13 +40,16 @@ def info(fmt, *args, **kwargs): logging.info(str(fmt) % args, **kwargs)
 def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args, **kwargs)
 def error(fmt, *args, **kwargs): logging.error(str(fmt) % args, **kwargs)
 def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args, **kwargs)
+def console(fmt, *args, **kwargs):
+  print >>sys.stderr, str(fmt) % args 
 
-CRAWLER_THREADS = 10
+CRAWLER_THREADS = 100
 ROBOTS_REJECT_ALL = '/'
 MAX_ROBOTS_SIZE = 50000
 MAX_PAGE_SIZE = 500000
 CRAWL_TIMEOUT = 10
 RECORD_HEADER = '*' * 30 + 'BEGIN_RECORD' + '*' * 30 + '\n'
+PROFILING = False
 
 class CrawlOpener(object):
     def __init__(self):
@@ -122,25 +129,20 @@ class Page(object):
     
     def key(self): return key_from_url(self.url)
 
-try:
-  import python_support as cs
-except:
-  print 'Failed to import crawler support module!'
-  traceback.print_exc()
-  sys.exit(1)
-    
-
 fetch_table = None
 crawltime_table = None
 domain_counts = None
+fetch_counts = None
 robots_table = None
+running = True
 
 def initialize():
-    global fetch_table, crawltime_table, robots_table, domain_counts
+    global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
     fetch_table = cs.kernel().crawl_table(0)
     crawltime_table = cs.kernel().crawl_table(1)
     robots_table = cs.kernel().robots_table(2)
     domain_counts = cs.kernel().crawl_table(3)
+    fetch_counts = cs.kernel().crawl_table(4)
     fetch_table.update(key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")), 
                     FetchStatus.SHOULD_FETCH)
     return 0
@@ -162,7 +164,7 @@ def fetch_robots(site):
     except: pass
     
     info('Failed robots fetch for %s.', site, exc_info=1)
-    warn('Failed robots fetch for %s.', site)
+    warn('Failed robots fetch for %s: %s', site, sys.exc_info()[1])
     return ROBOTS_REJECT_ALL
         
 def parse_robots(site, rtxt):
@@ -188,10 +190,13 @@ def fetch_page(page):
         url_log.write(page.url_s + '\n')
         data_log.writeRecord(page.content, url=page.url_s, domain=page.domain)
         fetch_table.update(page.key(), FetchStatus.FETCH_DONE)
+        fetch_counts.update(FetchStatus.as_str[FetchStatus.FETCH_DONE], 1)
     except (urllib2.URLError, socket.timeout):
-        warn('Fetch of %s failed.', page.url_s)
+        warn('Fetch of %s failed: %s', page.url_s, sys.exc_info()[1])
+        info('Fetch of %s failed.', page.url_s, exc_info=1)
         page.content = ''
         fetch_table.update(page.key(), FetchStatus.ERROR)
+        fetch_counts.update(FetchStatus.as_str[FetchStatus.ERROR], 1)
 
 def join_url(base, l):
     if l.find('#') != -1: l = l[:l.find('#')]    
@@ -210,7 +215,9 @@ def extract_links(page):
         outlinks = [join_url(base_href, l) for l in href_xpath(root)]
         page.outlinks = set([l for l in outlinks if l])
     except:
-        warn('Parse of %s failed.', page.url_s)
+        warn('Parse of %s failed: %s', page.url_s, sys.exc_info()[1])
+        info('Parse of %s failed.', page.url_s, exc_info=1)
+        
 
 def add_links(page):
     for l in page.outlinks:
@@ -256,6 +263,7 @@ class CrawlThread(Thread):
             except:
                 warn('Error when processing page %s', page.url_s, exc_info=1)
                 fetch_table.update(page.key(), FetchStatus.ERROR)
+                fetch_counts.update(FetchStatus.as_str[FetchStatus.ERROR], 1)
 
 class StatusThread(Thread):
     def __init__(self, threadlist):
@@ -263,20 +271,19 @@ class StatusThread(Thread):
         self.threads = threadlist
     
     def run(self):
+        global running
+        start_time = time.time()
         while 1:
             try:
-                it = fetch_table.get_typed_iterator(cs.kernel().current_shard())
-                counts = defaultdict(int)
+                console('Crawler status:::')
+                it = fetch_counts.get_typed_iterator(cs.kernel().current_shard())
                 while not it.done():                        
-                    counts[it.value()] += 1
+                    console('Fetch[%s] :: %d', it.key(), it.value())
                     it.Next()
-                
-                for k, v in sorted(counts.items()):
-                    warn('Fetched [%s]: %s', FetchStatus.as_str[k], v)
                 
                 for t in sorted(self.threads, key=lambda t: t.last_active):
                     if t.status != ThreadStatus.IDLE:
-                        warn('Thread [%s]: %.2f %s', ThreadStatus.as_str[t.status], now() - t.last_active, t.url)
+                        info('Thread [%s]: %.2f %s', ThreadStatus.as_str[t.status], now() - t.last_active, t.url)
                     
                 it = domain_counts.get_typed_iterator(cs.kernel().current_shard())
                 dcounts = []            
@@ -284,27 +291,29 @@ class StatusThread(Thread):
                     dcounts += [(it.value(), it.key())]
                     it.Next()
                 
-                warn('Top sites:')
+                console('Top sites:')
                 dcounts.sort(reverse=1)
-                for v, k in dcounts[:100]:
-                    warn('%s: %s', k, v) 
+                for v, k in dcounts[:10]:
+                    console('%s: %s', k, v) 
             except:
                 warn('Failed to print status!?', exc_info=1)
-                            
             time.sleep(10)
+            
+            if PROFILING and time.time() - start_time > 30:
+                running = False
 
-
-def crawl():    
+def do_crawl():
     threads = [CrawlThread() for i in range(CRAWLER_THREADS)]
     for t in threads: t.start()
     
-    status = StatusThread(threads)
-    status.start()
+    if cs.NetworkThread.Get().id() == 1:
+      status = StatusThread(threads)
+      status.start()
     
     warn('Starting crawl!')
     last_t = time.time()
-        
-    while 1:
+    
+    while running:
         it = fetch_table.get_typed_iterator(cs.kernel().current_shard())        
         fetch_table.SendUpdates()
         fetch_table.HandlePutRequests()
@@ -315,7 +324,7 @@ def crawl():
             warn('Queue thread running...')
             last_t = time.time()
         
-        while not it.done():
+        while not it.done() and running:
             url = url_from_key(it.key())
             status = it.value()
             it.Next()
@@ -325,6 +334,18 @@ def crawl():
         
             check_url(url, status)        
 
+def crawl():
+    if PROFILING:
+        import yappi
+        yappi.start()
+    
+    do_crawl()
+    
+    if PROFILING:
+        stats = yappi.get_stats()
+        for stat in stats: print stat
+        yappi.stop()
+        
 
 def check_url(url, status):
     url_s = url.geturl()
@@ -349,6 +370,7 @@ def check_url(url, status):
     if not check_robots(url):
         info('Blocked by robots "%s"', url_s)
         fetch_table.update(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST)
+        fetch_counts.update(FetchStatus.as_str[FetchStatus.ROBOTS_BLACKLIST], 1)
         return
       
     last_crawl = 0

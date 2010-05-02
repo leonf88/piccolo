@@ -52,10 +52,10 @@ ADD_CUSTOM_COMMAND(
  
 add_executable(dsm-crawler 
 			   python_support_wrap.cc
-			   crawler/crawler_support.cc
+			   crawler/crawler-main.cc
 			   ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
 
 target_link_libraries(dsm-crawler -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
-target_link_libraries(dsm-crawler -Wl,-Bstatic ${STATICLIBS} ${MPILIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
+target_link_libraries(dsm-crawler -Wl,-Bstatic ${STATICLIBS} ${MPILIBS} gflags glog profiler blas unwind boost_python-mt-py26 -Wl,-Bdynamic )
 target_link_libraries(dsm-crawler ${DYNAMICLIBS})
-target_link_libraries(dsm-crawler boost_python-mt-py26 ${PYTHON_LIBRARIES})
+target_link_libraries(dsm-crawler ${PYTHON_LIBRARIES})
