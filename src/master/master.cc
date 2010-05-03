@@ -563,7 +563,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
   int count = 0;
   while (count < shards.size()) {
-    PERIODIC(1, {
+    PERIODIC(10, {
        DumpProfile();
        string status;
        for (int k = 0; k < config_.num_workers(); ++k) {

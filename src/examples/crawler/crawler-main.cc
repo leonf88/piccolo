@@ -1,5 +1,6 @@
 #include <python2.6/Python.h>
 #include <boost/python.hpp>
+#include <gflags/gflags.h>
 
 #include "client.h"
 #include "examples/python_support.i"
@@ -9,6 +10,8 @@ using namespace boost::python;
 DECLARE_bool(work_stealing);
 
 static DSMKernel *the_kernel;
+
+DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
 
 class PythonKernel : public DSMKernel {
 public:
@@ -21,7 +24,6 @@ public:
       exec("path += ['bin/release/examples/']", sys_ns, sys_ns);
       exec("path += ['bin/debug/examples/crawler']", sys_ns, sys_ns);
       exec("path += ['bin/debug/examples/']", sys_ns, sys_ns);
-      exec("print path", sys_ns, sys_ns);
 
       crawl_module_ = import("crawler");
       crawl_ns_ = crawl_module_.attr("__dict__");
@@ -64,12 +66,24 @@ DSMKernel* kernel() {
   return the_kernel;
 }
 
+int DomainSharding(const string& in, int num_shards) {
+   int d_end = in.find(" ");
+ //  LOG(INFO) << "Shard for " << in.substr(0, d_end) << " is "
+ //            << SuperFastHash(in.data(), d_end) % num_shards;
+   return SuperFastHash(in.data(), d_end) % num_shards;
+}
+
+double CrawlerRuntime() {
+  return FLAGS_crawler_runtime;
+}
+
 extern "C" void init_python_support();
 int main(int argc, const char* argv[]) {
   Init(argc, (char**)argv);
   FLAGS_work_stealing = false;
 
   Py_Initialize();
+  PySys_SetArgv(argc, (char**)argv);
   init_python_support();
 
   ConfigData conf;

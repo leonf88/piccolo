@@ -13,21 +13,18 @@ using namespace std;
 #endif
 
 dsm::DSMKernel* kernel();
-
+  
 // Shard based on the domain contained within "in".  This is separated from the
 // full url by a space.
-static int DomainSharding(const string& in, int num_shards) {
-  int d_end = in.find(" ");
-//  LOG(INFO) << "Shard for " << in.substr(0, d_end) << " is "
-//            << SuperFastHash(in.data(), d_end) % num_shards;
-  return SuperFastHash(in.data(), d_end) % num_shards;
-}
+int DomainSharding(const string& in, int num_shards);
+double CrawlerRuntime();
 
 #ifdef SWIG
 %module python_support
 
 %{
 #include "examples/python_support.i"
+#include <gflags/gflags.h>
 %}
 
 #define GOOGLE_PROTOBUF_VERSION 2003000
@@ -71,6 +68,7 @@ using namespace std;
   %template(robots_table) get_table<string, string>;
   %template(crawl_table) get_table<string, int>;
 }
+
 #endif
 
 #endif
