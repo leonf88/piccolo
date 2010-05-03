@@ -7,7 +7,8 @@ import runutil, math
 
 checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
-base_size=100
+scaled_base_size=10
+fixed_base_size=100
 shards=512
 
 def cleanup(size):
@@ -37,36 +38,45 @@ def make_graph(size, hostfile='fast_hostfile'):
 
 def run_pr(fname, size, args=None, **kw):
   try:
-    runutil.run_command('Pagerank', 
-                      n=n,
-                      logfile_name=fname,
-                      build_type='release',
-                      args=['--iterations=%s' % max(5, n/4),
-                            '--sleep_time=0.001',
+    runutil.run_example('Pagerank', 
+                        n=n,
+                        logfile_name=fname,
+                        build_type='release',
+                        args=['--iterations=%s' % max(5, n/4),
+                              '--sleep_time=0.001',
 #                            '--cpu_profile',
 #                            '--sleep_hack=1',
-                            '--nodes=%s' % (size * 1000 * 1000),
-                            '--shards=%s' % shards,
-                            '--work_stealing=true',
-                            '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
-                            '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
-                            '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
-                            ] + args,
-                      **kw)
+                              '--nodes=%s' % (size * 1000 * 1000),
+                              '--shards=%s' % shards,
+                              '--work_stealing=true',
+                              '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
+                              '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
+                              '--graph_prefix=/scratch/pagerank_test/%sM/pr' % (size),
+                              ] + args,
+                        **kw)
   except SystemError:
     traceback.print_exc()
     return
 
+# test scaling with work size, and with a fixed size of data
 for n in runutil.parallelism:
-  graphsize = base_size
-  #make_graph(graphsize)
-  #cleanup(graphsize)
-  #run_pr('Pagerank.no_checkpoint', graphsize, ['--checkpoint=false'])
-  #make_graph(graphsize, hostfile='slow_hostfile')
-  run_pr('Pagerank.with_stealing', 
-         graphsize, 
-         hostfile='slow_hostfile',
-         args=['--checkpoint=false', '--work_stealing=true'])
+  graphsize = scaled_base_size * n
+  make_graph(graphsize)
+  cleanup(graphsize)
+  run_pr('Pagerank.scaled_size', graphsize, ['--checkpoint=false'])
+  
+  graphsize = fixed_base_size
+  make_graph(graphsize)
+  cleanup(graphsize)
+  run_pr('Pagerank.fixed_size', graphsize, ['--checkpoint=false'])
+
+for n in runutil.parallelism: pass
+#  Test work stealing...
+#  make_graph(graphsize, hostfile='slow_hostfile')
+#  run_pr('Pagerank.with_stealing', 
+#         graphsize, 
+#         hostfile='slow_hostfile',
+#         args=['--checkpoint=false', '--work_stealing=true'])
   
 #  cleanup(graphsize)
 #  run_pr('Pagerank.checkpoint', graphsize, ['--checkpoint=true'])

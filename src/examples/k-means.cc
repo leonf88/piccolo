@@ -5,16 +5,16 @@
 
 #include "client.h"
 
-DEFINE_int32(num_dists, 2, "");
-DEFINE_int32(num_points, 100, "");
+DEFINE_int64(num_dists, 2, "");
+DEFINE_int64(num_points, 100, "");
 DEFINE_bool(dump_results, false, "");
 
 using namespace dsm;
 
 struct Point {
   double x, y;
-  int source;
   double min_dist;
+  int source;
 };
 
 struct Distribution {
@@ -28,12 +28,12 @@ static TypedGlobalTable<int, Distribution> *actual;
 class KMeansKernel : public DSMKernel {
 public:
   void initialize_world() {
-    points->resize(FLAGS_num_points * 2);
+    points->resize(FLAGS_num_points);
 
     srand(time(NULL));
     int c = 0;
     for (int i = 0; i < FLAGS_num_dists; ++i) {
-      if (i % points->num_shards() != current_shard()) { continue; }
+      if (i % dists->num_shards() != current_shard()) { continue; }
 
       double dx = 0.5 - rand_double();
       double dy = 0.5 - rand_double();
@@ -47,11 +47,13 @@ public:
       }
     }
 
-    for (int i = 0; i < FLAGS_num_dists; ++i) {
-      // Initialize a guess for center point of the distributions
-      Point p = points->get(random() % FLAGS_num_points);
-      Distribution d = { p.x, p.y };
-      dists->update(i, d);
+    if (current_shard() == 0) {
+      for (int i = 0; i < FLAGS_num_dists; ++i) {
+        // Initialize a guess for center point of the distributions
+        Point p = points->get(random() % FLAGS_num_points);
+        Distribution d = { p.x, p.y };
+        dists->update(i, d);
+      }
     }
   }
 
@@ -163,9 +165,11 @@ static void dist_merge(Distribution* d1, const Distribution& d2) {
 }
 
 static int KMeans(ConfigData& conf) {
-  dists = Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
-  points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
-  actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
+  conf.set_slots(4);
+
+  dists = Registry::create_table<int, Distribution>(0, 4 * conf.num_workers(), &ModSharding, &dist_merge);
+  points = Registry::create_table<int, Point>(1, 4 * conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
+  actual = Registry::create_table<int, Distribution>(2, 4 * conf.num_workers(), &ModSharding, &dist_merge);
 
   if (!StartWorker(conf)) {
     Master m(conf);

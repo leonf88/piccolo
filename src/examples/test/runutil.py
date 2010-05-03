@@ -6,7 +6,7 @@ import os, sys, re, subprocess
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-parallelism = [64, 32, 16, 8, 4, 2]
+parallelism = [64, 32, 16, 8, 4, 2, 1]
 
 def hostfile_info(f):
   cores = machines = 0
@@ -26,8 +26,19 @@ def log(fmt, *args):
   print fmt % args
   print >>logfile, fmt % args
   logfile.flush()
+
+def init_log(results_dir, n, logfile_name):
+  if not logfile_name:
+    raise KeyError, 'Need a logfile target!'
+  
+  output_dir="%s.%s" % (results_dir, n)
+  system('mkdir -p %s' % output_dir)
+  global logfile
+  logfile = open('%s/%s' % (output_dir, logfile_name), 'w')
     
-def run_command(runner, 
+  log("Writing output to: %s", output_dir)
+
+def run_example(runner, 
                 n=64, 
                 build_type='release',
                 results_dir='results',
@@ -36,25 +47,13 @@ def run_command(runner,
                 args=None):
   if not logfile_name: logfile_name = runner
   if not args: args = []
-
-  output_dir="%s.%s" % (results_dir, n)
-  system('mkdir -p %s' % output_dir)
-  global logfile
-
-  logfile = open('%s/%s' % (output_dir, logfile_name), 'w')
+  
+  init_log(results_dir, n, logfile_name)
 
   machines, cores = hostfile_info(hostfile)
-  log("Running with %s machines, %s cores" % (machines, cores))
-
-  system('rm -f profile/*')
-  log("Writing output to: %s", output_dir)
-  log("Wiping cache...")
-  #system("pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'")
-  log("Killing existing workers...")
-  #system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
-
   affinity = 0 if n >= cores else 1
 
+  log("Running with %s machines, %s cores" % (machines, cores))
   log("Runner: %s", runner)
   log("Parallelism: %s", n)
   log("Processor affinity: %s", affinity)
@@ -74,7 +73,22 @@ def run_command(runner,
                   '--log_prefix=false']
                   + args + 
                   ['"'])
-  
+  run_command(cmd, n, 
+              results_dir=results_dir,
+              logfile_name=logfile_name)
+
+def run_command(cmd, n,
+                results_dir='results',
+                logfile_name=None):
+
+  init_log(results_dir, n, logfile_name)
+
+  system('rm -f profile/*')
+  log("Wiping cache...")
+  #system("pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'")
+  log("Killing existing workers...")
+  #system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
+
   log('Command: %s', cmd)
   start = time.time()
   handle = subprocess.Popen(cmd,
@@ -85,7 +99,7 @@ def run_command(runner,
   while handle.returncode == None:
     handle.poll()
     l = handle.stdout.readline().strip()
-    if l: log(l)
+    if l: log('%s', l)
 
   end = time.time()
   log('Finished in: %s', end - start)
