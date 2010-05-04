@@ -16,9 +16,14 @@ static const float kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
 static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
+
+DEFINE_bool(memory_graph, false,
+            "If true, the web graph will be generated on-demand.");
+
+DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
-DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
+
 
 // I'd like to use a pair here, but for some reason they fail to count
 // as POD types according to C++.  Sigh.
@@ -63,12 +68,10 @@ static float powerlaw_random(float dmin, float dmax, float n) {
 static boost::recursive_mutex file_lock;
 
 static vector<int> site_sizes;
-static void BuildGraph(int shard, int nshards, int nodes, int density) {
-  boost::recursive_mutex::scoped_lock sl(file_lock);
 
-  char* d = strdup(FLAGS_graph_prefix.c_str());
-  File::Mkdirs(dirname(d));
+static void InitSites() {
   if (site_sizes.empty()) {
+    srand(0);
     for (int n = 0; n < FLAGS_nodes; ) {
       int c = powerlaw_random(1, (int)(100000. * FLAGS_nodes / 100e6), 0.001);
       site_sizes.push_back(c);
@@ -76,6 +79,14 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
       n += c;
     }
   }
+}
+
+static void BuildGraph(int shard, int nshards, int nodes, int density) {
+  boost::recursive_mutex::scoped_lock sl(file_lock);
+
+  InitSites();
+  char* d = strdup(FLAGS_graph_prefix.c_str());
+  File::Mkdirs(dirname(d));
 
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
 
@@ -83,6 +94,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
     return;
   }
 
+  srand(shard);
   Page n;
   RecordFile out(target, "w", RecordFile::LZO);
   // Only sites with site_id % nshards == shard are in this shard.
@@ -105,6 +117,46 @@ static float random_restart_seed() {
   return (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes);
 }
 
+// Generate a graph on-demand rather then reading from disk.
+class InMemoryGraph : public RecordFile {
+public:
+  InMemoryGraph(int shard, int num_shards)
+    : shard_(shard), site_(shard), site_pos_(0), num_shards_(num_shards) {
+    InitSites();
+    srand(shard);
+  }
+
+  bool read(google::protobuf::Message *m) {
+    if (site_pos_ >= site_sizes[site_]) {
+      site_ += num_shards_;
+      site_pos_ = 0;
+    }
+
+    if (site_ >= site_sizes.size()) {
+      return false;
+    }
+
+    Page* p = static_cast<Page*>(m);
+    p->Clear();
+    p->set_site(site_);
+    p->set_id(site_pos_);
+    for (int k = 0; k < 15; k++) {
+      int target_site = (random() % 10 != 0) ? site_ : (random() % site_sizes.size());
+      p->add_target_site(target_site);
+      p->add_target_id(random() % site_sizes[target_site]);
+    }
+
+    ++site_pos_;
+    return true;
+  }
+
+private:
+  int shard_;
+  int site_;
+  int site_pos_;
+  int num_shards_;
+};
+
 class PRKernel : public DSMKernel {
 public:
   int iter;
@@ -118,18 +170,22 @@ public:
   }
 
   void BuildGraph() {
-    srand(0);
+    if (FLAGS_memory_graph) { return; }
     for (int i = 0; i < FLAGS_shards; ++i) {
        ::BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
     }
   }
 
   RecordFile* get_reader() {
-    string file = StringPrintf("%s-%05d-of-%05d-N%05d",
-        FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
-    //FILE* lzo = popen(StringPrintf("lzop -d -c %s", file.c_str()).c_str(), "r");
-    //RecordFile * r = new RecordFile(lzo, "r");
-    return new RecordFile(file, "r", RecordFile::LZO);
+    if (!FLAGS_memory_graph) {
+      string file = StringPrintf("%s-%05d-of-%05d-N%05d",
+          FLAGS_graph_prefix.c_str(), current_shard(), FLAGS_shards, FLAGS_nodes);
+      //FILE* lzo = popen(StringPrintf("lzop -d -c %s", file.c_str()).c_str(), "r");
+      //RecordFile * r = new RecordFile(lzo, "r");
+      return new RecordFile(file, "r", RecordFile::LZO);
+    }
+
+    return new InMemoryGraph(current_shard(), FLAGS_shards);
   }
 
   void free_reader(RecordFile* r) {

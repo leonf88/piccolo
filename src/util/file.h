@@ -223,6 +223,9 @@ public:
     LZO = 1
   };
 
+  RecordFile() {
+    fp = NULL;
+  }
   RecordFile(const string& path, const string& mode, int compression=NONE);
   virtual ~RecordFile();
 
@@ -231,8 +234,8 @@ public:
   typedef unordered_map<string, string> AttrMap;
   AttrMap attributes;
 
-  void write(const google::protobuf::Message &m);
-  bool read(google::protobuf::Message *m);
+  virtual void write(const google::protobuf::Message &m);
+  virtual bool read(google::protobuf::Message *m);
   const char* name() { return fp->name(); }
 
   bool eof() { return fp->eof(); }

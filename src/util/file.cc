@@ -232,6 +232,8 @@ RecordFile::RecordFile(const string& path, const string& mode, int compression) 
 }
 
 RecordFile::~RecordFile() {
+  if (!fp) { return; }
+
   if (mode_ != "r") {
     fp->sync();
     LOG(INFO) << "Renaming: " << path_;
