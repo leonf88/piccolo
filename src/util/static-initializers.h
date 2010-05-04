@@ -24,7 +24,7 @@ struct StaticTestHelper {
   struct name ## StaticInitHelper : public dsm::StaticInitHelper {\
     name ## StaticInitHelper() : StaticInitHelper(#name) {}\
     void Run() {\
-    code \
+    code; \
   }\
   };\
 static name ## StaticInitHelper name ## helper;

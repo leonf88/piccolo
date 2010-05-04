@@ -36,8 +36,8 @@ public:
   void Send(int dst, int method, const Message &msg);
 
   void Broadcast(int method, const Message& msg);
-  void SyncBroadcast(int method, const Message& msg);
-  void WaitForSync(int count);
+  void SyncBroadcast(int method, int reply, const Message& msg);
+  void WaitForSync(int method, int count);
 
   void Flush();
   void Shutdown();
