@@ -3,9 +3,6 @@
 import time
 import os, sys, re, subprocess
 
-import signal
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-
 parallelism = [64, 32, 16, 8, 4, 2, 1]
 
 def hostfile_info(f):
@@ -66,13 +63,10 @@ def run_example(runner,
                   '-tag-output ',
                   '-display-map',
                   '-n %s ' % (n + 1),
-                  'bash -c "',
-                  'LD_LIBRARY_PATH=/home/power/share/lib',
                   'bin/%s/examples/example-dsm' % build_type,
                   '--runner=%s' % runner,
                   '--log_prefix=false']
-                  + args + 
-                  ['"'])
+                  + args)
   run_command(cmd, n, 
               results_dir=results_dir,
               logfile_name=logfile_name)
@@ -105,4 +99,5 @@ def run_command(cmd, n,
   log('Finished in: %s', end - start)
 
   if handle.returncode != 0:
-    raise SystemError, 'Command failed'
+    log('Error while running %s!', cmd)
+    return 1

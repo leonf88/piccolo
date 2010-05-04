@@ -16,6 +16,8 @@ int main(int argc, char** argv) {
 
 //  LOG(INFO) << "Running: " << FLAGS_runner;
   CHECK_NE(FLAGS_runner, "");
-  Registry::get_runner(FLAGS_runner)(conf);
+  Registry::KernelRunner k = Registry::get_runner(FLAGS_runner);
+  CHECK(k != NULL);
+  k(conf);
   LOG(INFO) << "Exiting.";
 }

@@ -10,7 +10,7 @@ static const double kTimestep = 1e-6;
 // Each box is 1*1*1
 static const int kBoxSize = (int)ceil(kCutoffRadius);
 
-// A partition is 8*8*8 boxes.
+// A partition is 4*4*4 boxes.
 static const int kPartitionSize = 4;
 
 // World is a cube of boxes.
