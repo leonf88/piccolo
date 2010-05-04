@@ -12,18 +12,18 @@ DEFINE_bool(dump_results, false, "");
 using namespace dsm;
 
 struct Point {
-  double x, y;
-  double min_dist;
+  float x, y;
+  float min_dist;
   int source;
 };
 
 struct Distribution {
-  double x, y;
+  float x, y;
 };
 
-static TypedGlobalTable<int, Point> *points;
-static TypedGlobalTable<int, Distribution> *dists;
-static TypedGlobalTable<int, Distribution> *actual;
+static TypedGlobalTable<int32_t, Point> *points;
+static TypedGlobalTable<int32_t, Distribution> *dists;
+static TypedGlobalTable<int32_t, Distribution> *actual;
 
 class KMeansKernel : public DSMKernel {
 public:
@@ -165,11 +165,9 @@ static void dist_merge(Distribution* d1, const Distribution& d2) {
 }
 
 static int KMeans(ConfigData& conf) {
-  conf.set_slots(4);
-
-  dists = Registry::create_table<int, Distribution>(0, 4 * conf.num_workers(), &ModSharding, &dist_merge);
-  points = Registry::create_table<int, Point>(1, 4 * conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
-  actual = Registry::create_table<int, Distribution>(2, 4 * conf.num_workers(), &ModSharding, &dist_merge);
+  dists = Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
+  points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
+  actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
 
   if (!StartWorker(conf)) {
     Master m(conf);

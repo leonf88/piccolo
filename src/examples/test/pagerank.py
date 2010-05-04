@@ -59,36 +59,34 @@ def run_pr(fname, size, args=None, **kw):
     return
 
 # test scaling with work size, and with a fixed size of data
-for n in runutil.parallelism:
-  graphsize = scaled_base_size * n
-  make_graph(graphsize)
-  cleanup(graphsize)
-  run_pr('Pagerank.scaled_size', graphsize, ['--checkpoint=false'])
-  
-  graphsize = fixed_base_size
-  make_graph(graphsize)
-  cleanup(graphsize)
-  run_pr('Pagerank.fixed_size', graphsize, ['--checkpoint=false'])
-
-for n in runutil.parallelism: pass
-#  Test work stealing...
-#  make_graph(graphsize, hostfile='slow_hostfile')
-#  run_pr('Pagerank.with_stealing', 
-#         graphsize, 
-#         hostfile='slow_hostfile',
-#         args=['--checkpoint=false', '--work_stealing=true'])
-  
-#  cleanup(graphsize)
-#  run_pr('Pagerank.checkpoint', graphsize, ['--checkpoint=true'])
+def test_size_scaling():
+  for n in runutil.parallelism:
+    graphsize = scaled_base_size * n
+    make_graph(graphsize)
+    run_pr('Pagerank.scaled_size', graphsize, ['--checkpoint=false'])
 
 
-# test terminating job and trying to restore from checkpoint
-#cleanup()
-#run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])
+def test_time_scaling():
+  for n in runutil.parallelism:  
+    graphsize = fixed_base_size
+    make_graph(graphsize)
+    run_pr('Pagerank.fixed_size', graphsize, ['--checkpoint=false'])
 
-#sleep 180
-#pkill mpirun
 
-#RESULTS_DIR=results.restore_fault
-#run_test '--checkpoint=true' '--dead_workers=5,6,10'
-#run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
+def test_work_stealing():
+  make_graph(graphsize, hostfile='slow_hostfile')
+  run_pr('Pagerank.with_stealing', 
+         graphsize, 
+         hostfile='slow_hostfile',
+         args=['--checkpoint=false', '--work_stealing=true'])
+
+def test_checkpointing():    
+  cleanup()
+  os.popen('sleep 120; pkill mpirun')
+  run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])  
+  run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
+
+def test_ec2():
+  for n in runutil.parallelism:
+    graphsize = scaled_base_size * n
+    run_pr('Pagerank.ec2', graphsize, ['--checkpoint=false', '--memory_graph=true'])
