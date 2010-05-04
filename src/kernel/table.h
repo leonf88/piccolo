@@ -118,6 +118,7 @@ public:
   virtual void SendUpdates() = 0;
   virtual void HandlePutRequests() = 0;
 
+  virtual int get_shard_str(StringPiece k) = 0;
   virtual bool is_local_shard(int shard) = 0;
   virtual void handle_get(const StringPiece& key, HashPut* resp) = 0;
   virtual void set_worker(Worker* w) = 0;

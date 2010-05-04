@@ -72,7 +72,7 @@ void Worker::TableLoop() {
 }
 
 void Worker::KernelLoop() {
-  LOG(INFO) << "Worker " << config_.worker_id() << " registering...";
+  VLOG(1) << "Worker " << config_.worker_id() << " registering...";
   RegisterWorkerRequest req;
   req.set_id(id());
   req.set_slots(config_.slots());
@@ -338,6 +338,12 @@ void Worker::HandleGetRequests() {
 
     {
       GlobalView * t = Registry::get_table(get_req.table());
+      int shard = t->get_shard_str(get_req.key());
+      CHECK(t->is_local_shard(shard))
+      << "Not local for shard: " << shard
+      << " get request from: " << source
+      << " for " << MP(get_req.table(), get_req.shard());
+
       t->handle_get(get_req.key(), &get_resp);
     }
 

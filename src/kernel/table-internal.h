@@ -2,7 +2,7 @@ static const int kWriteFlushCount = 100000;
 
 template<class K, class V>
 TypedLocalTable<K, V>::TypedLocalTable(const TableDescriptor &tinfo) : LocalTable(tinfo) {
-  data_.rehash(3);//tinfo.default_shard_size);
+  data_.rehash(1);//tinfo.default_shard_size);
   owner = -1;
 }
 
