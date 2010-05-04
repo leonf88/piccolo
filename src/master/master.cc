@@ -222,8 +222,10 @@ Master::Master(const ConfigData &conf) :
     int src = 0;
     network_->Read(MPI::ANY_SOURCE, MTYPE_REGISTER_WORKER, &req, &src);
     workers_[src - 1]->slots = req.slots();
-    LOG(INFO) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
+    VLOG(1) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
+
+  LOG(INFO) << "All workers registered; starting up.";
 
   vector<StringPiece> bits = StringPiece::split(FLAGS_dead_workers, ",");
 //  LOG(INFO) << "dead workers: " << FLAGS_dead_workers;
