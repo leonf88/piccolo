@@ -349,10 +349,10 @@ void Worker::HandleGetRequests() {
 void Worker::CheckForMasterUpdates() {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   // Check for shutdown.
-  EmptyMessage msg;
+  EmptyMessage empty;
   KernelRequest k;
 
-  if (network_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &msg)) {
+  if (network_->TryRead(config_.master_id(), MTYPE_WORKER_SHUTDOWN, &empty)) {
     VLOG(1) << "Shutting down worker " << config_.worker_id();
     running_ = false;
     return;
@@ -370,7 +370,7 @@ void Worker::CheckForMasterUpdates() {
                     tablev);
   }
   
-  while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &empty)) {
     FinishCheckpoint();
   }
 
@@ -410,11 +410,14 @@ void Worker::CheckForMasterUpdates() {
     for (set<GlobalView*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
       (*i)->SendUpdates();
     }
+
+    network_->Send(config_.master_id(), MTYPE_SHARD_ASSIGNMENT_DONE, empty);
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
-  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &msg)) {
+  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &empty)) {
     Flush();
+    network_->Send(config_.master_id(), MTYPE_WORKER_FLUSH_DONE, empty);
   }
 }
 

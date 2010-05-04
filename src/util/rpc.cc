@@ -245,21 +245,15 @@ void NetworkThread::Broadcast(int method, const Message& msg) {
   }
 }
 
-void NetworkThread::SyncBroadcast(int method, const Message& msg) {
-  for (int i = 1; i < world_->Get_size(); ++i) {
-    Header h;
-    h.sync_request = 1;
-
-    RPCRequest *r = new RPCRequest(i, method, msg, h);
-    Send(r);
-  }
-
-  WaitForSync(world_->Get_size() - 1);
+void NetworkThread::SyncBroadcast(int method, int reply, const Message& msg) {
+  Broadcast(method, msg);
+  WaitForSync(reply, world_->Get_size() - 1);
 }
 
-void NetworkThread::WaitForSync(int count) {
+void NetworkThread::WaitForSync(int reply, int count) {
+  EmptyMessage empty;
   while (count > 0) {
-    Read(MPI::ANY_SOURCE, MTYPE_SYNC_REPLY, NULL, NULL);
+    Read(MPI::ANY_SOURCE, reply, &empty, NULL);
     --count;
   }
 }

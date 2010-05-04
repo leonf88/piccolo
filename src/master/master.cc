@@ -360,18 +360,12 @@ ParamMap* Master::restore() {
 
   StartRestore req;
   req.set_epoch(epoch);
-  network_->Broadcast(MTYPE_RESTORE, req);
-
-  for (int i = 0; i < config_.num_workers(); ++i) {
-    EmptyMessage resp;
-    LOG(INFO) << "Waiting for restore to finish... " << i + 1 << " of " << config_.num_workers();
-    network_->Read(MPI::ANY_SOURCE, MTYPE_RESTORE_DONE, &resp, NULL);
-  }
-
+  network_->SyncBroadcast(MTYPE_RESTORE, MTYPE_RESTORE_DONE, req);
   return ParamMap::from_params(params);
 }
 
 void Master::run_all(RunDescriptor r) {
+  CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   vector<int> shards;
   for (int i = 0; i < r.table->num_shards(); ++i) {
     shards.push_back(i);
@@ -441,7 +435,7 @@ void Master::send_table_assignments() {
     }
   }
 
-  network_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
+  network_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, MTYPE_SHARD_ASSIGNMENT_DONE, req);
 }
 
 bool Master::steal_work(const RunDescriptor& r, int idle_worker,
@@ -670,7 +664,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
   }
 
   EmptyMessage empty;
-  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
+  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, MTYPE_WORKER_FLUSH_DONE, empty);
   kernel_epoch_++;
   LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
 }
