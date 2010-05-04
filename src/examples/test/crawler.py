@@ -9,10 +9,11 @@ for n in runutil.parallelism:
   cmd = ' '.join(['mpirun',
                   '-hostfile fast_hostfile',
                   '-bynode',
+                  '-nooversubscribe',
                   '-display-map',
                   '-n %d' % (1 + n),
                   'bin/release/examples/dsm-crawler',
                   '--log_prefix=false',
-                  '--crawler_runtime=120'])
+                  '--crawler_runtime=300'])
   
   runutil.run_command(cmd, n, logfile_name='Crawler')

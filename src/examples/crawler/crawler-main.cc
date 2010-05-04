@@ -91,11 +91,11 @@ int main(int argc, const char* argv[]) {
   conf.set_slots(1);
 
   // Fetch, crawltime, robots, and counts
-  Registry::create_table<string, int>(0, conf.num_workers(), &DomainSharding, &Accumulator<int>::max);
-  Registry::create_table<string, int>(1, conf.num_workers(), &StringSharding, &Accumulator<int>::max);
+  Registry::create_table<string, int64_t>(0, conf.num_workers(), &DomainSharding, &Accumulator<int64_t>::max);
+  Registry::create_table<string, int64_t>(1, conf.num_workers(), &StringSharding, &Accumulator<int64_t>::max);
   Registry::create_table<string, string>(2, conf.num_workers(), &DomainSharding, &Accumulator<string>::replace);
-  Registry::create_table<string, int>(3, conf.num_workers(), &StringSharding, &Accumulator<int>::sum);
-  Registry::create_table<string, int>(4, 1, &StringSharding, &Accumulator<int>::sum);
+  Registry::create_table<string, int64_t>(3, conf.num_workers(), &StringSharding, &Accumulator<int64_t>::sum);
+  Registry::create_table<string, int64_t>(4, 1, &StringSharding, &Accumulator<int64_t>::sum);
 
   if (!StartWorker(conf)) {
     Master m(conf);

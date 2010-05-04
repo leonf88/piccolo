@@ -33,6 +33,7 @@ double CrawlerRuntime();
 %include "google/protobuf/message.h"
 
 typedef google::protobuf::int32_t int32_t;
+typedef long int64_t;
 
 %include "std_string.i"
 
@@ -50,23 +51,21 @@ typedef google::protobuf::int32_t int32_t;
 using namespace dsm;
 using namespace std;
 
-%typemap(in) int& {
-  $1 = PyInt_AsLong($input);
-}
+%typemap(in) long& { $1 = PyInt_AsLong($input); }
+%typemap(out) long& { $result = PyInt_FromLong(*$1); }
 
-%typemap(out) int& {
-  $result = PyInt_FromLong(*$1);
-}
+%typemap(in) long { $1 = PyInt_AsLong($input); }
+%typemap(out) long { $result = PyInt_FromLong($1); }
 
-%template(CrawlTable) dsm::TypedGlobalTable<string, int>;
-%template(CrawlTable_Iterator) dsm::TypedTable_Iterator<string, int>;
+%template(CrawlTable) dsm::TypedGlobalTable<string, int64_t>;
+%template(CrawlTable_Iterator) dsm::TypedTable_Iterator<string, int64_t>;
 
 %template(RobotsTable) dsm::TypedGlobalTable<string, string>;
 %template(RobotsTable_Iterator) dsm::TypedTable_Iterator<string, string>;
 
 %extend dsm::DSMKernel {
   %template(robots_table) get_table<string, string>;
-  %template(crawl_table) get_table<string, int>;
+  %template(crawl_table) get_table<string, int64_t>;
 }
 
 #endif

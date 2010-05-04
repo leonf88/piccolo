@@ -76,8 +76,13 @@ class FetchStatus:
     PARSE_DONE = 3
     DONE = 4
     ROBOTS_BLACKLIST = 5
-    ERROR = 6    
+    FETCH_ERROR = 6    
+    PARSE_ERROR = 7
+    GENERIC_ERROR = 8
+    # used for reporting bytes downloaded
+    FETCHED_BYTES = 10
 
+  
 @enum
 class ThreadStatus:
     IDLE = 1
@@ -111,8 +116,11 @@ class LockedFile(object):
     def write(self, s):
         with self.lock: self.f.write(s)
 
-url_log = LockedFile('/scratch/urls.out.%d')
-data_log = LockedFile('/scratch/pages.out.%d')
+    def sync(self):
+        with self.lock: os.fsync(self.f)
+
+url_log = LockedFile('/scratch/urls.out.%d' % crawler_id)
+data_log = LockedFile('/scratch/pages.out.%d' % crawler_id)
 
 def key_from_site(site): return domain_from_site(site) + ' ' + site
     
@@ -151,8 +159,9 @@ def initialize():
     robots_table = cs.kernel().robots_table(2)
     domain_counts = cs.kernel().crawl_table(3)
     fetch_counts = cs.kernel().crawl_table(4)
-    fetch_table.update(key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")), 
-                    FetchStatus.SHOULD_FETCH)
+    fetch_table.update(
+      key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")), 
+      FetchStatus.SHOULD_FETCH)
     return 0
 
 def check_robots(url):
@@ -191,20 +200,24 @@ def parse_robots(site, rtxt):
     except:
         warn('Failed to parse robots file!', exc_info=1)
 
+def update_fetch_table(key, status, byte_count=0):
+        fetch_table.update(key, status)
+        fetch_counts.update(FetchStatus.as_str[status], 1)
+        if byte_count > 0:
+            fetch_counts.update(FetchStatus.as_str[FetchStatus.FETCHED_BYTES], byte_count)
+
 def fetch_page(page):
     info('Fetching page: %s', page.url_s)
     try:
         page.content = crawl_opener.open(page.url_s).read(MAX_PAGE_SIZE)
         url_log.write(page.url_s + '\n')
         data_log.writeRecord(page.content, url=page.url_s, domain=page.domain)
-        fetch_table.update(page.key(), FetchStatus.FETCH_DONE)
-        fetch_counts.update(FetchStatus.as_str[FetchStatus.FETCH_DONE], 1)
+        update_fetch_table(page.key(), FetchStatus.FETCH_DONE, len(page.content))
     except (urllib2.URLError, socket.timeout):
         info('Fetch of %s failed: %s', page.url_s, sys.exc_info()[1])
         warn('Fetch of %s failed.', page.url_s, exc_info=1)
         page.content = ''
-        fetch_table.update(page.key(), FetchStatus.ERROR)
-        fetch_counts.update(FetchStatus.as_str[FetchStatus.ERROR], 1)
+        update_fetch_table(page.key(), FetchStatus.FETCH_ERROR)
 
 def join_url(base, l):
     '''Join a link with the base href extracted from the page; throwing away garbage.'''   
@@ -230,6 +243,7 @@ def extract_links(page):
     except:
         info('Parse of %s failed: %s', page.url_s, sys.exc_info()[1])
         warn('Parse of %s failed.', page.url_s, exc_info=1)
+        update_fetch_table(page.key(), FetchStatus.PARSE_ERROR)
         
 
 def add_links(page):
@@ -271,8 +285,7 @@ class CrawlThread(Thread):
                 except Empty: pass
                 except:
                     warn('Error when processing page %s', page.url_s, exc_info=1)
-                    fetch_table.update(page.key(), FetchStatus.ERROR)
-                    fetch_counts.update(FetchStatus.as_str[FetchStatus.ERROR], 1)
+                    update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
             
             try:
                 site = robots_queue.get(block=False)                
@@ -307,7 +320,8 @@ class StatusThread(Thread):
           
           console('Threads (ordered by last ping time)')
           for t in sorted(self.threads, key=lambda t: t.last_active):
-            console('>> T(%02d) last ping: %.2f status: %s last url:%s', t.id, now() - t.last_active, ThreadStatus.as_str[t.status], t.url)
+            console('>> T(%02d) last ping: %.2f status: %s last url:%s', 
+                    t.id, now() - t.last_active, ThreadStatus.as_str[t.status], t.url)
               
           it = domain_counts.get_typed_iterator(cs.kernel().current_shard())
           dcounts = []
@@ -324,7 +338,7 @@ class StatusThread(Thread):
         global running
         while 1:
             try:
-                if my_id == 1:
+                if crawler_id == 1:
                     self.print_status()
             except:
                 warn('Failed to print status!?', exc_info=1)
@@ -333,6 +347,8 @@ class StatusThread(Thread):
             if RUNTIME > 0 and time.time() - self.start_time > RUNTIME:
                 running = False
             
+            url_log.sync()
+            data_log.sync()
             time.sleep(5)
 
 
@@ -402,8 +418,7 @@ def check_url(url, status):
     
     if not check_robots(url):
         debug('Blocked by robots "%s"', url_s)
-        fetch_table.update(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST)
-        fetch_counts.update(FetchStatus.as_str[FetchStatus.ROBOTS_BLACKLIST], 1)
+        update_fetch_table(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST, 1)
         return
       
     last_crawl = 0
