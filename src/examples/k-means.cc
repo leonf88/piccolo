@@ -30,21 +30,24 @@ public:
   void initialize_world() {
     points->resize(FLAGS_num_points);
 
-    srand(time(NULL));
-    int c = 0;
+    srand(0);
+    vector<Distribution> rdists;
     for (int i = 0; i < FLAGS_num_dists; ++i) {
-      if (i % dists->num_shards() != current_shard()) { continue; }
-
       double dx = 0.5 - rand_double();
       double dy = 0.5 - rand_double();
 
       Distribution d = { dx, dy };
-      actual->update(i, d);
+      rdists.push_back(d);
+    }
 
-      for (int j = 0; j < FLAGS_num_points / FLAGS_num_dists; ++j) {
-        Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
-        points->update(c++, p);
-      }
+    const int num_shards = points->num_shards();
+    for (int64_t i = current_shard(); i < FLAGS_num_points; i += num_shards) {
+      Distribution d = rdists[i % FLAGS_num_dists];
+      double dx = d.x;
+      double dy = d.y;
+
+      Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
+      points->update(i, p);
     }
 
     if (current_shard() == 0) {
@@ -53,6 +56,7 @@ public:
         Point p = points->get(random() % FLAGS_num_points);
         Distribution d = { p.x, p.y };
         dists->update(i, d);
+        actual->update(i, rdists[i]);
       }
     }
   }
@@ -165,9 +169,10 @@ static void dist_merge(Distribution* d1, const Distribution& d2) {
 }
 
 static int KMeans(ConfigData& conf) {
-  dists = Registry::create_table<int, Distribution>(0, conf.num_workers(), &ModSharding, &dist_merge);
-  points = Registry::create_table<int, Point>(1, conf.num_workers(), &ModSharding, &Accumulator<Point>::replace);
-  actual = Registry::create_table<int, Distribution>(2, conf.num_workers(), &ModSharding, &dist_merge);
+  const int num_shards = conf.num_workers() * 4;
+  dists = Registry::create_table<int, Distribution>(0, num_shards, &ModSharding, &dist_merge);
+  points = Registry::create_table<int, Point>(1, num_shards, &ModSharding, &Accumulator<Point>::replace);
+  actual = Registry::create_table<int, Distribution>(2, num_shards, &ModSharding, &dist_merge);
 
   if (!StartWorker(conf)) {
     Master m(conf);
