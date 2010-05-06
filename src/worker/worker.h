@@ -76,6 +76,7 @@ private:
   vector<Stub*> peers_;
 
   NetworkThread *network_;
+  set<GlobalView*> dirty_tables_;
 
   struct KernelId {
     string kname_;

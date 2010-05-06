@@ -186,8 +186,9 @@ void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
   HashPutCoder h(get_resp);
 
   int shard = get_shard_str(key);
-  CHECK(is_local_shard(shard))
-    << "Not local for shard: " << shard;
+  if (!is_local_shard(shard)) {
+    LOG_EVERY_N(WARNING, 1000) << "Not local for shard: " << shard;
+  }
 
   LocalTable *t = partitions_[shard];
   if (!t->contains_str(key)) {
