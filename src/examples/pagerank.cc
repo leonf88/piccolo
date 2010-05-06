@@ -16,7 +16,6 @@ static const float kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
 static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
-
 DEFINE_bool(memory_graph, false,
             "If true, the web graph will be generated on-demand.");
 
@@ -73,7 +72,8 @@ static void InitSites() {
   if (site_sizes.empty()) {
     srand(0);
     for (int n = 0; n < FLAGS_nodes; ) {
-      int c = powerlaw_random(1, (int)(100000. * FLAGS_nodes / 100e6), 0.001);
+      int c = powerlaw_random(1, min(50000,
+                                     (int)(100000. * FLAGS_nodes / 100e6)), 0.001);
       site_sizes.push_back(c);
 //      LOG_EVERY_N(INFO, 100) << "Site size: " << c;
       n += c;

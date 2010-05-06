@@ -40,15 +40,20 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     memset(b.d, 2, kBlockSize * kBlockSize * sizeof(double));
     memset(z.d, 0, kBlockSize * kBlockSize * sizeof(double));
 
+    int bcount = 0;
+
     for (int by = 0; by < bRows; by ++) {
       for (int bx = 0; bx < bCols; bx ++) {
         if (!is_local(by, bx)) { continue; }
+        ++bcount;
         CHECK(matrix_a->get_shard(block_id(by, bx)) == current_shard());
         matrix_a->update(block_id(by, bx), b);
         matrix_b->update(block_id(by, bx), b);
         matrix_c->update(block_id(by, bx), z);
       }
     }
+
+    LOG(INFO) << NetworkThread::Get()->id() << " assigned " << bcount;
   }
 
   void Multiply() {

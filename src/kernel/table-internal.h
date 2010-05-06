@@ -5,7 +5,7 @@
 #include "util/rpc.h"
 
 namespace dsm {
-static const int kWriteFlushCount = 100000;
+static const int kWriteFlushCount = 1000000;
 
 struct HashPutCoder {
   HashPutCoder(HashPut *h);

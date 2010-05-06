@@ -3,7 +3,7 @@
 import time
 import os, sys, re, subprocess
 
-parallelism = [64, 32, 16, 8, 4, 2, 1]
+parallelism = [8, 16, 32, 64]
 #parallelism = [64, 32, 16, 8]
 
 def hostfile_info(f):
@@ -59,7 +59,7 @@ def run_example(runner,
   cmd = ' '.join(['/home/power/share/bin/mpirun',
                   '-mca mpi_paffinity_alone %s' % affinity,
                   '-hostfile %s' % hostfile,
-                  '-bysocket',
+                  '-bynode',
                   '-nooversubscribe',
                   '-tag-output ',
                   '-display-map',

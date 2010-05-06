@@ -9,7 +9,7 @@ checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
 scaled_base_size=5
 fixed_base_size=100
-shards=128
+shards=256
 memory_graph=1
 
 def cleanup(size):
@@ -88,5 +88,5 @@ def test_checkpointing():
   run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])  
   run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
 
-#test_fixed_perf()
-test_scaled_perf()
+test_fixed_perf()
+#test_scaled_perf()
