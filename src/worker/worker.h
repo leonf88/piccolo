@@ -78,6 +78,9 @@ private:
   NetworkThread *network_;
   set<GlobalView*> dirty_tables_;
 
+  uint32_t iterator_id_;
+  unordered_map<uint32_t, Table_Iterator*> iterators_;
+
   struct KernelId {
     string kname_;
     int table_;

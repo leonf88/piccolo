@@ -36,6 +36,7 @@ Worker::Worker(const ConfigData &c) {
   }
 
   running_ = true;
+  iterator_id_ = 0;
 
   // HACKHACKHACK - register ourselves with any existing tables
   Registry::TableMap &t = Registry::get_tables();
@@ -329,8 +330,8 @@ void Worker::HandlePutRequests() {
 void Worker::HandleGetRequests() {
   int source;
   HashGet get_req;
-  HashPut get_resp;
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
+    HashPut get_resp;
 //    LOG(INFO) << "Get request: " << get_req;
 
     stats_.set_get_in(stats_.get_in() + 1);
@@ -345,17 +346,38 @@ void Worker::HandleGetRequests() {
 
     {
       GlobalView * t = Registry::get_table(get_req.table());
-      int shard = t->get_shard_str(get_req.key());
-//      CHECK(t->is_local_shard(shard))
-//      << "Not local for shard: " << shard
-//      << " get request from: " << source
-//      << " for " << MP(get_req.table(), get_req.shard());
-
-      t->handle_get(get_req.key(), &get_resp);
+      t->handle_get(get_req, &get_resp);
     }
 
     network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
     VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
+  }
+
+  IteratorRequest iterator_req;
+  while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_ITERATOR_REQ, &iterator_req, &source)) {
+    IteratorResponse iterator_resp;
+    int table = iterator_req.table();
+    int shard = iterator_req.shard();
+
+    GlobalView * t = Registry::get_table(table);
+    Table_Iterator* it = NULL;
+    if (iterator_req.id() == -1) {
+      it = t->get_iterator(shard);
+      uint32_t id = iterator_id_++;
+      iterators_[id] = it;
+      iterator_resp.set_id(id);
+    } else {
+      it = iterators_[iterator_req.id()];
+      iterator_resp.set_id(iterator_req.id());
+    }
+
+    iterator_resp.set_done(it->done());
+    if (!it->done()) {
+      it->key_str(iterator_resp.mutable_key());
+      it->value_str(iterator_resp.mutable_value());
+    }
+
+    network_->Send(source, MTYPE_ITERATOR_RESP, iterator_resp);
   }
 
 

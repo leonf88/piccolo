@@ -74,10 +74,24 @@ message KernelDone {
   repeated ShardInfo shards = 5;
 }
 
+message IteratorRequest {
+  required uint32 table = 1;
+  required uint32 shard = 2;  
+  optional int32 id = 3 [default = -1];
+}
+
+message IteratorResponse {
+  required uint32 id = 1;
+  required bool done = 2;
+  optional string key = 3;
+  optional string value = 4;
+}
+
 message HashGet {
   required uint32 table = 1;
   required uint32 shard = 2;
-  required bytes key = 3;
+  optional bytes key = 3;
+  optional uint32 index = 4;
 }
 
 message HashPut {

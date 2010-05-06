@@ -1,23 +1,10 @@
-#include "kernel/table.h"
+#include "kernel/table-internal.h"
 #include "worker/worker.h"
 
 static const int kMaxNetworkChunk = 1 << 20;
 static const int kMaxNetworkPending = 1 << 26;
 
 namespace dsm {
-
-struct HashPutCoder {
-  HashPutCoder(HashPut *h);
-  HashPutCoder(const HashPut& h);
-
-  void add_pair(const string& k, const string& v);
-  StringPiece key(int idx);
-  StringPiece value(int idx);
-
-  int size();
-
-  HashPut *h_;
-};
 
 static void SerializePartial(HashPut& r, TableView::Iterator *it) {
   int bytes_used = 0;
@@ -180,21 +167,21 @@ void GlobalTable::restore(const string& f) {
   }
 }
 
-void GlobalTable::handle_get(const StringPiece& key, HashPut *get_resp) {
+void GlobalTable::handle_get(const HashGet& get_req, HashPut *get_resp) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
   HashPutCoder h(get_resp);
 
-  int shard = get_shard_str(key);
+  int shard = get_req.shard();
   if (!is_local_shard(shard)) {
     LOG_EVERY_N(WARNING, 1000) << "Not local for shard: " << shard;
   }
 
   LocalTable *t = partitions_[shard];
-  if (!t->contains_str(key)) {
+  if (!t->contains_str(get_req.key())) {
     get_resp->set_missing_key(true);
   } else {
-    h.add_pair(key.AsString(), t->get_str(key));
+    h.add_pair(get_req.key(), t->get_str(get_req.key()));
   }
 }
 
@@ -330,10 +317,9 @@ TableView::Iterator *DiskTable::get_iterator(int shard) {
 }
 
 int64_t DiskTable::shard_size(int shard) {
-return 0;
+  return 0;
 }
 
 void DiskTable::UpdateShardinfo(const ShardInfo & sinfo) {}
-
 
 }
