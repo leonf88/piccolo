@@ -5,7 +5,7 @@ using namespace dsm;
 
 DEFINE_int32(edge_size, 1000, "");
 
-static const int kBlockSize = 100;
+static const int kBlockSize = 250;
 static int bRows = -1;
 static int bCols = -1;
 
@@ -86,8 +86,10 @@ int MatrixMultiplication(ConfigData& conf) {
   StartWorker(conf);
   Master m(conf);
 
-  m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", matrix_a));
-  m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", matrix_a));
+  for (int i = 0; i < FLAGS_iterations; ++i) {
+    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", matrix_a));
+    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", matrix_a));
+  }
   return 0;
 }
 REGISTER_RUNNER(MatrixMultiplication);

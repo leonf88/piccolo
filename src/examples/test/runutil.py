@@ -4,6 +4,7 @@ import time
 import os, sys, re, subprocess
 
 parallelism = [64, 32, 16, 8, 4, 2, 1]
+#parallelism = [64, 32, 16, 8]
 
 def hostfile_info(f):
   cores = machines = 0
@@ -58,7 +59,7 @@ def run_example(runner,
   cmd = ' '.join(['/home/power/share/bin/mpirun',
                   '-mca mpi_paffinity_alone %s' % affinity,
                   '-hostfile %s' % hostfile,
-                  '-bynode',
+                  '-bysocket',
                   '-nooversubscribe',
                   '-tag-output ',
                   '-display-map',
