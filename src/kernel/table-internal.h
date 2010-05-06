@@ -1,4 +1,81 @@
+#ifndef TABLE_INTERNAL_H
+#define TABLE_INTERNAL_H
+
+#include "kernel/table.h"
+#include "util/rpc.h"
+
+namespace dsm {
 static const int kWriteFlushCount = 100000;
+
+struct HashPutCoder {
+  HashPutCoder(HashPut *h);
+  HashPutCoder(const HashPut& h);
+
+  void add_pair(const string& k, const string& v);
+  StringPiece key(int idx);
+  StringPiece value(int idx);
+
+  int size();
+
+  HashPut *h_;
+};
+
+template<class K, class V>
+class RemoteIterator : public TypedTable_Iterator<K, V> {
+public:
+  RemoteIterator(GlobalView *table, int shard) :
+    owner_(table), shard_(shard), done_(false) {
+    request_.set_table(table->id());
+    request_.set_shard(shard_);
+    int target_worker = owner_->get_owner(shard_);
+
+    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+
+    request_.set_id(response_.id());
+  }
+
+  void key_str(string *out) {
+    *out = response_.key();
+  }
+
+  void value_str(string *out) {
+    *out = response_.value();
+  }
+
+  bool done() {
+    return response_.done();
+  }
+
+  void Next() {
+    int target_worker = owner_->get_owner(shard_);
+    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+    ++index_;
+  }
+
+  const K& key() {
+    data::unmarshal(response_.key(), &key_);
+    return key_;
+  }
+
+  V& value() {
+    data::unmarshal(response_.value(), &value_);
+    return value_;
+  }
+
+private:
+  GlobalView* owner_;
+  IteratorRequest request_;
+  IteratorResponse response_;
+  int id_;
+
+  int shard_;
+  int index_;
+  K key_;
+  V value_;
+  bool done_;
+};
 
 template<class K, class V>
 TypedLocalTable<K, V>::TypedLocalTable(const TableDescriptor &tinfo) : LocalTable(tinfo) {
@@ -251,7 +328,7 @@ void TypedGlobalTable<K, V>::remove(const K &k) {
 
 template<class K, class V>
 Table_Iterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
-  return partitions_[shard]->get_iterator();
+  return get_typed_iterator(shard);
 }
 
 template<class K, class V>
@@ -263,9 +340,12 @@ LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
 }
 
 template<class K, class V>
-TypedTable_Iterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(
-                                                                       int shard) {
-  return (typename TypedTable<K, V>::Iterator*) partitions_[shard]->get_iterator();
+TypedTable_Iterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+  if (this->is_local_shard(shard)) {
+    return (typename TypedTable<K, V>::Iterator*) partitions_[shard]->get_iterator();
+  } else {
+    return new RemoteIterator<K, V>(this, shard);
+  }
 }
 
 #define WRAPPER_IMPL(klass)\
@@ -296,3 +376,6 @@ void klass<K, V>::update_str(const StringPiece &k, const StringPiece &v) {\
 
 WRAPPER_IMPL(TypedLocalTable);
 WRAPPER_IMPL(TypedGlobalTable);
+}
+
+#endif

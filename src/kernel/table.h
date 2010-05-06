@@ -120,7 +120,7 @@ public:
 
   virtual int get_shard_str(StringPiece k) = 0;
   virtual bool is_local_shard(int shard) = 0;
-  virtual void handle_get(const StringPiece& key, HashPut* resp) = 0;
+  virtual void handle_get(const HashGet& req, HashPut* resp) = 0;
   virtual void set_worker(Worker* w) = 0;
 
 
@@ -177,7 +177,7 @@ public:
   bool is_local_key(const StringPiece &k);
 
   // Fill in a response from a remote worker for the given key.
-  void handle_get(const StringPiece& key, HashPut* resp);
+  void handle_get(const HashGet& req, HashPut* resp);
 
   // Transmit any buffered update data to remote peers.
   void SendUpdates();
@@ -301,9 +301,5 @@ private:
   HashMap<int, int> owner_map_;
 };
 
-#include "table-internal.h"
-
 }
-
-
 #endif
