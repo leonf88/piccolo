@@ -7,9 +7,10 @@ import runutil, math
 
 checkpoint_write_dir="/scratch/checkpoints/"
 checkpoint_read_dir="/scratch/cp-union/checkpoints/"
-scaled_base_size=10
+scaled_base_size=5
 fixed_base_size=100
-shards=512
+shards=128
+memory_graph=1
 
 def cleanup(size):
   print "Removing old checkpoints..."
@@ -21,6 +22,7 @@ def system(cmd):
   os.system(cmd)
 
 def make_graph(size, hostfile='fast_hostfile'):
+  if memory_graph: return
   system(' '.join(
                   ['/home/power/share/bin/mpirun',
                    '-hostfile %s' % hostfile,
@@ -36,17 +38,16 @@ def make_graph(size, hostfile='fast_hostfile'):
                    '--work_stealing=false',
                    '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % size]))
 
-def run_pr(fname, size, args=None, **kw):
+def run_pr(fname, size, n, args=None, **kw):
   try:
     runutil.run_example('Pagerank', 
                         n=n,
                         logfile_name=fname,
                         build_type='release',
-                        args=['--iterations=%s' % max(5, n/4),
+                        args=['--iterations=%s' % 3,
                               '--sleep_time=0.001',
-#                            '--cpu_profile',
-#                            '--sleep_hack=1',
                               '--nodes=%s' % (size * 1000 * 1000),
+                              '--memory_graph=%d' % memory_graph,
                               '--shards=%s' % shards,
                               '--work_stealing=true',
                               '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
@@ -59,24 +60,25 @@ def run_pr(fname, size, args=None, **kw):
     return
 
 # test scaling with work size, and with a fixed size of data
-def test_size_scaling():
-  for n in runutil.parallelism:
+def test_scaled_perf():
+  for n in runutil.parallelism[5:]:
     graphsize = scaled_base_size * n
     make_graph(graphsize)
-    run_pr('Pagerank.scaled_size', graphsize, ['--checkpoint=false'])
+    run_pr('Pagerank.scaled_size', graphsize, n, ['--checkpoint=false'])
 
 
-def test_time_scaling():
+def test_fixed_perf():
   for n in runutil.parallelism:  
     graphsize = fixed_base_size
     make_graph(graphsize)
-    run_pr('Pagerank.fixed_size', graphsize, ['--checkpoint=false'])
+    run_pr('Pagerank.fixed_size', graphsize, n, ['--checkpoint=false'])
 
 
 def test_work_stealing():
   make_graph(graphsize, hostfile='slow_hostfile')
   run_pr('Pagerank.with_stealing', 
-         graphsize, 
+         graphsize,
+         n,
          hostfile='slow_hostfile',
          args=['--checkpoint=false', '--work_stealing=true'])
 
@@ -86,7 +88,5 @@ def test_checkpointing():
   run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])  
   run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
 
-def test_ec2():
-  for n in runutil.parallelism:
-    graphsize = scaled_base_size * n
-    run_pr('Pagerank.ec2', graphsize, ['--checkpoint=false', '--memory_graph=true'])
+#test_fixed_perf()
+test_scaled_perf()
