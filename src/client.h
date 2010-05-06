@@ -6,8 +6,8 @@
 
 #include "worker/worker.h"
 #include "master/master.h"
-#include "kernel/table.h"
 #include "kernel/kernel.h"
+#include "kernel/table-internal.h"
 #include "kernel/table-registry.h"
 
 #ifndef SWIG

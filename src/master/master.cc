@@ -8,6 +8,7 @@ DEFINE_string(dead_workers, "",
 
 DECLARE_string(checkpoint_write_dir);
 DECLARE_string(checkpoint_read_dir);
+DECLARE_double(sleep_time);
 
 namespace dsm {
 
@@ -610,7 +611,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
       mstats.set_shard_invocations(mstats.shard_invocations() + 1);
       w.ping();
     } else {
-      Sleep(0.001);
+      Sleep(FLAGS_sleep_time);
     }
 
     PERIODIC(0.1, {

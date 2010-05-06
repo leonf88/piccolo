@@ -3,7 +3,7 @@
 import sys; sys.path += ['src/examples/test']
 import runutil, math
 fixed_base = 2500
-scaled_base = 500
+scaled_base = 1000
 iterations = 3
 
 def edge(n):
@@ -11,12 +11,12 @@ def edge(n):
     return int(v) * 250
 
 def test_scaled_perf():
-  for n in runutil.parallelism:                            
+  for n in runutil.parallelism[4:]:                            
      runutil.run_example('MatrixMultiplication', 
                           n=n,
                           logfile_name='MatrixMultiplication.scaled_size',
                           args=['--iterations=%s' % iterations,
-                                '--sleep_time=0.001',
+                                '--sleep_time=0.0001',
                                 '--work_stealing=false',
                                 '--edge_size=%d' % edge(n),
                                 ])
