@@ -236,13 +236,15 @@ Master::Master(const ConfigData &conf) :
 }
 
 Master::~Master() {
+  LOG(INFO) << "Worker execution time:";
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
-    LOG(INFO) << StringPrintf("Worker %2d: %.3f", i, w.total_runtime);
+    LOG(INFO) << StringPrintf("--> %2d: %.3f", i, w.total_runtime);
   }
 
+  LOG(INFO) << "Kernel stats: ";
   for (MethodStatsMap::iterator i = method_stats_.begin(); i != method_stats_.end(); ++i) {
-    LOG(INFO) << "Kernel stats: " << i->first << " :: " << i->second;
+     LOG(INFO) << i->first << "--> " << i->second.DebugString();
   }
 
   LOG(INFO) << "Shutting down workers.";
