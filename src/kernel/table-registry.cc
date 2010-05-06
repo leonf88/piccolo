@@ -3,6 +3,8 @@
 #include "kernel/table-registry.h"
 #include "kernel/table.h"
 
+static const int kStatsTableId = 1000000;
+
 namespace dsm {
 
 namespace Registry {
@@ -22,3 +24,10 @@ GlobalView* get_table(int id) {
 }
 
 }
+
+static void CreateStatsTable() {
+  dsm::Registry::create_table<string, string>(kStatsTableId, 1,
+                                              &dsm::StringSharding, &dsm::Accumulator<string>::replace);
+}
+
+REGISTER_INITIALIZER(CreateStatsTable, CreateStatsTable());

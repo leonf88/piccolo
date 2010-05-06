@@ -161,6 +161,13 @@ void Worker::Flush() {
 void Worker::CheckNetwork() {
   CheckForMasterUpdates();
   HandlePutRequests();
+
+  // Flush any tables we no longer own.
+  for (set<GlobalView*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
+    (*i)->SendUpdates();
+  }
+
+  dirty_tables_.clear();
 }
 
 int64_t Worker::pending_kernel_bytes() const {
@@ -339,16 +346,47 @@ void Worker::HandleGetRequests() {
     {
       GlobalView * t = Registry::get_table(get_req.table());
       int shard = t->get_shard_str(get_req.key());
-      CHECK(t->is_local_shard(shard))
-      << "Not local for shard: " << shard
-      << " get request from: " << source
-      << " for " << MP(get_req.table(), get_req.shard());
+//      CHECK(t->is_local_shard(shard))
+//      << "Not local for shard: " << shard
+//      << " get request from: " << source
+//      << " for " << MP(get_req.table(), get_req.shard());
 
       t->handle_get(get_req.key(), &get_resp);
     }
 
     network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
     VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
+  }
+
+
+  ShardAssignmentRequest shard_req;
+  while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
+    for (int i = 0; i < shard_req.assign_size(); ++i) {
+      const ShardAssignment &a = shard_req.assign(i);
+      GlobalView *t = Registry::get_table(a.table());
+      int old_owner = t->get_owner(a.shard());
+      t->set_owner(a.shard(), a.new_worker());
+//      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
+
+      if (a.new_worker() == id() && old_owner != id()) {
+        VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
+
+        // Don't consider ourselves canonical for this shard until we receive updates
+        // from the old owner.
+        if (old_owner != -1) {
+          LOG(INFO) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
+          t->set_tainted(a.shard());
+        }
+      } else if (old_owner == id() && a.new_worker() != id()) {
+        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
+        // A new worker has taken ownership of this shard.  Flush our data out.
+        t->set_dirty(a.shard());
+        dirty_tables_.insert(t);
+      }
+    }
+
+    EmptyMessage empty;
+    network_->Send(config_.master_id(), MTYPE_SHARD_ASSIGNMENT_DONE, empty);
   }
 }
 
@@ -383,41 +421,6 @@ void Worker::CheckForMasterUpdates() {
   StartRestore restore_msg;
   while (network_->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
     Restore(restore_msg.epoch());
-  }
-
-  ShardAssignmentRequest shard_req;
-  set<GlobalView*> dirty_tables;
-  while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
-    for (int i = 0; i < shard_req.assign_size(); ++i) {
-      const ShardAssignment &a = shard_req.assign(i);
-      GlobalView *t = Registry::get_table(a.table());
-      int old_owner = t->get_owner(a.shard());
-      t->set_owner(a.shard(), a.new_worker());
-//      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
-
-      if (a.new_worker() == id() && old_owner != id()) {
-        VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
-
-        // Don't consider ourselves canonical for this shard until we receive updates
-        // from the old owner.
-        if (old_owner != -1) {
-          LOG(INFO) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
-          t->set_tainted(a.shard());
-        }
-      } else if (old_owner == id() && a.new_worker() != id()) {
-        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
-        // A new worker has taken ownership of this shard.  Flush our data out.
-        t->set_dirty(a.shard());
-        dirty_tables.insert(t);
-      }
-    }
-
-    // Flush any tables we no longer own.
-    for (set<GlobalView*>::iterator i = dirty_tables.begin(); i != dirty_tables.end(); ++i) {
-      (*i)->SendUpdates();
-    }
-
-    network_->Send(config_.master_id(), MTYPE_SHARD_ASSIGNMENT_DONE, empty);
   }
 
   // Check for new kernels to run, and report finished kernels to the master.
