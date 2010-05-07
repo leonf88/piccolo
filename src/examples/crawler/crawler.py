@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import json, os, re, socket, sys, time, types, threading, traceback
-import urllib, cgi, httplib, urllib2, cStringIO
+import gzip, urllib, cgi, httplib, urllib2, cStringIO
 
 from urlparse import urlparse, urljoin 
 from collections import defaultdict
@@ -57,10 +57,16 @@ class CrawlOpener(object):
     def __init__(self):
         self.o = urllib2.build_opener()
     
-    def open(self, url_s):    
+    def read(self, url_s):    
         req = urllib2.Request(url_s)
         req.add_header('User-Agent', 'MPICrawler/0.1 +http://kermit.news.cs.nyu.edu/crawler.html')
-        return self.o.open(req, timeout=CRAWL_TIMEOUT)
+        req.add_header('Accept-encoding', 'gzip')
+        url_f = self.o.open(req, timeout=CRAWL_TIMEOUT)        
+        if 'gzip' in url_f.headers.get('Content-Encoding'):
+        	sf = cStringIO.StringIO(url_f.read())
+        	return gzip.GzipFile(fileobj=sf).read()
+        return url_f.read()
+       
 crawl_opener = CrawlOpener()
 
 
@@ -175,7 +181,7 @@ DISALLOW_RE = re.compile('Disallow:(.*)')
 def fetch_robots(site):
     info('Fetching robots: %s', site)
     try:
-        return crawl_opener.open('http://%s/robots.txt' % site).read(MAX_ROBOTS_SIZE)
+        return crawl_opener.read('http://%s/robots.txt' % site)
     except urllib2.HTTPError, e:
         if e.code == 404: return ''
     except: pass
@@ -209,7 +215,7 @@ def update_fetch_table(key, status, byte_count=0):
 def fetch_page(page):
     info('Fetching page: %s', page.url_s)
     try:
-        page.content = crawl_opener.open(page.url_s).read(MAX_PAGE_SIZE)
+        page.content = crawl_opener.read(page.url_s)
         url_log.write(page.url_s + '\n')
         data_log.writeRecord(page.content, url=page.url_s, domain=page.domain)
         update_fetch_table(page.key(), FetchStatus.FETCH_DONE, len(page.content))
@@ -232,6 +238,10 @@ def join_url(base, l):
 
 def extract_links(page):
     debug('Extracting... %s [%d]', page.url_s, len(page.content))
+    if not page.content:
+    	page.outlinks = []
+    	return
+    
     try:
         root = etree.parse(cStringIO.StringIO(page.content), html_parser)
         base_href = base_xpath(root)
@@ -332,7 +342,7 @@ class StatusThread(Thread):
           console('Top sites:')
           dcounts.sort(key=lambda t: t[1], reverse=1)
           for k, v in dcounts[:10]:
-              console('%s: %s', k, v)               
+              console('%s: %s', k, v)
       
     def run(self):
         global running
