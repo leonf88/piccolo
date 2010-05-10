@@ -44,11 +44,11 @@ def console(fmt, *args, **kwargs):
   info(fmt, *args, **kwargs)
   print >>sys.stderr, str(fmt) % args 
 
-CRAWLER_THREADS = 50
+CRAWLER_THREADS = 100
 ROBOTS_REJECT_ALL = '/'
 MAX_ROBOTS_SIZE = 50000
 MAX_PAGE_SIZE = 100000
-CRAWL_TIMEOUT = 3
+CRAWL_TIMEOUT = 10
 RECORD_HEADER = '*' * 30 + 'BEGIN_RECORD' + '*' * 30 + '\n'
 PROFILING = False
 RUNTIME = -1
@@ -61,11 +61,11 @@ class CrawlOpener(object):
         req = urllib2.Request(url_s)
         req.add_header('User-Agent', 'MPICrawler/0.1 +http://kermit.news.cs.nyu.edu/crawler.html')
         req.add_header('Accept-encoding', 'gzip')
-        url_f = self.o.open(req, timeout=CRAWL_TIMEOUT)        
-        if 'gzip' in url_f.headers.get('Content-Encoding'):
-        	sf = cStringIO.StringIO(url_f.read())
+        url_f = self.o.open(req, timeout=CRAWL_TIMEOUT)
+        sf = cStringIO.StringIO(url_f.read())        
+        if url_f.headers.get('Content-Encoding') and 'gzip' in url_f.headers.get('Content-Encoding'):
         	return gzip.GzipFile(fileobj=sf).read()
-        return url_f.read()
+        return sf.read()
        
 crawl_opener = CrawlOpener()
 
