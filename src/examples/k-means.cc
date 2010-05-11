@@ -62,7 +62,7 @@ public:
   }
 
   void initialize_expectation() {
-    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
+    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       it->value().min_dist = 2;
     }
@@ -76,7 +76,7 @@ public:
       local.push_back(dists->get(i));
     }
 
-    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
+    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       for (int i = 0; i < FLAGS_num_dists; ++i) {
         Distribution& d = local[i];
@@ -91,7 +91,7 @@ public:
   }
 
   void initialize_maximization() {
-    TypedTable<int, Distribution>::Iterator *it = dists->get_typed_iterator(current_shard());
+    TypedIterator<int, Distribution> *it = dists->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       Distribution &d = it->value();
 //      LOG(INFO) << "Distribution" << ":: " << it->key() << " :: "<< d.x << " : " << d.y;
@@ -112,7 +112,7 @@ public:
   // appropriate distribution.
   void compute_maximization() {
     Distribution d;
-    TypedTable<int, Point>::Iterator *it = points->get_typed_iterator(current_shard());
+    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       const Point &p = it->value();
       d.x = p.x * FLAGS_num_dists / FLAGS_num_points;
@@ -161,18 +161,20 @@ REGISTER_METHOD(KMeansKernel, compute_expectation);
 REGISTER_METHOD(KMeansKernel, compute_maximization);
 REGISTER_METHOD(KMeansKernel, print_results);
 
-static void dist_merge(Distribution* d1, const Distribution& d2) {
-  Distribution o;
-  o.x = d1->x + d2.x;
-  o.y = d1->y + d2.y;
-  *d1 = o;
-}
+struct DistAccum {
+  void operator()(Distribution* d1, const Distribution& d2) {
+    Distribution o;
+    o.x = d1->x + d2.x;
+    o.y = d1->y + d2.y;
+    *d1 = o;
+  }
+};
 
 static int KMeans(ConfigData& conf) {
   const int num_shards = conf.num_workers() * 4;
-  dists = Registry::create_table<int, Distribution>(0, num_shards, &ModSharding, &dist_merge);
-  points = Registry::create_table<int, Point>(1, num_shards, &ModSharding, &Accumulator<Point>::replace);
-  actual = Registry::create_table<int, Distribution>(2, num_shards, &ModSharding, &dist_merge);
+  dists = TableRegistry::Get()->create_table<int, Distribution>(0, num_shards, new Sharding::Mod, new DistAccum);
+  points = TableRegistry::Get()->create_table<int, Point>(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);
+  actual = TableRegistry::Get()->create_table<int, Distribution>(2, num_shards, new Sharding::Mod, new DistAccum);
 
   if (!StartWorker(conf)) {
     Master m(conf);

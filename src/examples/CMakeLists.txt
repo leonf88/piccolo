@@ -25,37 +25,58 @@ if ($ENV{JEMALLOC})
 endif()
 
 # link statically if possible
-target_link_libraries(example-dsm -Wl,-Bstatic ${MPILIBS} ${STATICLIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
-target_link_libraries(example-dsm ${DYNAMICLIBS})		      
+target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
+target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPILIBS})		      
 
 
 GET_DIRECTORY_PROPERTY(cmake_include_directories INCLUDE_DIRECTORIES)
-SET(swig_include_dirs)
+SET(include_flag)
 FOREACH(it ${cmake_include_directories})
-  SET(swig_include_dirs ${swig_include_dirs} "-I${it}")
+  SET(include_flag ${include_flag} "-I${it}")
 ENDFOREACH(it)
 
+GET_DIRECTORY_PROPERTY(cmake_link_directories LINK_DIRECTORIES)
+SET(link_flag)
+FOREACH(it ${cmake_link_directories})
+  SET(link_flag ${link_flag} "-L${it}")
+ENDFOREACH(it)
+
+SET(swig_out ${CMAKE_CURRENT_BINARY_DIR}/piccolo_wrap.cc)
+SET(swig_shim ${CMAKE_CURRENT_SOURCE_DIR}/python_support.cc)
 
 ADD_CUSTOM_COMMAND(
- OUTPUT python_support_wrap.cc
+ OUTPUT ${swig_out}
  COMMAND swig
  ARGS 
- -python 
- -ignoremissing 
- -O 
- -c++ 
+ -python -ignoremissing -O  -c++ 
+ -w315 -w317 -w362 -w503 -w451 -w401
  -outdir ${CMAKE_CURRENT_BINARY_DIR} 
- ${swig_include_dirs}
- -o ${CMAKE_CURRENT_BINARY_DIR}/python_support_wrap.cc
- ${CMAKE_CURRENT_SOURCE_DIR}/python_support.i
- DEPENDS python_support.i)
+ ${include_flag}
+ -o ${swig_out}
+ ${CMAKE_CURRENT_SOURCE_DIR}/python_support.swig
+ DEPENDS python_support.swig worker master common kernel)
  
-add_executable(dsm-crawler 
-			   python_support_wrap.cc
-			   crawler/crawler-main.cc
-			   ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
-
-target_link_libraries(dsm-crawler -Wl,--whole-archive common worker kernel master -Wl,--no-whole-archive )
-target_link_libraries(dsm-crawler -Wl,-Bstatic ${STATICLIBS} ${MPILIBS} gflags glog profiler blas unwind boost_python-mt-py26 -Wl,-Bdynamic )
-target_link_libraries(dsm-crawler ${DYNAMICLIBS})
-target_link_libraries(dsm-crawler ${PYTHON_LIBRARIES})
+ADD_CUSTOM_COMMAND(
+  OUTPUT _piccolo.so
+  COMMAND g++
+  ARGS
+  -shared
+  -fPIC
+  ${include_flag}
+  ${link_flag}
+  -o ${CMAKE_CURRENT_BINARY_DIR}/_piccolo.so
+  ${swig_out} ${swig_shim} ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC}
+  ${CMAKE_BINARY_DIR}/util/libcommon.a
+  ${CMAKE_BINARY_DIR}/worker/libworker.a
+  ${CMAKE_BINARY_DIR}/kernel/libkernel.a
+  ${CMAKE_BINARY_DIR}/master/libmaster.a
+  -Wl,-Bstatic 
+  -lgflags -lglog -lprofiler -lunwind -lprotobuf  
+  -lmpi_cxx -lmpi -lopen-rte -lopen-pal
+  -Wl,-Bdynamic
+  -lpthread -lutil -lnuma
+  -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
+  DEPENDS ${swig_out}
+ )
+  
+ ADD_CUSTOM_TARGET(_piccolo ALL DEPENDS _piccolo.so)

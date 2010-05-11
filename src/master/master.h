@@ -52,36 +52,40 @@ private:
   unordered_map<string, string> p_;
 };
 
+struct RunDescriptor {
+   string kernel;
+   string method;
+
+   GlobalView *table;
+   CheckpointType checkpoint_type;
+   int checkpoint_interval;
+
+   // Tables to checkpoint.  If empty, commit all tables.
+   vector<int> checkpoint_tables;
+
+   int epoch;
+
+   // Parameters to be passed to the individual kernel functions.  These are
+   // also saved when checkpointing.
+   Params* params;
+
+   RunDescriptor(const string& kernel,
+                 const string& method,
+                 GlobalView *table,
+                 CheckpointType c_type=CP_NONE, int c_interval=-1) {
+     this->kernel = kernel;
+     this->method = method;
+     this->table = table;
+     this->checkpoint_type = c_type;
+     this->checkpoint_interval = c_interval;
+     this->params = NULL;
+   }
+ };
+
 class Master {
 public:
   Master(const ConfigData &conf);
   ~Master();
-
-  struct RunDescriptor {
-    string kernel;
-    string method;
-
-    GlobalView *table;
-    CheckpointType checkpoint_type;
-    int checkpoint_interval;
-
-    // Tables to checkpoint.  If empty, commit all tables.
-    vector<int> checkpoint_tables;
-
-    int epoch;
-
-    // Parameters to save when checkpointing.
-    Params* params;
-
-    static RunDescriptor Create(const string& kernel,
-                                const string& method,
-                                GlobalView *table,
-                                CheckpointType c_type=CP_NONE, int c_interval=-1) {
-      RunDescriptor r = { kernel, method, table, c_type, c_interval };
-      r.params = NULL;
-      return r;
-    }
-  };
 
   // N.B.  All run_* methods are blocking.
   void run_all(RunDescriptor r);
@@ -133,19 +137,19 @@ private:
   typedef map<string, MethodStats> MethodStatsMap;
   MethodStatsMap method_stats_;
 
-  Registry::TableMap& tables_;
+  TableRegistry::Map& tables_;
 
   NetworkThread* network_;
 };
 
 #define RUN_ONE(m, klass, method, table)\
-  m.run_one(Master::RunDescriptor::Create(#klass, #method, table))
+  m.run_one(RunDescriptor(#klass, #method, table))
 
 #define RUN_ALL(m, klass, method, table)\
-  m.run_all(Master::RunDescriptor::Create(#klass, #method, table))
+  m.run_all(RunDescriptor(#klass, #method, table))
 
 #define RUN_RANGE(m, klass, method, table, shards)\
-  m.run_range(Master::RunDescriptor::Create(#klass, #method, table), shards)
+  m.run_range(RunDescriptor(#klass, #method, table), shards)
 
 }
 

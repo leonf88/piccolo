@@ -39,15 +39,15 @@ Worker::Worker(const ConfigData &c) {
   iterator_id_ = 0;
 
   // HACKHACKHACK - register ourselves with any existing tables
-  Registry::TableMap &t = Registry::get_tables();
-  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+  TableRegistry::Map &t = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
     i->second->set_worker(this);
   }
 
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
-  return Registry::get_tables()[table]->get_owner(shard);
+  return TableRegistry::Get()->tables()[table]->get_owner(shard);
 }
 
 void Worker::Run() {
@@ -102,7 +102,7 @@ void Worker::KernelLoop() {
                  << " : " << peer_for_shard(kreq.table(), kreq.shard());
     }
 
-    KernelInfo *helper = Registry::get_kernel(kreq.kernel());
+    KernelInfo *helper = KernelRegistry::Get()->kernel(kreq.kernel());
     KernelId id(kreq.kernel(), kreq.table(), kreq.shard());
     DSMKernel* d = kernels_[id];
 
@@ -120,15 +120,15 @@ void Worker::KernelLoop() {
     helper->Run(d, kreq.method());
 
     // Flush any table updates leftover.
-    for (Registry::TableMap::iterator i = Registry::get_tables().begin();
-         i != Registry::get_tables().end(); ++i) {
+    for (TableRegistry::Map::iterator i = TableRegistry::Get()->tables().begin();
+         i != TableRegistry::Get()->tables().end(); ++i) {
       i->second->SendUpdates();
     }
 
     KernelDone kd;
     kd.mutable_kernel()->CopyFrom(kreq);
-    Registry::TableMap &tmap = Registry::get_tables();
-    for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+    for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
       GlobalView* t = i->second;
       for (int j = 0; j < t->num_shards(); ++j) {
         if (t->is_local_shard(j)) {
@@ -150,8 +150,8 @@ void Worker::KernelLoop() {
 void Worker::Flush() {
   Timer idle;
 
-  Registry::TableMap &tmap = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     i->second->SendUpdates();
   }
 
@@ -174,8 +174,8 @@ void Worker::CheckNetwork() {
 int64_t Worker::pending_kernel_bytes() const {
   int64_t t = 0;
 
-  Registry::TableMap &tmap = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     t += i->second->pending_write_bytes();
   }
 
@@ -197,8 +197,8 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
     LOG(INFO) << "Received new epoch marker from peer:" << MP(epoch_, peer_epoch);
 
     vector<int> to_checkpoint;
-    Registry::TableMap &t = Registry::get_tables();
-    for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+    TableRegistry::Map &t = TableRegistry::Get()->tables();
+    for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
       to_checkpoint.push_back(i->first);
     }
 
@@ -232,7 +232,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_chec
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
                             FLAGS_checkpoint_write_dir.c_str(), epoch_));
 
-  Registry::TableMap &t = Registry::get_tables();
+  TableRegistry::Map &t = TableRegistry::Get()->tables();
   for (int i = 0; i < to_checkpoint.size(); ++i) {
     LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch)
         << " : " << to_checkpoint[i];
@@ -266,13 +266,13 @@ void Worker::FinishCheckpoint() {
 
   active_checkpoint_ = CP_NONE;
   LOG(INFO) << "Worker " << id() << " flushing checkpoint.";
-  Registry::TableMap &t = Registry::get_tables();
+  TableRegistry::Map &t = TableRegistry::Get()->tables();
 
   for (int i = 0; i < peers_.size(); ++i) {
     peers_[i]->epoch = epoch_;
   }
 
-  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+  for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
      GlobalView* t = i->second;
      t->finish_checkpoint();
   }
@@ -286,8 +286,8 @@ void Worker::Restore(int epoch) {
   LOG(INFO) << "Worker restoring state from epoch: " << epoch;
   epoch_ = epoch;
 
-  Registry::TableMap &t = Registry::get_tables();
-  for (Registry::TableMap::iterator i = t.begin(); i != t.end(); ++i) {
+  TableRegistry::Map &t = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
     GlobalView* t = i->second;
     t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                             FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
@@ -311,7 +311,7 @@ void Worker::HandlePutRequests() {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
-    GlobalView *t = Registry::get_table(put.table());
+    GlobalView *t = TableRegistry::Get()->table(put.table());
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
@@ -345,7 +345,7 @@ void Worker::HandleGetRequests() {
     get_resp.set_epoch(epoch_);
 
     {
-      GlobalView * t = Registry::get_table(get_req.table());
+      GlobalView * t = TableRegistry::Get()->table(get_req.table());
       t->handle_get(get_req, &get_resp);
     }
 
@@ -359,7 +359,7 @@ void Worker::HandleGetRequests() {
     int table = iterator_req.table();
     int shard = iterator_req.shard();
 
-    GlobalView * t = Registry::get_table(table);
+    GlobalView * t = TableRegistry::Get()->table(table);
     Table_Iterator* it = NULL;
     if (iterator_req.id() == -1) {
       it = t->get_iterator(shard);
@@ -385,7 +385,7 @@ void Worker::HandleGetRequests() {
   while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
-      GlobalView *t = Registry::get_table(a.table());
+      GlobalView *t = TableRegistry::Get()->table(a.table());
       int old_owner = t->get_owner(a.shard());
       t->set_owner(a.shard(), a.new_worker());
 //      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());

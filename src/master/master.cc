@@ -110,8 +110,8 @@ struct WorkerState : private boost::noncopyable {
   bool full() const { return work.size() >= slots; }
 
   void assign_shard(int shard, bool should_service) {
-    Registry::TableMap &tables = Registry::get_tables();
-    for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+    TableRegistry::Map &tables = TableRegistry::Get()->tables();
+    for (TableRegistry::Map::iterator i = tables.begin(); i != tables.end(); ++i) {
       if (shard < i->second->num_shards()) {
         Taskid t(i->first, shard);
         if (should_service) {
@@ -181,7 +181,7 @@ struct WorkerState : private boost::noncopyable {
   }
 
   // Order pending tasks by our guess of how large they are
-  bool get_next(const Master::RunDescriptor& r,
+  bool get_next(const RunDescriptor& r,
                 KernelRequest* msg) {
     vector<TaskState*> p = pending();
 
@@ -204,7 +204,7 @@ struct WorkerState : private boost::noncopyable {
 };
 
 Master::Master(const ConfigData &conf) :
-  tables_(Registry::get_tables()){
+  tables_(TableRegistry::Get()->tables()){
   config_.CopyFrom(conf);
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
@@ -505,8 +505,8 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker,
 
 void Master::assign_tables() {
   // Assign workers for all table shards, to ensure every shard has an owner.
-  Registry::TableMap &tables = Registry::get_tables();
-  for (Registry::TableMap::iterator i = tables.begin(); i != tables.end(); ++i) {
+  TableRegistry::Map &tables = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tables.begin(); i != tables.end(); ++i) {
     for (int j = 0; j < i->second->num_shards(); ++j) {
       assign_worker(i->first, j);
     }
@@ -536,7 +536,7 @@ void Master::dispatch_work(const RunDescriptor& r) {
 }
 
 void Master::run_range(RunDescriptor r, vector<int> shards) {
-  KernelInfo *k = Registry::get_kernel(r.kernel);
+  KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
@@ -546,7 +546,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 
   // Fill in the list of tables to checkpoint, if it was left empty.
   if (r.checkpoint_tables.empty()) {
-    for (Registry::TableMap::iterator i = tables_.begin(); i != tables_.end(); ++i) {
+    for (TableRegistry::Map::iterator i = tables_.begin(); i != tables_.end(); ++i) {
       r.checkpoint_tables.push_back(i->first);
     }
   }

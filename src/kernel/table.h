@@ -11,9 +11,52 @@ namespace dsm {
 
 class HashPut;
 
-static int StringSharding(const string& k, int shards) { return StringPiece(k).hash() % shards; }
-static int ModSharding(const int& key, int shards) { return key % shards; }
-static int UintModSharding(const uint32_t& key, int shards) { return key % shards; }
+template <class V>
+struct Accumulator {
+  virtual void operator()(V* a, const V& b) = 0;
+};
+
+template <class K>
+struct Sharder {
+  virtual int operator()(const K& k, int shards) = 0;
+};
+
+#ifndef SWIG
+// Commonly used accumulation operators.
+template <class V>
+struct Accumulators {
+  struct Min : public Accumulator<V> {
+    void operator()(V* a, const V& b) { *a = std::min(*a, b); }
+  };
+
+  struct Max : public Accumulator<V> {
+    void operator()(V* a, const V& b) { *a = std::max(*a, b); }
+  };
+
+  struct Sum : public Accumulator<V> {
+    void operator()(V* a, const V& b) { *a = *a + b; }
+  };
+
+  struct Replace : public Accumulator<V> {
+    void operator()(V* a, const V& b) { *a = b; }
+  };
+};
+
+struct Sharding {
+  struct String  : public Sharder<string> {
+    int operator()(const string& k, int shards) { return StringPiece(k).hash() % shards; }
+  };
+
+  struct Mod : public Sharder<int> {
+    int operator()(const int& key, int shards) { return key % shards; }
+  };
+
+  struct UintMod : public Sharder<uint32_t> {
+    int operator()(const uint32_t& key, int shards) { return key % shards; }
+  };
+};
+#endif
+
 class Worker;
 
 struct TableDescriptor {
@@ -26,9 +69,9 @@ public:
   int default_shard_size;
 
   // We use void* to pass around the various accumulation and sharding
-  // functions; they are cast to the appropriate type at the time of use.
-  void *accum_function;
-  void *sharding_function;
+  // objects; they are cast to the appropriate type at the time of use.
+  void *accum;
+  void *sharder;
 };
 
 struct Table_Iterator {
@@ -39,28 +82,9 @@ struct Table_Iterator {
 };
 
 template <class K, class V>
-struct TypedTable_Iterator : public Table_Iterator {
+struct TypedIterator : public Table_Iterator {
   virtual const K& key() = 0;
   virtual V& value() = 0;
-};
-
-// Accumulator interface
-//template <class InternalV, class ExternalV>
-//class Accumulator {
-//public:
-//  virtual void Accumulate(InternalV* out, const ExternalV& in) = 0;
-//  virtual void Merge(InternalV* out, vector<InternalV>& in) = 0;
-//  virtual ExternalV View(const InternalV& in) = 0;
-//};
-
-template <class K, class V>
-class TypedTable {
-public:
-  typedef TypedTable_Iterator<K, V> Iterator;
-
-  // Functions for locating and accumulating data.
-  typedef int (*ShardingFunction)(const K& k, int num_shards);
-  typedef void (*AccumFunction)(V* a, const V& b);
 };
 
 // Methods common to both global table views and local shards
@@ -282,11 +306,9 @@ public:
   bool contains(const K &k);
   void remove(const K &k);
   Table_Iterator* get_iterator(int shard);
-  TypedTable_Iterator<K, V>* get_typed_iterator(int shard);
+  TypedIterator<K, V>* get_typed_iterator(int shard);
 
   WRAPPER_FUNCTION_DECL;
-private:
-  typedef typename TypedTable<K, V>::ShardingFunction ShardingFunction;
 protected:
   LocalTable* create_local(int shard);
 };

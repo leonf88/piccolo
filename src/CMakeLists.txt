@@ -11,7 +11,7 @@ find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
 
-set(CMAKE_CXX_FLAGS "-march=core2 -ggdb2 -Wall -Wno-sign-compare -Wno-unused-function")
+set(CMAKE_CXX_FLAGS "-fPIC -march=core2 -ggdb2 -Wall -Wno-sign-compare -Wno-unused-function")
 if ($ENV{TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHEAPPROF")
 endif()
@@ -36,8 +36,8 @@ include_directories( .
 
 link_directories( ${PICCOLO_SOURCE_DIR}/../extlib/glog/.libs/
                   ${PICCOLO_SOURCE_DIR}/../extlib/gflags/.libs/
-            		  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/.libs/
-            		  ${PICCOLO_SOURCE_DIR}/../extlib/jemalloc/lib/
+                  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/.libs/
+            	  ${PICCOLO_SOURCE_DIR}/../extlib/libunwind/src/.libs/
 		              /home/power/share/lib )
 
 add_subdirectory (util)

@@ -7,27 +7,25 @@ static const int kStatsTableId = 1000000;
 
 namespace dsm {
 
-namespace Registry {
-static TableMap *tables = NULL;
-
-TableMap& get_tables() {
-  if (tables == NULL) {
-    tables = new map<int, GlobalView*>;
-  }
-  return *tables;
+TableRegistry* TableRegistry::Get() {
+  static TableRegistry* t = new TableRegistry;
+  return t;
 }
 
-GlobalView* get_table(int id) {
-  CHECK(get_tables().find(id) != get_tables().end());
-  return get_tables()[id];
-}
+TableRegistry::Map& TableRegistry::tables() {
+  return tmap_;
 }
 
+GlobalView* TableRegistry::table(int id) {
+  CHECK(tmap_.find(id) != tmap_.end());
+  return tmap_[id];
 }
+
 
 static void CreateStatsTable() {
-  dsm::Registry::create_table<string, string>(kStatsTableId, 1,
-                                              &dsm::StringSharding, &dsm::Accumulator<string>::replace);
+  TableRegistry::Get()->create_table<string, string>(
+      kStatsTableId, 1, new Sharding::String, new Accumulators<string>::Replace);
+}
 }
 
-REGISTER_INITIALIZER(CreateStatsTable, CreateStatsTable());
+REGISTER_INITIALIZER(CreateStatsTable, dsm::CreateStatsTable());
