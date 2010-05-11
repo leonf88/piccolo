@@ -29,19 +29,9 @@ uint32_t hash(string s) {
 
 namespace dsm {
 
-// Commonly used accumulation operators.
-template <class V>
-struct Accumulator {
-  static void min(V* a, const V& b) { *a = std::min(*a, b); }
-  static void max(V* a, const V& b) { *a = std::max(*a, b); }
-  static void sum(V* a, const V& b) { *a = *a + b; }
-  static void replace(V* a, const V& b) { *a = b; }
-};
-
 template <class K, class V>
 class HashMap : private boost::noncopyable {
 public:
-  typedef void (*AccumFunction)(V* v1, const V& v2);
   typedef void (*KMarshal)(const K& t, string *out);
   typedef void (*VMarshal)(const V& t, string *out);
 
@@ -59,8 +49,6 @@ public:
 
   V& get(const K& k);
   V& put(const K& k, const V& v);
-
-  void accumulate(const K& k, const V& v, AccumFunction f);
 
   void rehash(uint32_t size);
 
@@ -216,16 +204,6 @@ V& HashMap<K, V>::operator[](const K& k) {
   }
 
   return put(k, V());
-}
-
-template <class K, class V>
-void HashMap<K, V>::accumulate(const K& k, const V& v, AccumFunction f) {
-  int b = bucket_for_key(k);
-  if (b != -1) {
-    f(&buckets_[b].v, v);
-  } else {
-    put(k, v);
-  }
 }
 
 template <class K, class V>

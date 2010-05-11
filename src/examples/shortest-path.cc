@@ -85,7 +85,7 @@ REGISTER_METHOD(ShortestPathKernel, DumpDistances);
 int ShortestPath(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
-  distance = Registry::create_table<int, double>(0, FLAGS_shards, &ModSharding, &Accumulator<double>::min);
+  distance = TableRegistry::Get()->create_table<int, double>(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);
 
   if (!StartWorker(conf)) {
     BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);

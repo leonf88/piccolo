@@ -21,7 +21,7 @@ struct HashPutCoder {
 };
 
 template<class K, class V>
-class RemoteIterator : public TypedTable_Iterator<K, V> {
+class RemoteIterator : public TypedIterator<K, V> {
 public:
   RemoteIterator(GlobalView *table, int shard) :
     owner_(table), shard_(shard), done_(false) {
@@ -119,8 +119,13 @@ void TypedLocalTable<K, V>::put(const K &k, const V &v) {
 }
 
 template<class K, class V> void TypedLocalTable<K, V>::update(const K &k, const V &v) {
-  data_.accumulate(k, v,
-                   ((typename TypedTable<K, V>::AccumFunction) this->info_.accum_function));
+  typename HashMap<K, V>::iterator pos = data_.find(k);
+  if (pos == data_.end()) {
+    data_.put(k, v);
+  } else {
+    Accumulator<V>* a = (Accumulator<V>*)this->info_.accum;
+    (*a)(&pos->second, v);
+  }
 }
 
 template<class K, class V>
@@ -165,7 +170,7 @@ template<class K, class V> void TypedLocalTable<K, V>::restore(const string& f) 
 }
 
 template<class K, class V>
-struct TypedLocalTable<K, V>::Iterator: public TypedTable<K, V>::Iterator {
+struct TypedLocalTable<K, V>::Iterator: public TypedIterator<K, V> {
   Iterator(TypedLocalTable<K, V> *t) :
     it_(t->data_.begin()) {
     t_ = t;
@@ -204,10 +209,10 @@ private:
 template<class K, class V>
 int TypedGlobalTable<K, V>::get_shard(const K& k) {
   DCHECK(this != NULL);
-  DCHECK(info().sharding_function != NULL);
+  DCHECK(this->info().sharder != NULL);
 
-  ShardingFunction sf = (ShardingFunction) info().sharding_function;
-  int shard = sf(k, info().num_shards);
+  Sharder<K> *sharder = (Sharder<K>*)(this->info().sharder);
+  int shard = (*sharder)(k, this->info().num_shards);
   DCHECK_GE(shard, 0);
   DCHECK_LT(shard, this->num_shards());
   return shard;
@@ -340,9 +345,9 @@ LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
 }
 
 template<class K, class V>
-TypedTable_Iterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+TypedIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
   if (this->is_local_shard(shard)) {
-    return (typename TypedTable<K, V>::Iterator*) partitions_[shard]->get_iterator();
+    return (TypedIterator<K, V>*) partitions_[shard]->get_iterator();
   } else {
     return new RemoteIterator<K, V>(this, shard);
   }

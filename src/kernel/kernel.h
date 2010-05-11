@@ -80,46 +80,59 @@ struct KernelInfoT : public KernelInfo {
 };
 
 class ConfigData;
-namespace Registry {
+class KernelRegistry {
+public:
+  typedef map<string, KernelInfo*> Map;
+  Map& kernels() { return m_; }
+  KernelInfo* kernel(const string& name) { return m_[name]; }
+
+  static KernelRegistry* Get();
+private:
+  KernelRegistry() {}
+  Map m_;
+};
+
+template <class C>
+struct KernelRegistrationHelper {
+  KernelRegistrationHelper(const char* name) {
+    KernelRegistry::Get()->kernels().insert(make_pair(name, new KernelInfoT<C>(name)));
+  }
+};
+
+template <class C>
+struct MethodRegistrationHelper {
+  MethodRegistrationHelper(const char* klass, const char* mname, void (C::*m)()) {
+    ((KernelInfoT<C>*)KernelRegistry::Get()->kernel(klass))->register_method(mname, m);
+  }
+};
+
+class RunnerRegistry {
+public:
   typedef int (*KernelRunner)(ConfigData&);
+  typedef map<string, KernelRunner> Map;
 
-  typedef map<string, KernelInfo*> KernelMap;
-  typedef map<string, KernelRunner> RunnerMap;
+  KernelRunner runner(const string& name) { return m_[name]; }
+  Map& runners() { return m_; }
 
-  KernelMap& get_kernels();
-  RunnerMap& get_runners();
+  static RunnerRegistry* Get();
+private:
+  RunnerRegistry() {}
+  Map m_;
+};
 
-  KernelInfo* get_kernel(const string& name);
-  KernelRunner get_runner(const string& name);
-
-  template <class C>
-  struct KernelRegistrationHelper {
-    KernelRegistrationHelper(const char* name) {
-      get_kernels().insert(make_pair(name, new KernelInfoT<C>(name)));
-    }
-  };
-
-  template <class C>
-  struct MethodRegistrationHelper {
-    MethodRegistrationHelper(const char* klass, const char* mname, void (C::*m)()) {
-      ((KernelInfoT<C>*)get_kernel(klass))->register_method(mname, m);
-    }
-  };
-
-  struct RunnerRegistrationHelper {
-    RunnerRegistrationHelper(KernelRunner k, const char* name) {
-      get_runners().insert(MP(name, k));
-    }
-  };
-}
+struct RunnerRegistrationHelper {
+  RunnerRegistrationHelper(RunnerRegistry::KernelRunner k, const char* name) {
+    RunnerRegistry::Get()->runners().insert(MP(name, k));
+  }
+};
 
 #define REGISTER_KERNEL(klass)\
-  Registry::KernelRegistrationHelper<klass> k_helper_ ## klass(#klass);
+  static KernelRegistrationHelper<klass> k_helper_ ## klass(#klass);
 
 #define REGISTER_METHOD(klass, method)\
-  static Registry::MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
+  static MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
 
 #define REGISTER_RUNNER(r)\
-  static Registry::RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
+  static RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
 }
 #endif /* KERNELREGISTRY_H_ */

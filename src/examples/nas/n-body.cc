@@ -106,15 +106,19 @@ void unmarshal(const StringPiece& s, pos* t) {
 
 } }
 
-static int sharding(const pos& p, int shards) { 
-  return pos::shard_for_pos(p); 
-}
+struct PosSharding : public Sharder<pos> {
+  int operator()(const pos& p, int shards) {
+    return pos::shard_for_pos(p);
+  }
+};
+
+struct AppendAccum : public Accumulator<string> {
+  void operator()(string* a, const string& b) {
+    a->append(b);
+  }
+};
 
 static pos kZero(0, 0, 0);
-
-static void append_merge(string* a, const string& b) {
-  a->append(b);
-}
 
 class NBodyKernel : public DSMKernel {
 public:
@@ -211,7 +215,7 @@ public:
     cache.clear();
 
     // Iterate over each box in this partition.
-    TypedTable<pos, string>::Iterator* it = curr->get_typed_iterator(current_shard());
+    TypedIterator<pos, string>* it = curr->get_typed_iterator(current_shard());
 //    int total = curr->get_partition(current_shard())->size();
 
     for (int count = 0; !it->done(); ++count) {
@@ -241,18 +245,18 @@ REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
   conf.set_slots(256);
-  Registry::create_table<pos, string>(0, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      &sharding, &append_merge);
+  TableRegistry::Get()->create_table<pos, string>(0, kNumPartitions * kNumPartitions * kNumPartitions, 
+                                      new PosSharding, new AppendAccum);
   
-  Registry::create_table<pos, string>(1, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      &sharding, &append_merge);
+  TableRegistry::Get()->create_table<pos, string>(1, kNumPartitions * kNumPartitions * kNumPartitions, 
+                                      new PosSharding, new AppendAccum);
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    RUN_ALL(m, NBodyKernel, CreatePoints, Registry::get_table(0));
+    RUN_ALL(m, NBodyKernel, CreatePoints, TableRegistry::Get()->table(0));
     for (int i = 0; i < FLAGS_iterations; ++i) {
       LOG(INFO) << "Running iteration: " << MP(i, FLAGS_iterations);
-      RUN_ALL(m, NBodyKernel, Simulate, Registry::get_table(0));
+      RUN_ALL(m, NBodyKernel, Simulate, TableRegistry::Get()->table(0));
     }
   }
 

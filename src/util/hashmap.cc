@@ -46,18 +46,6 @@ static void TestHashMap() {
 
   optimizer_hack = 0;
   TEST_PERF(ArrayPut, optimizer_hack += array_test[data::hash<int>(i) % FLAGS_test_table_size]);
-
-
-  h.clear();
-  for (int i = 0; i < FLAGS_test_table_size; ++i) {
-    h.put(i, i);
-    h.accumulate(-1, 1, &Accumulator<double>::sum);
-  }
-
-  for (int i = 0; i < FLAGS_test_table_size; ++i) {
-    CHECK_EQ(h.get(i), i);
-  }
-  CHECK_EQ(h.get(-1), FLAGS_test_table_size);
 }
 
 REGISTER_TEST(HashMap, TestHashMap());

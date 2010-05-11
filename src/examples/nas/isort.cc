@@ -6,9 +6,11 @@ using namespace dsm;
 typedef uint32_t KeyType;
 typedef Bucket ValueType;
 
-static void BucketMerge(Bucket *l, const Bucket &r) {
-  l->MergeFrom(r);
-}
+struct BucketMerge : public Accumulator<Bucket> {
+  void operator()(Bucket *l, const Bucket &r) {
+    l->MergeFrom(r);
+  }
+};
 
 struct KeyGen {
   KeyGen() : x_(314159625), a_(1220703125) {}
@@ -47,7 +49,7 @@ public:
   }
 
   void Sort() {
-    TypedTable<KeyType, ValueType>::Iterator *i = dst->get_typed_iterator(current_shard());
+    TypedIterator<KeyType, ValueType> *i = dst->get_typed_iterator(current_shard());
     while (!i->done()) {
       Bucket b = i->value();
       uint32_t* t = b.mutable_value()->mutable_data();
@@ -63,7 +65,8 @@ REGISTER_METHOD(SortKernel, Partition);
 REGISTER_METHOD(SortKernel, Sort);
 
 int IntegerSort(ConfigData& conf) {
-  dst = Registry::create_table<KeyType, ValueType>(0, conf.num_workers(), &UintModSharding, &BucketMerge);
+  dst = TableRegistry::Get()->create_table<KeyType, ValueType>(0, conf.num_workers(),
+      new Sharding::UintMod, new BucketMerge);
 
   if (!StartWorker(conf)) {
     Master m(conf);

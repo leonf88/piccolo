@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
   HashMap<int, int> test_map(10);
   for (int i = 0; i < FLAGS_count; ++i) {
-    test_map.accumulate(i % FLAGS_size, 1, Accumulator<int>::sum);
+    test_map.accumulate(i % FLAGS_size, 1, Accumulators<int>::sum);
   }
 
   for (int i = 0; i < FLAGS_size; ++i) {

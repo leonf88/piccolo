@@ -43,7 +43,7 @@ public:
   }
 
   void TestGetLocal() {
-    TypedTable<int, int>::Iterator *it = min_hash->get_typed_iterator(current_shard());
+    TypedIterator<int, int> *it = min_hash->get_typed_iterator(current_shard());
     int num_shards = min_hash->num_shards();
 
     while (!it->done()) {
@@ -77,11 +77,11 @@ REGISTER_METHOD(TableKernel, TestClear);
 static int TestTables(ConfigData &conf) {
   conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
 
-  min_hash = Registry::create_table<int, int>(0, FLAGS_shards, &ModSharding, &Accumulator<int>::min);
-  max_hash = Registry::create_table<int, int>(1, FLAGS_shards, &ModSharding, &Accumulator<int>::max);
-  sum_hash = Registry::create_table<int, int>(2, FLAGS_shards, &ModSharding, &Accumulator<int>::sum);
-  replace_hash = Registry::create_table<int, int>(3, FLAGS_shards, &ModSharding, &Accumulator<int>::replace);
-  string_hash = Registry::create_table<int, string>(4, FLAGS_shards, &ModSharding, &Accumulator<string>::replace);
+  min_hash = TableRegistry::Get()->create_table<int, int>(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
+  max_hash = TableRegistry::Get()->create_table<int, int>(1, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Max);
+  sum_hash = TableRegistry::Get()->create_table<int, int>(2, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Sum);
+  replace_hash = TableRegistry::Get()->create_table<int, int>(3, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Replace);
+  string_hash = TableRegistry::Get()->create_table<int, string>(4, FLAGS_shards, new Sharding::Mod, new Accumulators<string>::Replace);
 
   if (!StartWorker(conf)) {
     Master m(conf);

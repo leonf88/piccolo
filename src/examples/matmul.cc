@@ -15,11 +15,13 @@ static TypedGlobalTable<int, Block>* matrix_a = NULL;
 static TypedGlobalTable<int, Block>* matrix_b = NULL;
 static TypedGlobalTable<int, Block>* matrix_c = NULL;
 
-static void block_sum(Block *a, const Block& b) {
-  for (int i = 0; i < kBlockSize * kBlockSize; ++i) {
-    a->d[i] += b.d[i];
+struct BlockSum : public Accumulator<Block> {
+  void operator()(Block *a, const Block& b) {
+    for (int i = 0; i < kBlockSize * kBlockSize; ++i) {
+      a->d[i] += b.d[i];
+    }
   }
-}
+};
 
 struct MatrixMultiplicationKernel : public DSMKernel {
   int num_shards, my_shard;
@@ -84,16 +86,16 @@ int MatrixMultiplication(ConfigData& conf) {
   bRows = FLAGS_edge_size / kBlockSize;
 
   LOG(INFO) << "Create matrices with " << conf.num_workers() << " shards.";
-  matrix_a = Registry::create_table<int, Block>(0, 4 * conf.num_workers(), &ModSharding, &block_sum);
-  matrix_b = Registry::create_table<int, Block>(1, 4 * conf.num_workers(), &ModSharding, &block_sum);
-  matrix_c = Registry::create_table<int, Block>(2, 4 * conf.num_workers(), &ModSharding, &block_sum);
+  matrix_a = TableRegistry::Get()->create_table<int, Block>(0, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_b = TableRegistry::Get()->create_table<int, Block>(1, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_c = TableRegistry::Get()->create_table<int, Block>(2, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
 
   StartWorker(conf);
   Master m(conf);
 
   for (int i = 0; i < FLAGS_iterations; ++i) {
-    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Initialize", matrix_a));
-    m.run_all(Master::RunDescriptor::Create("MatrixMultiplicationKernel", "Multiply", matrix_a));
+    m.run_all(RunDescriptor("MatrixMultiplicationKernel", "Initialize", matrix_a));
+    m.run_all(RunDescriptor("MatrixMultiplicationKernel", "Multiply", matrix_a));
   }
   return 0;
 }

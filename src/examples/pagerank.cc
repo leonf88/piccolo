@@ -55,9 +55,11 @@ template<>
 }
 }
 
-static int SiteSharding(const PageId& p, int nshards) {
-  return p.site % nshards;
-}
+struct SiteSharding : public Sharder<PageId> {
+  int operator()(const PageId& p, int nshards) {
+    return p.site % nshards;
+  }
+};
 
 static float powerlaw_random(float dmin, float dmax, float n) {
   float r = (float)random() / RAND_MAX;
@@ -249,8 +251,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  Registry::create_table<PageId, float>(0, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
-  Registry::create_table<PageId, float>(1, FLAGS_shards, &SiteSharding, &Accumulator<float>::sum);
+  TableRegistry::Get()->create_table<PageId, float>(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  TableRegistry::Get()->create_table<PageId, float>(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
 
   StartWorker(conf);
 
@@ -261,7 +263,7 @@ int Pagerank(ConfigData& conf) {
       shards.push_back(i);
     }
 
-    RUN_RANGE(m, PRKernel, BuildGraph, Registry::get_table(0), shards);
+    RUN_RANGE(m, PRKernel, BuildGraph, TableRegistry::Get()->table(0), shards);
     return 0;
   }
 
@@ -276,7 +278,7 @@ int Pagerank(ConfigData& conf) {
   if (pmap == NULL) {
     i = 0;
     pmap = new ParamMap;
-    RUN_ALL(m, PRKernel, Initialize, Registry::get_table(0));
+    RUN_ALL(m, PRKernel, Initialize, TableRegistry::Get()->table(0));
   } else {
     i = pmap->get_int("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
@@ -286,8 +288,8 @@ int Pagerank(ConfigData& conf) {
     int curr_pr = (i % 2 == 0) ? 0 : 1;
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
-    Master::RunDescriptor r = Master::RunDescriptor::Create("PRKernel", "PageRankIter",
-                                                            Registry::get_table(curr_pr));
+    RunDescriptor r("PRKernel", "PageRankIter",
+                    TableRegistry::Get()->table(curr_pr));
     pmap->set_int("iteration", i);
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
@@ -299,8 +301,8 @@ int Pagerank(ConfigData& conf) {
     r.params = pmap->to_params();
 
     m.run_all(r);
-    RUN_ALL(m, PRKernel, ResetTable, Registry::get_table(curr_pr));
-    RUN_ONE(m, PRKernel, WriteStatus, Registry::get_table(curr_pr));
+    RUN_ALL(m, PRKernel, ResetTable, TableRegistry::Get()->table(curr_pr));
+    RUN_ONE(m, PRKernel, WriteStatus, TableRegistry::Get()->table(curr_pr));
   }
 
   return 0;

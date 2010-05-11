@@ -13,37 +13,22 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
 }
 
 GlobalTable* DSMKernel::get_table(int id) {
-  GlobalTable* t = (GlobalTable*)Registry::get_table(id);
+  GlobalTable* t = (GlobalTable*)TableRegistry::Get()->table(id);
   CHECK_NE(t, (void*)NULL);
   return t;
 }
 
-namespace Registry {
-static KernelMap *kernels = NULL;
-static RunnerMap *runners = NULL;
-
-KernelMap& get_kernels() {
-  if (kernels == NULL) {
-    kernels = new KernelMap;
-  }
-  return *kernels;
+KernelRegistry* KernelRegistry::Get() {
+  static KernelRegistry* r = NULL;
+  if (!r) { r = new KernelRegistry; }
+  return r;
 }
 
-KernelInfo* get_kernel(const string& name) {
-  return get_kernels()[name];
+RunnerRegistry* RunnerRegistry::Get() {
+  static RunnerRegistry* r = NULL;
+  if (!r) { r = new RunnerRegistry; }
+  return r;
 }
 
-RunnerMap& get_runners() {
-  if (runners == NULL) {
-    runners = new RunnerMap;
-  }
-  return *runners;
-}
-
-KernelRunner get_runner(const string& name) {
-  return get_runners()[name];
-}
-
-}
 
 }
