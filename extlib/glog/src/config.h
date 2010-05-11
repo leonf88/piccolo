@@ -26,7 +26,7 @@
 #define HAVE_LIBPTHREAD 1
 
 /* Define to 1 if you have the <libunwind.h> header file. */
-#define HAVE_LIBUNWIND_H 1
+/* #undef HAVE_LIBUNWIND_H */
 
 /* define if you have google gflags library */
 #define HAVE_LIB_GFLAGS 1
