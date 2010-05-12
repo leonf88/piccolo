@@ -369,19 +369,18 @@ ParamMap* Master::restore() {
   return ParamMap::from_params(params);
 }
 
-void Master::run_all(RunDescriptor r) {
-  CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
-  vector<int> shards;
-  for (int i = 0; i < r.table->num_shards(); ++i) {
-    shards.push_back(i);
-  }
-  run_range(r, shards);
+void Master::run_all(const string& kernel, const string& method, GlobalView* locality) {
+  run_range(kernel, method, locality, range(locality->num_shards()));
 }
 
-void Master::run_one(RunDescriptor r) {
-  vector<int> shards;
-  shards.push_back(0);
-  run_range(r, shards);
+void Master::run_one(const string& kernel, const string& method, GlobalView* locality) {
+  run_range(kernel, method, locality, range(1));
+}
+
+void Master::run_range(const string& kernel, const string& method, GlobalView* locality, vector<int> shards) {
+  RunDescriptor r(kernel, method, locality);
+  r.shards = shards;
+  run(r);
 }
 
 WorkerState* Master::worker_for_shard(int table, int shard) {
@@ -535,11 +534,13 @@ void Master::dispatch_work(const RunDescriptor& r) {
   }
 }
 
-void Master::run_range(RunDescriptor r, vector<int> shards) {
+void Master::run(RunDescriptor r) {
   KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
+
+  vector<int> shards = r.shards;
 
   MethodStats &mstats = method_stats_[r.kernel + ":" + r.method];
   mstats.set_invocations(mstats.invocations() + 1);

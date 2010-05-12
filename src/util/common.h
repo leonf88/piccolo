@@ -317,6 +317,20 @@ inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
   return out;
 }
 
+#ifndef SWIG
+static vector<int> range(int from, int to, int step=1) {
+  vector<int> out;
+  for (int i = from; i < to; ++i) {
+    out.push_back(i);
+  }
+  return out;
+}
+
+static vector<int> range(int to) {
+  return range(0, to);
+}
+#endif
+
 namespace std {  namespace tr1 {
 template <>
 struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {

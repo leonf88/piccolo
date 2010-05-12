@@ -1,4 +1,21 @@
 %module piccolo
+%include "stl.i"
+%include "std_string.i"
+
+%apply const std::string& {std::string* foo};
+
+
+%typemap(in) long& { $1 = PyInt_AsLong($input); }
+%typemap(out) long& { $result = PyInt_FromLong(*$1); }
+
+%typemap(in) long { $1 = PyInt_AsLong($input); }
+%typemap(out) long { $result = PyInt_FromLong($1); }
+
+%typemap(in) const string& (string temp) { 
+  temp = PyString_AsString($input); 
+  $1 = &temp;
+}
+
 
 %{
 #include "examples/python_support.h"
@@ -11,8 +28,6 @@
 
 typedef google::protobuf::int32_t int32_t;
 typedef long int64_t;
-
-%include "std_string.i"
 
 %include "util/common.pb.h"
 %include "util/common.h"
@@ -31,24 +46,17 @@ typedef long int64_t;
 %include "examples/python_support.h"
 
 using namespace dsm;
-using namespace std;
-
-%typemap(in) long& { $1 = PyInt_AsLong($input); }
-%typemap(out) long& { $result = PyInt_FromLong(*$1); }
-
-%typemap(in) long { $1 = PyInt_AsLong($input); }
-%typemap(out) long { $result = PyInt_FromLong($1); }
 
 %template(PythonTable) dsm::TypedGlobalTable<string, PyObject*>;
 %template(PythonTable_Iterator) dsm::TypedIterator<string, PyObject*>;
 
 %extend dsm::DSMKernel {
-  %template(PythonTable) get_table<string, PyObject*>;
+  %template(PythonTable) get_table<std::string, PyObject*>;
 }
 
 %extend dsm::TableRegistry {
   GlobalView* CreateTable(int id, int shards, PyObject* sharding, PyObject* accum) {
-    return $self->create_table<string, PyObject*>(
+    return $self->create_table<std::string, PyObject*>(
         id, shards,
         new PythonSharding(sharding), new PythonAccumulate(accum));
   }
