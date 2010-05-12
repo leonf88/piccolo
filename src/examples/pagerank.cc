@@ -251,8 +251,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  TableRegistry::Get()->create_table<PageId, float>(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
-  TableRegistry::Get()->create_table<PageId, float>(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalView* curr = TableRegistry::Get()->create_table<PageId, float>(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalView* next = TableRegistry::Get()->create_table<PageId, float>(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
 
   StartWorker(conf);
 
@@ -263,7 +263,7 @@ int Pagerank(ConfigData& conf) {
       shards.push_back(i);
     }
 
-    RUN_RANGE(m, PRKernel, BuildGraph, TableRegistry::Get()->table(0), shards);
+    m.run_range("PRKernel", "BuildGraph", TableRegistry::Get()->table(0), shards);
     return 0;
   }
 
@@ -278,7 +278,7 @@ int Pagerank(ConfigData& conf) {
   if (pmap == NULL) {
     i = 0;
     pmap = new ParamMap;
-    RUN_ALL(m, PRKernel, Initialize, TableRegistry::Get()->table(0));
+    m.run_all("PRKernel", " Initialize",  TableRegistry::Get()->table(0));
   } else {
     i = pmap->get_int("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
@@ -288,8 +288,7 @@ int Pagerank(ConfigData& conf) {
     int curr_pr = (i % 2 == 0) ? 0 : 1;
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
-    RunDescriptor r("PRKernel", "PageRankIter",
-                    TableRegistry::Get()->table(curr_pr));
+    RunDescriptor r("PRKernel", "PageRankIter", curr);
     pmap->set_int("iteration", i);
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
@@ -299,10 +298,11 @@ int Pagerank(ConfigData& conf) {
       r.checkpoint_type = CP_NONE;
     }
     r.params = pmap->to_params();
+    r.shards = range(curr->num_shards());
 
-    m.run_all(r);
-    RUN_ALL(m, PRKernel, ResetTable, TableRegistry::Get()->table(curr_pr));
-    RUN_ONE(m, PRKernel, WriteStatus, TableRegistry::Get()->table(curr_pr));
+    m.run(r);
+    m.run_all("PRKernel", " ResetTable",  TableRegistry::Get()->table(curr_pr));
+    m.run_one("PRKernel", " WriteStatus",  TableRegistry::Get()->table(curr_pr));
   }
 
   return 0;

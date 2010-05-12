@@ -178,14 +178,14 @@ static int KMeans(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    RUN_ALL(m, KMeansKernel, initialize_world, points);
+    m.run_all("KMeansKernel", " initialize_world",  points);
     for (int i = 0; i < FLAGS_iterations; i++) {
-      RUN_ALL(m, KMeansKernel, initialize_expectation, points);
-      RUN_ALL(m, KMeansKernel, compute_expectation, points);
-      RUN_ALL(m, KMeansKernel, initialize_maximization, dists);
-      RUN_ALL(m, KMeansKernel, compute_maximization, dists);
+      m.run_all("KMeansKernel", " initialize_expectation",  points);
+      m.run_all("KMeansKernel", " compute_expectation",  points);
+      m.run_all("KMeansKernel", " initialize_maximization",  dists);
+      m.run_all("KMeansKernel", " compute_maximization",  dists);
     }
-  //    RUN_ONE(m, KMeansKernel, print_results, 0);
+  //    m.run_one("KMeansKernel", " print_results",  0);
   }
   return 0;
 }

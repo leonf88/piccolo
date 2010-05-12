@@ -62,6 +62,7 @@ struct RunDescriptor {
 
    // Tables to checkpoint.  If empty, commit all tables.
    vector<int> checkpoint_tables;
+   vector<int> shards;
 
    int epoch;
 
@@ -88,13 +89,16 @@ public:
   ~Master();
 
   // N.B.  All run_* methods are blocking.
-  void run_all(RunDescriptor r);
+  void run_all(const string& kernel, const string& method, GlobalView* locality);
 
   // Run the given kernel function on one (arbitrary) worker node.
-  void run_one(RunDescriptor r);
+  void run_one(const string& kernel, const string& method, GlobalView* locality);
 
   // Run the kernel function on the given set of shards.
-  void run_range(RunDescriptor r, vector<int> shards);
+  void run_range(const string& kernel, const string& method,
+                 GlobalView* locality, vector<int> shards);
+
+  void run(RunDescriptor r);
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
@@ -141,16 +145,6 @@ private:
 
   NetworkThread* network_;
 };
-
-#define RUN_ONE(m, klass, method, table)\
-  m.run_one(RunDescriptor(#klass, #method, table))
-
-#define RUN_ALL(m, klass, method, table)\
-  m.run_all(RunDescriptor(#klass, #method, table))
-
-#define RUN_RANGE(m, klass, method, table, shards)\
-  m.run_range(RunDescriptor(#klass, #method, table), shards)
-
 }
 
 #endif /* MASTER_H_ */

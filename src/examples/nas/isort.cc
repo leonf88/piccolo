@@ -70,9 +70,9 @@ int IntegerSort(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    RUN_ALL(m, SortKernel, Init, dst);
-    RUN_ALL(m, SortKernel, Partition, dst);
-    RUN_ALL(m, SortKernel, Sort, dst);
+    m.run_all("SortKernel", " Init",  dst);
+    m.run_all("SortKernel", " Partition",  dst);
+    m.run_all("SortKernel", " Sort",  dst);
   }
   return 0;
 }

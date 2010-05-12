@@ -438,13 +438,13 @@ def check_url(url, status):
 def main():
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
   num_workers = NetworkThread.Get().size()
-  fetch_table = TableRegistry.Get().CreateTable(0,  DomainSharding)
-  crawltime_table = TableRegistry.Get().CreateTable(1, DomainSharding)
-  robots_table = TableRegistry.Get().CreateTable(2, DomainSharding)
-  domain_counts = TableRegistry.Get().CreateTable(3, DomainSharding)
-  fetch_counts = TableRegistry.Get().CreateTable(4, DomainSharding)
+  fetch_table = TableRegistry.Get().CreateTable(0,  num_workers, DomainSharding, max)
+  crawltime_table = TableRegistry.Get().CreateTable(1, num_workers, DomainSharding, max)
+  robots_table = TableRegistry.Get().CreateTable(2, num_workers, DomainSharding, max)
+  domain_counts = TableRegistry.Get().CreateTable(3, num_workers, DomainSharding, sum)
+  fetch_counts = TableRegistry.Get().CreateTable(4, num_workers, DomainSharding, sum)
   
-  conf = Configuration()
+  conf = ConfigData()
   if not StartWorker(conf):
     m = Master(conf)
     m.run_all('PythonKernel', 'initialize_crawl', fetch_table)

@@ -94,8 +94,8 @@ int MatrixMultiplication(ConfigData& conf) {
   Master m(conf);
 
   for (int i = 0; i < FLAGS_iterations; ++i) {
-    m.run_all(RunDescriptor("MatrixMultiplicationKernel", "Initialize", matrix_a));
-    m.run_all(RunDescriptor("MatrixMultiplicationKernel", "Multiply", matrix_a));
+    m.run_all("MatrixMultiplicationKernel", "Initialize", matrix_a);
+    m.run_all("MatrixMultiplicationKernel", "Multiply", matrix_a);
   }
   return 0;
 }

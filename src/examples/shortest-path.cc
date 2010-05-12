@@ -91,13 +91,13 @@ int ShortestPath(ConfigData& conf) {
     BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);
 
     Master m(conf);
-    RUN_ONE(m, ShortestPathKernel, Initialize, 0);
+    m.run_one("ShortestPathKernel", " Initialize",  0);
     for (int i = 0; i < 20; ++i) {
-      RUN_ALL(m, ShortestPathKernel, Propagate, 0);
+      m.run_all("ShortestPathKernel", " Propagate",  0);
     }
 
     if (FLAGS_dump_output) {
-      RUN_ONE(m, ShortestPathKernel, DumpDistances, 0);
+      m.run_one("ShortestPathKernel", " DumpDistances",  0);
     }
   }
   return 0;
