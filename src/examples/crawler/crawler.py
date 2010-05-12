@@ -132,6 +132,9 @@ def key_from_site(site): return domain_from_site(site) + ' ' + site
 def key_from_url(url): return domain_from_site(url.netloc) + ' ' + url.geturl()
 def url_from_key(key): return urlparse(key[key.find(' ') + 1:])
 
+def DomainSharding(key, nshards):
+  return key[key.find(' '):].hash() % nshards
+
 class Page(object):
   @staticmethod
   def create(url):
@@ -434,11 +437,12 @@ def check_url(url, status):
     
 def main():
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
-  fetch_table = TableRegistry.Get().create_table(0, DomainSharding)
-  crawltime_table = TableRegistry.Get().create_table(1, DomainSharding)
-  robots_table = TableRegistry.Get().create_table(2, DomainSharding)
-  domain_counts = TableRegistry.Get().create_table(3, DomainSharding)
-  fetch_counts = TableRegistry.Get().create_table(4, DomainSharding)
+  num_workers = NetworkThread.Get().size()
+  fetch_table = TableRegistry.Get().CreateTable(0,  DomainSharding)
+  crawltime_table = TableRegistry.Get().CreateTable(1, DomainSharding)
+  robots_table = TableRegistry.Get().CreateTable(2, DomainSharding)
+  domain_counts = TableRegistry.Get().CreateTable(3, DomainSharding)
+  fetch_counts = TableRegistry.Get().CreateTable(4, DomainSharding)
   
   conf = Configuration()
   if not StartWorker(conf):

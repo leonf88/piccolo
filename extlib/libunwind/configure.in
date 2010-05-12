@@ -181,6 +181,6 @@ AC_SUBST(PKG_EXTRA)
 AC_SUBST(PKG_MAINTAINER)
 AC_SUBST(enable_cxx_exceptions)
 
-AC_CONFIG_FILES(Makefile src/Makefile tests/Makefile tests/check-namespace.sh
+AC_CONFIG_FILES(Makefile src/Makefile 
 		doc/Makefile doc/common.tex include/libunwind-common.h)
 AC_OUTPUT
