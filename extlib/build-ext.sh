@@ -22,6 +22,6 @@ CPPFLAGS=-I../gflags/src/ LDFLAGS=-L../gflags/.libs $CONFIG && make clean && mak
 
 (
 cd gperftools
-CPPFLAGS="-I../gflags/src/ -I../libunwind/include" LDFLAGS="-L../gflags/.libs -L../libunwind/.libs" $CONFIG && make clean && make -j32 
+CPPFLAGS="-I../gflags/src/ -I../libunwind/include" LDFLAGS="-L../gflags/.libs " $CONFIG && make clean && make -j32 
 )
 

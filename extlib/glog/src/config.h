@@ -112,6 +112,10 @@
 /* define if your compiler has __sync_val_compare_and_swap */
 /* #undef HAVE___SYNC_VAL_COMPARE_AND_SWAP */
 
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#define LT_OBJDIR ".libs/"
+
 /* Name of package */
 #define PACKAGE "glog"
 
@@ -126,6 +130,9 @@
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "glog"
+
+/* Define to the home page for this package. */
+#define PACKAGE_URL ""
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "0.3.0"
