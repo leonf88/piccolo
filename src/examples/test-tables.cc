@@ -85,17 +85,17 @@ static int TestTables(ConfigData &conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("TableKernel", " TestPut",  min_hash);
+    m.run_all("TableKernel", "TestPut",  min_hash);
     //m.checkpoint();
 
     // wipe all the tables and then restore from the previous checkpoint.
     // m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
 
     //m.restore();
-    m.run_all("TableKernel", " TestGetLocal",  min_hash);
+    m.run_all("TableKernel", "TestGetLocal",  min_hash);
 
     //m.checkpoint();
-    m.run_all("TableKernel", " TestGet",  min_hash);
+    m.run_all("TableKernel", "TestGet",  min_hash);
   }
   return 0;
 }

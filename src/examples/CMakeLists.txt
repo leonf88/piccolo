@@ -48,7 +48,7 @@ ADD_CUSTOM_COMMAND(
  OUTPUT ${swig_out}
  COMMAND swig
  ARGS 
- -python -ignoremissing -c++ -fvirtual -dirprot
+ -python -ignoremissing -c++
  -w315 -w317 -w362 -w503 -w451 -w401
  -outdir ${CMAKE_CURRENT_BINARY_DIR} 
  ${include_flag}
@@ -60,6 +60,7 @@ ADD_CUSTOM_COMMAND(
   OUTPUT _piccolo.so
   COMMAND g++
   ARGS
+  -ggdb2
   -shared
   -fPIC
   ${include_flag}
