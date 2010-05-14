@@ -30,11 +30,10 @@ crawler_id = NetworkThread.Get().id()
 import logging
 
 os.system('mkdir -p logs.%d' % num_crawlers)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARN)
                     #filename='logs.%d/crawl.log.%s.%d' % (num_crawlers, socket.gethostname(), os.getpid()),
                     
-                    
-
+                  
 def now(): return time.time()
 
 def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args, **kwargs)
@@ -111,7 +110,7 @@ class ThreadStatus:
 
 @enum
 class RobotStatus:
-  FETCHING = 1
+  FETCHING = 'FETCHING'
 
 class LockedFile(object):
   def __init__(self, f, *args, **kw): 
@@ -139,22 +138,6 @@ def key_from_site(site): return domain_from_site(site) + ' ' + site
   
 def key_from_url(url): return domain_from_site(url.netloc) + ' ' + url.geturl()
 def url_from_key(key): return urlparse(key[key.find(' ') + 1:])
-
-def DomainSharding(key, nshards):
-  s = abs(hash(key[key.find(' '):])) % nshards
-  return s
-
-def CrawlMax(a, b):
-  console('AccumMax: "%s", "%s", "%s"', a, b, max(a, b))
-  return max(a, b)
-
-def CrawlSum(a, b):
-  console('AccumSum: "%s", "%s", "%s"', a, b, sum(a,b))
-  return sum(a, b)
-
-def CrawlReplace(a, b):
-  console('AccumReplace: "%s", "%s"', a, b)
-  return b
 
 import cPickle
 def CrawlPickle(v): 
@@ -338,7 +321,7 @@ class StatusThread(Thread):
       console('Page queue: %d; robot queue %d',
           crawl_queue.qsize(), robots_queue.qsize())
       
-      it = fetch_counts.get_typed_iterator(kernel().current_shard())
+      it = fetch_counts.get_iterator(kernel().current_shard())
       while not it.done():            
         console('Fetch[%s] :: %d', it.key(), it.value())
         it.Next()
@@ -348,7 +331,7 @@ class StatusThread(Thread):
         console('>> T(%02d) last ping: %.2f status: %s last url:%s',
                 t.id, now() - t.last_active, ThreadStatus.as_str[t.status], t.url)
         
-      it = domain_counts.get_typed_iterator(kernel().current_shard())
+      it = domain_counts.get_iterator(kernel().current_shard())
       dcounts = []
       while not it.done(): 
         dcounts += [(it.key(), it.value())]
@@ -385,13 +368,13 @@ def do_crawl():
   for t in threads: t.start()
   
   status = StatusThread(threads)
-  #status.start()
+  status.start()
   
   warn('Starting crawl!')
   last_t = time.time()
   
   while running:
-    it = fetch_table.get_typed_iterator(kernel().current_shard())
+    it = fetch_table.get_iterator(kernel().current_shard())
     if time.time() - last_t > 10:
       warn('Queue thread running...')
       last_t = time.time()
@@ -400,7 +383,7 @@ def do_crawl():
       url = url_from_key(it.key())
       status = it.value()
       
-      console('Looking AT: %s %s', url, status)      
+      debug('Looking AT: %s %s', url, status)      
       if status == FetchStatus.SHOULD_FETCH:
         check_url(url, status)
       it.Next()
@@ -448,11 +431,16 @@ def check_url(url, status):
 def initialize():
   console('Initializing...')
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
-  fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts = \
-      [kernel().get_py_table(i) for i in range(5)]
-  fetch_table.update(
-    key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")),
-    FetchStatus.SHOULD_FETCH)
+  fetch_table = kernel().GetIntTable(0)
+  crawltime_table = kernel().GetIntTable(1)
+  robots_table = kernel().GetStringTable(2) 
+  domain_counts = kernel().GetIntTable(3)
+  fetch_counts = kernel().GetIntTable(4)
+  
+  if kernel().current_shard() == 0:
+    fetch_table.update(
+      key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html")),
+      FetchStatus.SHOULD_FETCH)
   
   return 0
 
@@ -461,19 +449,16 @@ def crawl():
   do_crawl()
   return 0
 
-def make_table(id, sharding, accum):
-  num_workers = NetworkThread.Get().size() - 1
-  return TableRegistry.Get().CreateTable(id,  num_workers, sharding, accum, CrawlPickle, CrawlUnpickle)
-
 def main():
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
   num_workers = NetworkThread.Get().size() - 1
+  tr = TableRegistry.Get()
 
-  fetch_table = make_table(0, DomainSharding, CrawlMax)
-  crawltime_table = make_table(1, DomainSharding, CrawlMax)
-  robots_table = make_table(2,  DomainSharding, CrawlReplace)
-  domain_counts = make_table(3, DomainSharding, CrawlSum)
-  fetch_counts = make_table(4, DomainSharding, CrawlSum)
+  fetch_table = tr.CreateIntTable(0,  num_workers, DomainSharding(), IntAccum.Max())
+  crawltime_table = tr.CreateIntTable(1,  num_workers, DomainSharding(), IntAccum.Max())
+  robots_table = tr.CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
+  domain_counts = tr.CreateIntTable(3,  num_workers, DomainSharding(), IntAccum.Sum())
+  fetch_counts = tr.CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
 
   conf = ConfigData()
   conf.set_slots(10)
@@ -481,7 +466,7 @@ def main():
   if not StartWorker(conf):
     m = Master(conf)
     print fetch_table
-    m.py_run_one('initialize()', fetch_table)
+    m.py_run_all('initialize()', fetch_table)
     m.py_run_all('crawl()', fetch_table)
   
 if __name__ == '__main__':

@@ -46,6 +46,7 @@ struct Marshal<google::protobuf::Message> {
   void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
 };
 
+
 #ifndef SWIG
 // Commonly used accumulation operators.
 template <class V>
@@ -250,6 +251,8 @@ public:
   int64_t shard_size(int shard);
 
   virtual int get_shard_str(StringPiece k) = 0;
+
+  void HandlePutRequests();
 protected:
   virtual LocalTable* create_local(int shard) = 0;
   boost::recursive_mutex& mutex() { return m_; }
@@ -264,7 +267,6 @@ protected:
   int worker_id_;
 
   void set_worker(Worker *w);
-  void HandlePutRequests();
 
   // Fetch the given key, using only local information.
   void get_local(const StringPiece &k, string *v);

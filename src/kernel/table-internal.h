@@ -110,7 +110,7 @@ typename TypedLocalTable<K, V>::Iterator* TypedLocalTable<K, V>::get_typed_itera
 
 template<class K, class V>
 V TypedLocalTable<K, V>::get(const K &k) {
-  return data_[k];
+  return data_.get(k);
 }
 
 template<class K, class V>
