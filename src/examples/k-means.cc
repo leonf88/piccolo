@@ -161,7 +161,7 @@ REGISTER_METHOD(KMeansKernel, compute_expectation);
 REGISTER_METHOD(KMeansKernel, compute_maximization);
 REGISTER_METHOD(KMeansKernel, print_results);
 
-struct DistAccum {
+struct DistAccum : public Accumulator<Distribution> {
   void operator()(Distribution* d1, const Distribution& d2) {
     Distribution o;
     o.x = d1->x + d2.x;

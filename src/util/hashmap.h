@@ -32,12 +32,6 @@ namespace dsm {
 template <class K, class V>
 class HashMap : private boost::noncopyable {
 public:
-  typedef void (*KMarshal)(const K& t, string *out);
-  typedef void (*VMarshal)(const V& t, string *out);
-
-  KMarshal key_marshaller;
-  VMarshal value_marshaller;
-
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
   HashMap(int size=1);
   ~HashMap() {
@@ -161,8 +155,6 @@ HashMap<K, V>::HashMap(int size)
   end_->pos = size_;
 
   rehash(size);
-  key_marshaller = &data::marshal<K>;
-  value_marshaller = &data::marshal<V>;
 }
 
 static int log2(int s) {

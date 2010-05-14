@@ -21,6 +21,31 @@ struct Sharder {
   virtual int operator()(const K& k, int shards) = 0;
 };
 
+template <class T>
+struct Marshal {
+  virtual void marshal(const T& t, string* out) {
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
+    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
+  }
+
+  virtual void unmarshal(const StringPiece& s, T *t) {
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
+    *t = *reinterpret_cast<const T*>(s.data);
+  }
+};
+
+template <>
+struct Marshal<string> {
+  void marshal(const string& t, string *out) { *out = t; }
+  void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
+};
+
+template <>
+struct Marshal<google::protobuf::Message> {
+  void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
+  void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
+};
+
 #ifndef SWIG
 // Commonly used accumulation operators.
 template <class V>
@@ -72,6 +97,8 @@ public:
   // objects; they are cast to the appropriate type at the time of use.
   void *accum;
   void *sharder;
+  void *key_marshal;
+  void *value_marshal;
 };
 
 struct Table_Iterator {
@@ -252,7 +279,11 @@ bool contains_str(const StringPiece& k);\
 string get_str(const StringPiece &k);\
 void put_str(const StringPiece &k, const StringPiece &v);\
 void remove_str(const StringPiece &k);\
-void update_str(const StringPiece &k, const StringPiece &v);
+void update_str(const StringPiece &k, const StringPiece &v);\
+string key_to_string(const K& t);\
+string value_to_string(const V& t);\
+K key_from_string(const StringPiece& t);\
+V value_from_string(const StringPiece& t);
 
 template <class K, class V>
 class TypedLocalTable : public LocalTable, private boost::noncopyable {

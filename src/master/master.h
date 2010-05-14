@@ -4,6 +4,7 @@
 #include "worker/worker.pb.h"
 #include "util/common.h"
 #include "util/rpc.h"
+#include "kernel/kernel.h"
 #include "kernel/table.h"
 #include "kernel/table-registry.h"
 
@@ -11,46 +12,6 @@ namespace dsm {
 
 class WorkerState;
 class TaskState;
-
-class ParamMap {
-public:
-  string& operator[](const string& key) {
-    return p_[key];
-  }
-
-  void set_int(const string& key, int v) {
-    p_[key] = StringPrintf("%d", v);
-  }
-
-  int get_int(const string& key) {
-    return (int)strtol(p_[key].c_str(), NULL, 10);
-  }
-
-  double get_double(const string& key) {
-    return strtod(p_[key].c_str(), NULL);
-  }
-
-  Params* to_params() {
-    Params* out = new Params;
-    for (unordered_map<string, string>::iterator i = p_.begin(); i != p_.end(); ++i) {
-      Param *p = out->add_param();
-      p->set_key(i->first);
-      p->set_value(i->second);
-    }
-    return out;
-  }
-
-  static ParamMap* from_params(const Params& p) {
-    ParamMap *pm = new ParamMap;
-    for (int i = 0; i < p.param_size(); ++i) {
-      (*pm)[p.param(i).key()] = p.param(i).value();
-    }
-    return pm;
-  }
-
-private:
-  unordered_map<string, string> p_;
-};
 
 struct RunDescriptor {
    string kernel;
@@ -68,8 +29,9 @@ struct RunDescriptor {
 
    // Parameters to be passed to the individual kernel functions.  These are
    // also saved when checkpointing.
-   Params* params;
+   ArgMap params;
 
+   RunDescriptor() {}
    RunDescriptor(const string& kernel,
                  const string& method,
                  GlobalView *table,
@@ -79,7 +41,6 @@ struct RunDescriptor {
      this->table = table;
      this->checkpoint_type = c_type;
      this->checkpoint_interval = c_interval;
-     this->params = NULL;
    }
  };
 
@@ -102,21 +63,23 @@ public:
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
-  void checkpoint(RunDescriptor r);
+  void checkpoint();
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
   // the process is left in the original state, and this function returns NULL.
-  ParamMap* restore();
+  bool restore(ArgMap *args);
 
 private:
   void start_checkpoint();
   void start_worker_checkpoint(int worker_id, const RunDescriptor& r);
   void finish_worker_checkpoint(int worker_id, const RunDescriptor& r);
-  void flush_checkpoint(Params* params);
+  void flush_checkpoint(const ArgMap& params);
 
   ConfigData config_;
   int checkpoint_epoch_;
   int kernel_epoch_;
+
+  RunDescriptor current_run_;
 
   Timer cp_timer_;
   bool checkpointing_;

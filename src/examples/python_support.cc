@@ -1,34 +1,46 @@
-#include "examples/python_support.h"
-#include <python2.6/Python.h>
-
-#include "util/common.h"
-#include "examples/examples.h"
-#include "client.h"
-#include "worker/worker.h"
-#include "master/master.h"
+#include "python_support.h"
 #include <boost/python.hpp>
-#include <gflags/gflags.h>
 
-using namespace dsm;
 using namespace boost::python;
+using namespace google::protobuf;
+using namespace std;
 
-DECLARE_bool(work_stealing);
 DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
-
 static DSMKernel *the_kernel;
 
-int PythonSharding::operator()(const PyObjectPr& k, int shards) {
-  PyObjectPr result = PyEval_CallObject(c_, Py_BuildValue("(o,d)", k, shards));
+
+namespace dsm {
+
+DSMKernel* kernel() {
+  return the_kernel;
+}
+
+double crawler_runtime() {
+  return FLAGS_crawler_runtime;
+}
+
+int PythonSharder::operator()(const string& k, int shards) {
+  PyObjectPtr result = PyEval_CallFunction(c_, "(si)", k.c_str(), shards);
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    exit(1);
+  }
+
   long r = PyInt_AsLong(result);
-  Py_DecRef(result);
+//  Py_DecRef(result);
   return r;
 }
 
-void PythonAccumulate::operator()(PyObjectPr* a, const PyObjectPr& b) {
-  PyObjectPr result = PyEval_CallObject(c_, Py_BuildValue("(o,o)", a, b));
-  Py_DecRef(*a);
+void PythonAccumulate::operator()(PyObjectPtr* a, const PyObjectPtr& b) {
+  PyObjectPtr result = PyEval_CallFunction(c_, "OO", *a, b);
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    exit(1);
+  }
+
+//  Py_DecRef(*a);
   *a = result;
-  Py_DecRef(const_cast<PyObjectPr>(b));
+//  Py_DecRef(const_cast<PyObjectPtr>(b));
 }
 
 class PythonKernel : public DSMKernel {
@@ -49,10 +61,12 @@ public:
     }
   }
 
-  void run_python_method() {
+  void run_python_code() {
     the_kernel = this;
+    string python_code = args().get<string>("python_code");
+    LOG(INFO) << "Executing python code: " << python_code;
     try {
-      exec("initialize()\n", crawl_ns_, crawl_ns_);
+      exec(StringPrintf("%s\n", python_code.c_str()).c_str(), crawl_ns_, crawl_ns_);
     } catch (error_already_set e) {
       PyErr_Print();
       exit(1);
@@ -64,12 +78,6 @@ private:
   object crawl_ns_;
 };
 REGISTER_KERNEL(PythonKernel);
-REGISTER_METHOD(PythonKernel, run_python_method);
+REGISTER_METHOD(PythonKernel, run_python_code);
 
-DSMKernel* kernel() {
-  return the_kernel;
-}
-
-double CrawlerRuntime() {
-  return FLAGS_crawler_runtime;
 }

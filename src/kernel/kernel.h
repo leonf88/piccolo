@@ -4,6 +4,7 @@
 #include "kernel/table.h"
 #include "util/common.h"
 #include <boost/function.hpp>
+#include <boost/lexical_cast.hpp>
 
 namespace dsm {
 
@@ -13,6 +14,51 @@ class TypedGlobalTable;
 class Table;
 class Worker;
 
+
+class ArgMap {
+public:
+  ArgMap() {}
+  ArgMap(const Params& p) {
+    FromMessage(p);
+  }
+
+  string& operator[](const string& key) {
+    return p_[key];
+  }
+
+  template <class T>
+  void set(const string& k, const T& v) {
+    p_[k] = boost::lexical_cast<string>(v);
+  }
+
+  template <class T>
+  T get(const string& k, T defval=T()) const {
+    unordered_map<string, string>::const_iterator i = p_.find(k);
+    if (i == p_.end()) { return defval; }
+    return boost::lexical_cast<T>(i->second);
+  }
+
+  Params* ToMessage() const {
+    Params* out = new Params;
+    for (unordered_map<string, string>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
+      Param *p = out->add_param();
+      p->set_key(i->first);
+      p->set_value(i->second);
+    }
+    return out;
+  }
+
+  void FromMessage(const Params& p) {
+    for (int i = 0; i < p.param_size(); ++i) {
+      p_[p.param(i).key()] = p.param(i).value();
+    }
+  }
+
+private:
+  unordered_map<string, string> p_;
+};
+
+
 class DSMKernel {
 public:
   // Called upon creation of this kernel.
@@ -21,15 +67,17 @@ public:
   // Called before worker begins writing checkpoint data for the table
   // this kernel is working on.  Values stored in 'params' will be made
   // available in the corresponding Restore() call.
-  virtual void Checkpoint(Params* params) {}
+  virtual void Checkpoint(ArgMap* params) {}
 
   // Called after worker has restored table state from a previous checkpoint
   // with this kernel active.
-  virtual void Restore(const Params& params) {}
+  virtual void Restore(const ArgMap& params) {}
 
   // The table and shard being processed.
   int current_shard() const { return shard_; }
   int current_table() const { return table_id_; }
+
+  const ArgMap& args() const { return params_; }
 
   GlobalTable* get_table(int id);
 
@@ -41,11 +89,15 @@ private:
   friend class Worker;
   friend class Master;
 
-  void initialize_internal(Worker* w, int table_id, int shard);
+  void initialize_internal(Worker* w,
+                           int table_id, int shard);
+
+  void set_args(const ArgMap& params);
 
   Worker *w_;
   int shard_;
   int table_id_;
+  ArgMap params_;
 };
 
 struct KernelInfo {
