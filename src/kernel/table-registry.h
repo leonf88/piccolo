@@ -19,22 +19,28 @@ public:
   Map& tables();
   GlobalView* table(int id);
 
+
+#ifndef SWIG
   template<class K, class V>
-  TypedGlobalTable<K, V>* create_table(
-                                       int id,
+  TypedGlobalTable<K, V>* create_table(int id,
                                        int shards,
-                                       void* sharding,
-                                       void *accum) {
+                                       Sharder<K>* sharding,
+                                       Accumulator<V>* accum,
+                                       Marshal<K> *key_marshal = new Marshal<K>,
+                                       Marshal<V> *value_marshal = new Marshal<V>) {
     TableDescriptor info;
     info.num_shards = shards;
     info.accum = (void*) accum;
     info.sharder = (void*) sharding;
     info.table_id = id;
+    info.key_marshal = key_marshal;
+    info.value_marshal = value_marshal;
 
     TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
     tmap_.insert(make_pair(id, t));
     return t;
   }
+#endif
 
 private:
   Map tmap_;

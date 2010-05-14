@@ -3,14 +3,10 @@
 
 using namespace dsm;
 
-namespace dsm { namespace data {
-  template <>
-  void marshal(const Bucket& t, string *out) {
-    t.SerializePartialToString(out);
-  }
-
-  template <>
-  void unmarshal(const StringPiece& s, Bucket* t) {
-    t->ParseFromArray(s.data, s.len);
-  }
-} }
+namespace dsm {
+template <>
+struct Marshal<Bucket> {
+  static void marshal(const Bucket& t, string *out) { t.SerializePartialToString(out); }
+  static void unmarshal(const StringPiece& s, Bucket* t) { t->ParseFromArray(s.data, s.len); }
+};
+}

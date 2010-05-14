@@ -12,6 +12,10 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
   shard_ = shard;
 }
 
+void DSMKernel::set_args(const ArgMap& params) {
+  params_ = params;
+}
+
 GlobalTable* DSMKernel::get_table(int id) {
   GlobalTable* t = (GlobalTable*)TableRegistry::Get()->table(id);
   CHECK_NE(t, (void*)NULL);

@@ -255,7 +255,7 @@ Master::~Master() {
   }
 }
 
-void Master::checkpoint(RunDescriptor r) {
+void Master::checkpoint() {
   // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
   // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
   // is complete.
@@ -263,14 +263,14 @@ void Master::checkpoint(RunDescriptor r) {
   start_checkpoint();
 
   for (int i = 0; i < workers_.size(); ++i) {
-    start_worker_checkpoint(i, r);
+    start_worker_checkpoint(i, current_run_);
   }
 
   for (int i = 0; i < workers_.size(); ++i) {
-    finish_worker_checkpoint(i, r);
+    finish_worker_checkpoint(i, current_run_);
   }
 
-  flush_checkpoint(r.params);
+  flush_checkpoint(current_run_.params);
 }
 
 void Master::start_checkpoint() {
@@ -321,7 +321,8 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   workers_[worker_id]->checkpointing = false;
 }
 
-void Master::flush_checkpoint(Params* params) {
+void Master::flush_checkpoint(const ArgMap& pmap) {
+  Params *params = pmap.ToMessage();
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_), "w");
 
@@ -336,12 +337,13 @@ void Master::flush_checkpoint(Params* params) {
   LOG(INFO) << "Checkpoint: " << cp_timer_.elapsed() << " seconds elapsed; ";
   checkpointing_ = false;
   last_checkpoint_ = Now();
+  delete params;
 }
 
-ParamMap* Master::restore() {
+bool Master::restore(ArgMap *args) {
   vector<string> matches = File::Glob(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
-    return NULL;
+    return false;
   }
 
   // Glob returns results in sorted order, so our last checkpoint will be the last.
@@ -366,7 +368,8 @@ ParamMap* Master::restore() {
   StartRestore req;
   req.set_epoch(epoch);
   network_->SyncBroadcast(MTYPE_RESTORE, MTYPE_RESTORE_DONE, req);
-  return ParamMap::from_params(params);
+  args->FromMessage(params);
+  return true;
 }
 
 void Master::run_all(const string& kernel, const string& method, GlobalView* locality) {
@@ -529,16 +532,23 @@ void Master::dispatch_work(const RunDescriptor& r) {
     WorkerState& w = *workers_[i];
     if (w.num_pending() > 0 && w.num_active() == 0) {
       w.get_next(r, &w_req);
+      Params* p = r.params.ToMessage();
+      w_req.mutable_args()->CopyFrom(*p);
+      delete p;
       network_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }
   }
 }
 
 void Master::run(RunDescriptor r) {
+  current_run_ = r;
   KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
+
+
+  LOG(INFO) << "Running: " << r.kernel << " : " << r.method << " : " << *r.params.ToMessage();
 
   vector<int> shards = r.shards;
 
@@ -578,7 +588,7 @@ void Master::run(RunDescriptor r) {
 
     if (r.checkpoint_type == CP_ROLLING &&
         Now() - last_checkpoint_ > r.checkpoint_interval) {
-      checkpoint(r);
+      checkpoint();
     }
 
     int w_id = 0;

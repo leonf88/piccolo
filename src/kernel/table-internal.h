@@ -55,12 +55,12 @@ public:
   }
 
   const K& key() {
-    data::unmarshal(response_.key(), &key_);
+    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
     return key_;
   }
 
   V& value() {
-    data::unmarshal(response_.value(), &value_);
+    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
     return value_;
   }
 
@@ -177,10 +177,10 @@ struct TypedLocalTable<K, V>::Iterator: public TypedIterator<K, V> {
   }
 
   void key_str(string *out) {
-    data::marshal<K>(key(), out);
+    static_cast<Marshal<K>*>(this->owner()->info().key_marshal)->marshal(key(), out);
   }
   void value_str(string *out) {
-    data::marshal<V>(value(), out);
+    static_cast<Marshal<V>*>(this->owner()->info().value_marshal)->marshal(value(), out);
   }
 
   bool done() {
@@ -220,7 +220,7 @@ int TypedGlobalTable<K, V>::get_shard(const K& k) {
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::get_shard_str(StringPiece k) {
-  return get_shard(data::from_string<K>(k));
+  return get_shard(key_from_string(k));
 }
 
 template<class K, class V>
@@ -301,8 +301,8 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   }
 
   string v_str;
-  get_remote(shard, data::to_string<K>(k), &v_str);
-  return data::from_string<V>(v_str);
+  get_remote(shard, key_to_string(k), &v_str);
+  return value_from_string(v_str);
 }
 
 template<class K, class V>
@@ -323,7 +323,7 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   }
 
   string v_str;
-  return get_remote(shard, data::to_string<K>(k), &v_str);
+  return get_remote(shard, key_to_string(k), &v_str);
 }
 
 template<class K, class V>
@@ -356,27 +356,51 @@ TypedIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
 #define WRAPPER_IMPL(klass)\
 template<class K, class V>\
 bool klass<K, V>::contains_str(const StringPiece& k) {\
-  return contains(data::from_string<K>(k));\
+  return contains(key_from_string(k));\
 }\
 template<class K, class V>\
 string klass<K, V>::get_str(const StringPiece &k) {\
-  return data::to_string<V>(get(data::from_string<K>(k)));\
+  return value_to_string(get(key_from_string(k)));\
 }\
 template<class K, class V>\
 void klass<K, V>::put_str(const StringPiece &k, const StringPiece &v) {\
-  const K& kt = data::from_string<K>(k);\
-  const V& vt = data::from_string<V>(v);\
+  const K& kt = key_from_string(k);\
+  const V& vt = value_from_string(v);\
   put(kt, vt);\
 }\
 template<class K, class V>\
 void klass<K, V>::remove_str(const StringPiece &k) {\
-  remove(data::from_string<K>(k));\
+  remove(key_from_string(k));\
 }\
 template<class K, class V>\
 void klass<K, V>::update_str(const StringPiece &k, const StringPiece &v) {\
-  const K& kt = data::from_string<K>(k);\
-  const V& vt = data::from_string<V>(v);\
+  const K& kt = key_from_string(k);\
+  const V& vt = value_from_string(v);\
   update(kt, vt);\
+}\
+template<class K, class V>\
+string klass<K, V>::key_to_string(const K& t) { \
+  string s;\
+  static_cast<Marshal<K>* >(this->info().key_marshal)->marshal(t, &s);\
+  return s;\
+}\
+template<class K, class V>\
+string klass<K, V>::value_to_string(const V& t) { \
+  string s;\
+  static_cast<Marshal<V>* >(this->info().value_marshal)->marshal(t, &s);\
+  return s;\
+}\
+template<class K, class V>\
+K klass<K, V>::key_from_string(const StringPiece& t) { \
+  K k;\
+  static_cast<Marshal<K>* >(this->info().key_marshal)->unmarshal(t, &k);\
+  return k;\
+}\
+template<class K, class V>\
+V klass<K, V>::value_from_string(const StringPiece& t) { \
+  V v;\
+  static_cast<Marshal<V>* >(this->info().value_marshal)->unmarshal(t, &v);\
+  return v;\
 }
 
 WRAPPER_IMPL(TypedLocalTable);

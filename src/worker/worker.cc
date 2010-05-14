@@ -113,6 +113,9 @@ void Worker::KernelLoop() {
       d->InitKernel();
     }
 
+    ArgMap args(kreq.args());
+    d->set_args(args);
+
     if (this->id() == 1 && FLAGS_sleep_hack > 0) {
       Sleep(FLAGS_sleep_hack);
     }

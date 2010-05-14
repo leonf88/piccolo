@@ -48,7 +48,7 @@ ADD_CUSTOM_COMMAND(
  OUTPUT ${swig_out}
  COMMAND swig
  ARGS 
- -python -ignoremissing -O  -c++ 
+ -python -ignoremissing -c++ -fvirtual -dirprot
  -w315 -w317 -w362 -w503 -w451 -w401
  -outdir ${CMAKE_CURRENT_BINARY_DIR} 
  ${include_flag}

@@ -93,18 +93,16 @@ template <>
 uint32_t hash(pos p) {
   return p.hash();
 }
-
-template <>
-void marshal(const pos& t, string *out) {
-  out->append((char*)&t, sizeof(pos));  
-}
-
-template <>
-void unmarshal(const StringPiece& s, pos* t) {
-  *t = *(pos*)(s.data);
-}
-
 } }
+
+namespace dsm {
+template <>
+struct Marshal<pos> {
+  static void marshal(const pos& t, string *out) { out->append((char*)&t, sizeof(pos)); }
+  static void unmarshal(const StringPiece& s, pos* t) { *t = *(pos*)(s.data); }
+};
+
+}
 
 struct PosSharding : public Sharder<pos> {
   int operator()(const pos& p, int shards) {

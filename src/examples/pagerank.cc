@@ -269,19 +269,14 @@ int Pagerank(ConfigData& conf) {
 
 
   int i = 0;
-  ParamMap *pmap = NULL;
+  ArgMap pmap;
 
-  if (FLAGS_checkpoint) {
-    pmap = m.restore();
-  }
-
-  if (pmap == NULL) {
-    i = 0;
-    pmap = new ParamMap;
-    m.run_all("PRKernel", " Initialize",  TableRegistry::Get()->table(0));
-  } else {
-    i = pmap->get_int("iteration");
+  if (FLAGS_checkpoint && m.restore(&pmap)) {
+    i = pmap.get<int>("iteration");
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
+  } else {
+    i = 0;
+    m.run_all("PRKernel", " Initialize",  TableRegistry::Get()->table(0));
   }
 
   for (; i < FLAGS_iterations; i++) {
@@ -289,7 +284,7 @@ int Pagerank(ConfigData& conf) {
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
     RunDescriptor r("PRKernel", "PageRankIter", curr);
-    pmap->set_int("iteration", i);
+    pmap.set<int>("iteration", i);
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
       // We only need to save the next_pr table, which alternates each iteration.
@@ -297,7 +292,7 @@ int Pagerank(ConfigData& conf) {
     } else {
       r.checkpoint_type = CP_NONE;
     }
-    r.params = pmap->to_params();
+    r.params = pmap;
     r.shards = range(curr->num_shards());
 
     m.run(r);

@@ -52,3 +52,10 @@ message FileParams {
   repeated Param attr = 1;
   optional int32 compression = 2 [default=0];
 }
+
+message ConfigData {
+  required int32 num_workers = 1;
+  required int32 worker_id = 2;
+  required int32 master_id = 3;
+  optional int32 slots = 4 [default = 10];
+}
