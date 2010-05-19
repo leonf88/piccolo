@@ -37,6 +37,7 @@ link_directories( /home/power/share/lib )
 add_subdirectory (external/google-flags)
 add_subdirectory (external/google-logging)
 add_subdirectory (external/google-perftools)
+add_subdirectory (external/libunwind)
 
 include_directories( ${PICCOLO_SOURCE_DIR}/external/google-flags )
 include_directories( ${PICCOLO_SOURCE_DIR}/external/google-logging )
