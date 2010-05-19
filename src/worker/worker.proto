@@ -1,0 +1,124 @@
+package dsm;
+
+import "util/common.proto";
+option optimize_for = SPEED;
+
+enum CheckpointType {
+  CP_NONE = 0;
+  CP_MASTER_CONTROLLED = 1;
+  CP_ROLLING = 2;
+};
+
+message RegisterWorkerRequest {
+  required int32 id = 1;
+  required int32 slots = 2;
+}
+
+message Stats {
+  optional int64 bytes_out = 1;
+  optional int64 bytes_in = 2;
+	
+  optional int64 put_out = 3;
+  optional int64 put_in = 4;
+	
+  optional int64 get_out = 5;
+  optional int64 get_in = 6;
+
+  optional double idle_time = 7;
+  optional double network_time = 8;
+}
+
+message ShardAssignment {
+  required int32 table = 1;
+  required int32 shard = 2;
+//  required int32 old_worker = 3;
+  required int32 new_worker = 4;
+}
+
+message ShardAssignmentRequest {
+  repeated ShardAssignment assign = 1;
+}
+
+message ShardInfo {
+  required uint32 table = 1;
+  required uint32 shard = 2;
+  required uint64 entries = 3;
+  required uint32 owner = 4;
+}
+
+message MethodStats {
+  required double total_time = 1;
+  required double total_shard_time = 2;
+  required int32 invocations = 3;
+  required int32 shard_invocations = 4;
+};
+
+message KernelRequest {
+  required string kernel = 1;
+  required string method = 2;
+  optional int32 table = 3;
+  optional int32 shard = 4;
+  required Params args = 5;
+}
+
+message KernelDone {
+  required KernelRequest kernel = 1;
+  
+  // updated information about the state of this workers
+  // table shards.
+  repeated ShardInfo shards = 5;
+}
+
+message IteratorRequest {
+  required uint32 table = 1;
+  required uint32 shard = 2;  
+  optional int32 id = 3 [default = -1];
+}
+
+message IteratorResponse {
+  required uint32 id = 1;
+  required bool done = 2;
+  optional string key = 3;
+  optional string value = 4;
+}
+
+message HashGet {
+  required uint32 table = 1;
+  required uint32 shard = 2;
+  optional bytes key = 3;
+  optional uint32 index = 4;
+}
+
+message HashPut {
+  required uint32 source = 1;
+  required uint32 table = 2;
+  required uint32 shard = 3;
+  required bool done = 4;
+
+  repeated fixed32 key_offset = 5;
+  repeated fixed32 value_offset = 6;
+
+  optional bytes key_data = 9;
+  optional bytes value_data = 10;
+  
+  optional int32 epoch = 11;
+  optional int32 marker = 12 [default = -1];
+  
+  
+  optional bool missing_key = 13;
+}
+
+message CheckpointRequest {
+  required int32 epoch = 1;
+  required int32 checkpoint_type = 2;
+  repeated int32 table = 3;
+}
+
+message StartRestore {
+  required int32 epoch = 1;
+}
+
+message CheckpointInfo {
+  required int32 checkpoint_epoch = 1;
+  required int32 kernel_epoch = 2;
+}
