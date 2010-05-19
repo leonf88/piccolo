@@ -4,6 +4,13 @@ include_directories(src)
 include_directories(include )
 include_directories(include/tdep-x86_64 )
 
+set_property(SOURCE  
+             src/x86_64/getcontext.S
+             src/x86_64/longjmp.S
+             src/x86_64/setcontext.S
+             src/x86_64/siglongjmp.S
+             PROPERTY LANGUAGE C)
+
 add_library(unwind
             src/dwarf/Gexpr.c
             src/dwarf/Gfde.c
@@ -84,4 +91,39 @@ add_library(unwind
             src/x86_64/regname.c
             src/x86_64/setcontext.S
             src/x86_64/siglongjmp.S            
+            src/mi/Gdestroy_addr_space.c
+            src/mi/_ReadSLEB.c
+            src/mi/Lset_fpreg.c
+            src/mi/_ReadULEB.c
+            src/mi/Lput_dynamic_unwind_info.c
+            src/mi/Lset_caching_policy.c
+            src/mi/flush_cache.c
+            src/mi/Gset_fpreg.c
+            src/mi/Lfind_dynamic_proc_info.c
+            src/mi/Lget_accessors.c
+            src/mi/Lget_reg.c
+            src/mi/mempool.c
+            src/mi/Lset_reg.c
+            src/mi/backtrace.c
+            src/mi/init.c
+            src/mi/strerror.c
+            src/mi/Lget_fpreg.c
+            src/mi/Ldyn-extract.c
+            src/mi/Ldestroy_addr_space.c
+            src/mi/Gdyn-extract.c
+            src/mi/Gset_caching_policy.c
+            src/mi/Lget_proc_name.c
+            src/mi/Gget_proc_name.c
+            src/mi/Lget_proc_info_by_ip.c
+            src/mi/dyn-info-list.c
+            src/mi/Gset_reg.c
+            src/mi/Gget_fpreg.c
+            src/mi/Gfind_dynamic_proc_info.c
+            src/mi/Gput_dynamic_unwind_info.c
+            src/mi/Gget_accessors.c
+            src/mi/Gget_reg.c
+            src/mi/Gget_proc_info_by_ip.c
+            src/mi/dyn-register.c
+            src/mi/Gdyn-remote.c
+            src/mi/dyn-cancel.c
             )
