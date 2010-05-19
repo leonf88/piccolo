@@ -1,8 +1,9 @@
-#ifndef HASH_H_
-#define HASH_H_
+#ifndef UTIL_HASH_H_
+#define UTIL_HASH_H_
+
+#include <stdint.h>
 
 // Code from: http://www.azillionmonkeys.com/qed/hash.html
-#include <stdint.h>
 #undef get16bits
 #if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) \
   || defined(_MSC_VER) || defined (__BORLANDC__) || defined (__TURBOC__)
@@ -13,6 +14,8 @@
 #define get16bits(d) ((((uint32_t)(((const uint8_t *)(d))[1])) << 8)\
                        +(uint32_t)(((const uint8_t *)(d))[0]) )
 #endif
+
+namespace dsm {
 static uint32_t SuperFastHash (const char * data, int len) {
 uint32_t hash = len, tmp;
 int rem;
@@ -57,11 +60,6 @@ int rem;
 
     return hash;
 }
-
-namespace dsm {
-  static inline uint32_t Hash32(const char *key, size_t length) {
-    return SuperFastHash(key, length);
-  }
 }
 
 #endif /* HASH_H_ */

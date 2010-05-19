@@ -3,10 +3,7 @@
 
 #include <time.h>
 
-#include <stdarg.h>
-#include <glog/logging.h>
-#include <gflags/gflags.h>
-
+#include <cstdarg>
 #include <map>
 #include <vector>
 #include <deque>
@@ -16,15 +13,12 @@
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 
-#include "util/hash.h"
 #include "util/common.pb.h"
+#include "util/hash.h"
+#include "util/logging.h"
 #include "util/static-initializers.h"
+#include "util/timer.h"
 
-#ifdef SWIG
-
-#define __attribute__(X)
-
-#else
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 using std::tr1::unordered_set;
@@ -40,9 +34,6 @@ using std::make_pair;
 using std::min;
 using std::max;
 
-#endif
-
-
 namespace dsm {
 
 void Init(int argc, char** argv);
@@ -54,18 +45,6 @@ void Sleep(double t);
 void DumpProfile();
 
 double get_processor_frequency();
-
-static uint64_t rdtsc() {
-  uint32_t hi, lo;
-  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-  return (((uint64_t)hi)<<32) | ((uint64_t)lo);
-}
-
-inline double Now() {
-  timespec tp;
-  clock_gettime(CLOCK_MONOTONIC, &tp);
-  return tp.tv_sec + 1e-9 * tp.tv_nsec;
-}
 
 // Log-bucketed histogram.
 class Histogram {
@@ -87,77 +66,6 @@ private:
   static const double kLogBase = 1.1;
 };
 
-template <class T>
-class Pool {
-public:
-  Pool(int capacity=100) : c_(capacity) {
-    for (int i = 0; i < c_; ++i) {
-      entries_.push_back(new T);
-    }
-  }
-
-  ~Pool() {
-    for (int i = 0; i < c_; ++i) {
-      delete entries_[i];
-    }
-  }
-
-  T* get() {
-    T* t;
-    if (!entries_.empty()) {
-      t = entries_.back();
-      entries_.pop_back();
-    } else {
-      t = new T;
-    }
-
-    return t;
-  }
-
-  void free(T* t) {
-    entries_.push_back(t);
-  }
-
-private:
-  int c_;
-  vector<T*> entries_;
-};
-
-class StringPiece {
-public:
-  StringPiece();
-  StringPiece(const string& s);
-  StringPiece(const string& s, int len);
-  StringPiece(const char* c);
-  StringPiece(const char* c, int len);
-  uint32_t hash() const;
-  string AsString() const;
-
-  const char* data;
-  int len;
-
-  static vector<StringPiece> split(StringPiece sp, StringPiece delim);
-};
-
-static bool operator==(const StringPiece& a, const StringPiece& b) {
-  return a.data == b.data && a.len == b.len;
-}
-
-static const char* strnstr(const char* haystack, const char* needle, int len) {
-  int nlen = strlen(needle);
-  for (int i = 0; i < len - nlen; ++i) {
-    if (strncmp(haystack + i, needle, nlen) == 0) {
-      return haystack + i;
-    }
-  }
-  return NULL;
-}
-
-#ifndef SWIG
-string StringPrintf(StringPiece fmt, ...);
-string VStringPrintf(StringPiece fmt, va_list args);
-#endif
-
 class SpinLock {
 public:
   SpinLock() : d(0) {}
@@ -167,56 +75,10 @@ private:
   volatile int d;
 };
 
-
-class Timer {
-public:
-  Timer() {
-    Reset();
-  }
-
-  void Reset();
-  double elapsed() const;
-  uint64_t cycles_elapsed() const;
-
-  // Rate at which an event occurs.
-  double rate(int count) {
-    return count / (Now() - start_time_);
-  }
-
-  double cycle_rate(int count) {
-    return double(cycles_elapsed()) / count;
-  }
-
-private:
-  double start_time_;
-  uint64_t start_cycle_;
-};
-
-#define EVERY_N(interval, operation)\
-{ static int COUNT = 0;\
-  if (COUNT++ % interval == 0) {\
-    operation;\
-  }\
-}
-
-#define PERIODIC(interval, operation)\
-{ static int64_t last = 0;\
-  static int64_t cycles = (int64_t)(interval * get_processor_frequency());\
-  static int COUNT = 0; \
-  ++COUNT; \
-  int64_t now = rdtsc(); \
-  if (now - last > cycles) {\
-    last = now;\
-    operation;\
-    COUNT = 0;\
-  }\
-}
-
 static double rand_double() {
   return double(random()) / RAND_MAX;
 }
 
-#define CALL_MEMBER_FN(object,ptrToMember) ((object)->*(ptrToMember))
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
 template <class A, class B, class C>
@@ -239,7 +101,6 @@ inline tuple3<A, B, C> MP(A x, B y, C z) { return tuple3<A, B, C>(x, y, z); }
 
 template<class A, class B, class C, class D>
 inline tuple4<A, B, C, D> MP(A x, B y, C z, D a) { return tuple4<A, B, C, D>(x, y, z, a); }
-}
 
 template<class A>
 inline vector<A> MakeVector(const A&x) {
@@ -266,6 +127,8 @@ inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
 }
 
 #ifndef SWIG
+#include <google/protobuf/message.h>
+
 static vector<int> range(int from, int to, int step=1) {
   vector<int> out;
   for (int i = from; i < to; ++i) {
@@ -277,7 +140,33 @@ static vector<int> range(int from, int to, int step=1) {
 static vector<int> range(int to) {
   return range(0, to);
 }
+
+static string ToString(const google::protobuf::Message &q) { return q.ShortDebugString(); }
+
+template <class A, class B>
+static string ToString(const std::pair<A, B> &p) {
+  return StringPrintf("(%s, %s)", ToString(p.first).c_str(), ToString(p.second).c_str());
+}
+
+template <class A, class B, class C>
+static string ToString(const dsm::tuple3<A, B, C> &p) {
+  return StringPrintf("(%s, %s, %s)",
+                      ToString(p.a_).c_str(),
+                      ToString(p.b_).c_str(),
+                      ToString(p.c_).c_str());
+}
+
+template <class A, class B, class C, class D>
+static string ToString(const dsm::tuple4<A, B, C, D> &p) {
+  return StringPrintf("(%s, %s, %s, %s)",
+                      ToString(p.a_).c_str(),
+                      ToString(p.b_).c_str(),
+                      ToString(p.c_).c_str(),
+                      ToString(p.d_).c_str());
+}
+}
 #endif
+
 
 namespace std {  namespace tr1 {
 template <>
@@ -293,41 +182,10 @@ struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
   hash<B> hb;
 
   size_t operator()(const pair<A, B> & k) const {
-    return ha ^ hb;
+    return ha(k.a) ^ hb(k.b);
   }
 };
-
 }}
-
-#ifndef SWIG
-// operator<< overload to allow protocol buffers to be output from the logging methods.
-#include <google/protobuf/message.h>
-namespace std{
-static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
-  string s = q.ShortDebugString();
-  out << s;
-  return out;
-}
-
-template <class A, class B>
-static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
-  out << "(" << p.first << "," << p.second << ")";
-  return out;
-}
-
-template <class A, class B, class C>
-static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
-  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
-  return out;
-}
-
-template <class A, class B, class C, class D>
-static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
-  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << "," << p.d_ << ")";
-  return out;
-}
-}
-#endif
 
 #define COMPILE_ASSERT(x) extern int __dummy[(int)x]
 
