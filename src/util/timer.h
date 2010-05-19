@@ -1,6 +1,7 @@
 #ifndef TIMER_H_
 #define TIMER_H_
 
+namespace dsm {
 static uint64_t rdtsc() {
   uint32_t hi, lo;
   __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
@@ -37,6 +38,8 @@ private:
   uint64_t start_cycle_;
 };
 
+}
+
 #define EVERY_N(interval, operation)\
 { static int COUNT = 0;\
   if (COUNT++ % interval == 0) {\
@@ -56,6 +59,7 @@ private:
     COUNT = 0;\
   }\
 }
+
 
 
 #endif /* TIMER_H_ */

@@ -24,21 +24,23 @@ endif()
 
 set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
 
-include_directories( ${PROTOBUF_INCLUDE_DIRS} )
 include_directories( ${PYTHON_INCLUDE_PATH} )
-include_directories( .
+include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${PICCOLO_BINARY_DIR}
                      ${PROTOBUF_INCLUDE_DIRS}
-                     ${PICCOLO_SOURCE_DIR}/../extlib/glog/src 
-                     ${PICCOLO_SOURCE_DIR}/../extlib/gflags/src 
-                     ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/src 
                      /home/power/share/include ) 
+                     
+SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-link_directories( ${PICCOLO_SOURCE_DIR}/../extlib/glog/.libs/
-                  ${PICCOLO_SOURCE_DIR}/../extlib/gflags/.libs/
-                  ${PICCOLO_SOURCE_DIR}/../extlib/gperftools/.libs/
-            	  ${PICCOLO_SOURCE_DIR}/../extlib/libunwind/src/.libs/
-		              /home/power/share/lib )
+link_directories( /home/power/share/lib )
+
+add_subdirectory (external/google-flags)
+add_subdirectory (external/google-logging)
+add_subdirectory (external/google-perftools)
+
+include_directories( ${PICCOLO_SOURCE_DIR}/external/google-flags )
+include_directories( ${PICCOLO_SOURCE_DIR}/external/google-logging )
+include_directories( ${PICCOLO_SOURCE_DIR}/external/google-perftools )
 
 add_subdirectory (util)
 add_subdirectory (worker)
