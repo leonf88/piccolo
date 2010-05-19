@@ -1,7 +1,15 @@
 #ifndef UTIL_STRING_H_
 #define UTIL_STRING_H_
 
+#include <vector>
 #include <string>
+#include <memory.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+
+namespace dsm {
+
 using std::string;
 
 class StringPiece {
@@ -17,7 +25,7 @@ public:
   const char* data;
   int len;
 
-  static vector<StringPiece> split(StringPiece sp, StringPiece delim);
+  static std::vector<StringPiece> split(StringPiece sp, StringPiece delim);
 };
 
 static bool operator==(const StringPiece& a, const StringPiece& b) {
@@ -43,5 +51,7 @@ string ToString(int32_t);
 string ToString(int64_t);
 string ToString(string);
 string ToString(StringPiece);
+
+}
 
 #endif /* STRING_H_ */

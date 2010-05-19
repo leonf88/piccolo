@@ -13,10 +13,15 @@
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 
+#include <stdint.h>
+
+#include "glog/logging.h"
+#include "google/gflags.h"
+
 #include "util/common.pb.h"
 #include "util/hash.h"
-#include "util/logging.h"
 #include "util/static-initializers.h"
+#include "util/stringpiece.h"
 #include "util/timer.h"
 
 using std::tr1::unordered_map;
@@ -125,10 +130,12 @@ inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
   out.push_back(z);
   return out;
 }
+}
 
 #ifndef SWIG
 #include <google/protobuf/message.h>
 
+namespace dsm {
 static vector<int> range(int from, int to, int step=1) {
   vector<int> out;
   for (int i = from; i < to; ++i) {
@@ -140,29 +147,33 @@ static vector<int> range(int from, int to, int step=1) {
 static vector<int> range(int to) {
   return range(0, to);
 }
+}
 
-static string ToString(const google::protobuf::Message &q) { return q.ShortDebugString(); }
+// operator<< overload to allow protocol buffers to be output from the logging methods.
+#include <google/protobuf/message.h>
+namespace std{
+static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
+  string s = q.ShortDebugString();
+  out << s;
+  return out;
+}
 
 template <class A, class B>
-static string ToString(const std::pair<A, B> &p) {
-  return StringPrintf("(%s, %s)", ToString(p.first).c_str(), ToString(p.second).c_str());
+static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
+  out << "(" << p.first << "," << p.second << ")";
+  return out;
 }
 
 template <class A, class B, class C>
-static string ToString(const dsm::tuple3<A, B, C> &p) {
-  return StringPrintf("(%s, %s, %s)",
-                      ToString(p.a_).c_str(),
-                      ToString(p.b_).c_str(),
-                      ToString(p.c_).c_str());
+static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
+  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
+  return out;
 }
 
 template <class A, class B, class C, class D>
-static string ToString(const dsm::tuple4<A, B, C, D> &p) {
-  return StringPrintf("(%s, %s, %s, %s)",
-                      ToString(p.a_).c_str(),
-                      ToString(p.b_).c_str(),
-                      ToString(p.c_).c_str(),
-                      ToString(p.d_).c_str());
+static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
+  out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << "," << p.d_ << ")";
+  return out;
 }
 }
 #endif

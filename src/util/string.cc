@@ -1,13 +1,21 @@
-#include "util/string.h"
+#include "util/stringpiece.h"
 #include "util/hash.h"
 #include "util/static-initializers.h"
 
+#include "glog/logging.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+
+using std::vector;
+
+namespace dsm {
 StringPiece::StringPiece() : data(NULL), len(0) {}
 StringPiece::StringPiece(const string& s) : data(s.data()), len(s.size()) {}
 StringPiece::StringPiece(const string& s, int len) : data(s.data()), len(len) {}
 StringPiece::StringPiece(const char* c) : data(c), len(strlen(c)) {}
 StringPiece::StringPiece(const char* c, int len) : data(c), len(len) {}
-uint32_t StringPiece::hash() const { return Hash32(data, len); }
+uint32_t StringPiece::hash() const { return SuperFastHash(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
 
 vector<StringPiece> StringPiece::split(StringPiece sp, StringPiece delim) {
@@ -62,4 +70,5 @@ string VStringPrintf(StringPiece fmt, va_list l) {
   char buffer[32768];
   vsnprintf(buffer, 32768, fmt.AsString().c_str(), l);
   return string(buffer);
+}
 }

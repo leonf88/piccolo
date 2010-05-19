@@ -5,29 +5,24 @@ set(DYNAMICLIBS lzo2 pthread rt dl numa)
 protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 
 add_library(example 
-            k-means.cc matmul.cc pagerank.cc shortest-path.cc
-            test-tables.cc 
-            nas/isort.cc nas/n-body.cc
+            k-means.cc 
+            matmul.cc 
+            nas/isort.cc 
+            nas/n-body.cc
+            pagerank.cc 
+            shortest-path.cc
+            test-tables.cc
             ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
 add_dependencies(example worker_proto common_proto)
-
 add_executable(example-dsm example-main.cc)
 
 # we need to resolve static initializers, so glob all the symbols in
 target_link_libraries(example-dsm -Wl,--whole-archive common worker kernel master example -Wl,--no-whole-archive )
-
-if ($ENV{TCMALLOC})
-  target_link_libraries(example-dsm -Wl,-Bstatic tcmalloc -Wl,-Bdynamic )
-endif()
-
-if ($ENV{JEMALLOC})
-  target_link_libraries(example-dsm -Wl,--whole-archive jemalloc_pic -Wl,--no-whole-archive)
-endif()
+target_link_libraries(example-dsm gflags glog profiler gperfbase unwind)
 
 # link statically if possible
-target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} gflags glog profiler blas unwind -Wl,-Bdynamic )
+target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
 target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPILIBS})		      
-
 
 GET_DIRECTORY_PROPERTY(cmake_include_directories INCLUDE_DIRECTORIES)
 SET(include_flag)
@@ -71,8 +66,12 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_BINARY_DIR}/worker/libworker.a
   ${CMAKE_BINARY_DIR}/kernel/libkernel.a
   ${CMAKE_BINARY_DIR}/master/libmaster.a
+  ${CMAKE_BINARY_DIR}/external/google-flags/libgflags.a    
+  ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a
+  ${CMAKE_BINARY_DIR}/external/google-perftools/libprofiler.a
+  ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
   -Wl,-Bstatic 
-  -lgflags -lglog -lprofiler -lunwind -lprotobuf  
+  -lprotobuf  
   -lmpi_cxx -lmpi -lopen-rte -lopen-pal
   -Wl,-Bdynamic
   -lpthread -lutil -lnuma
