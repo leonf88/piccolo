@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 2.6)
 project (PICCOLO) 
 
 set(ENV{LANG} "C")
-cmake_policy(SET CMP0014 OLD)
+#cmake_policy(SET CMP0014 OLD)
 
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
 find_package(ProtoBuf REQUIRED)
