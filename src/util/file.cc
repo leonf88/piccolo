@@ -21,7 +21,7 @@ vector<string> File::Glob(const string& pattern) {
 }
 
 void File::Mkdirs(const string& path) {
-  system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str());
+  CHECK_EQ(system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str()), 0);
 }
 
 string File::Slurp(const string& f) {
