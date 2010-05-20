@@ -243,10 +243,10 @@ REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
   conf.set_slots(256);
-  TableRegistry::Get()->create_table<pos, string>(0, kNumPartitions * kNumPartitions * kNumPartitions, 
+  CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions, 
                                       new PosSharding, new AppendAccum);
   
-  TableRegistry::Get()->create_table<pos, string>(1, kNumPartitions * kNumPartitions * kNumPartitions, 
+  CreateTable(1, kNumPartitions * kNumPartitions * kNumPartitions, 
                                       new PosSharding, new AppendAccum);
 
   if (!StartWorker(conf)) {

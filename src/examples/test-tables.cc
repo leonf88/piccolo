@@ -77,11 +77,11 @@ REGISTER_METHOD(TableKernel, TestClear);
 static int TestTables(ConfigData &conf) {
   conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
 
-  min_hash = TableRegistry::Get()->create_table<int, int>(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
-  max_hash = TableRegistry::Get()->create_table<int, int>(1, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Max);
-  sum_hash = TableRegistry::Get()->create_table<int, int>(2, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Sum);
-  replace_hash = TableRegistry::Get()->create_table<int, int>(3, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Replace);
-  string_hash = TableRegistry::Get()->create_table<int, string>(4, FLAGS_shards, new Sharding::Mod, new Accumulators<string>::Replace);
+  min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
+  max_hash = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Max);
+  sum_hash = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Sum);
+  replace_hash = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Replace);
+  string_hash = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<string>::Replace);
 
   if (!StartWorker(conf)) {
     Master m(conf);

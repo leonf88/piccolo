@@ -2,6 +2,9 @@
 #define KERNELREGISTRY_H_
 
 #include "kernel/table.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
+
 #include "util/common.h"
 #include <boost/function.hpp>
 #include <boost/lexical_cast.hpp>

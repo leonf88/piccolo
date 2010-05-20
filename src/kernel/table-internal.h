@@ -2,6 +2,9 @@
 #define TABLE_INTERNAL_H
 
 #include "kernel/table.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
+
 #include "util/rpc.h"
 
 namespace dsm {

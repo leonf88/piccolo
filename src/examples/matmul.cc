@@ -86,9 +86,9 @@ int MatrixMultiplication(ConfigData& conf) {
   bRows = FLAGS_edge_size / kBlockSize;
 
   LOG(INFO) << "Create matrices with " << conf.num_workers() << " shards.";
-  matrix_a = TableRegistry::Get()->create_table<int, Block>(0, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
-  matrix_b = TableRegistry::Get()->create_table<int, Block>(1, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
-  matrix_c = TableRegistry::Get()->create_table<int, Block>(2, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_a = CreateTable(0, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_b = CreateTable(1, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_c = CreateTable(2, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
 
   StartWorker(conf);
   Master m(conf);

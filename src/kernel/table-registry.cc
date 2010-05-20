@@ -23,7 +23,7 @@ GlobalView* TableRegistry::table(int id) {
 
 
 static void CreateStatsTable() {
-  TableRegistry::Get()->create_table<string, string>(
+  CreateTable(
       kStatsTableId, 1, new Sharding::String, new Accumulators<string>::Replace);
 }
 }

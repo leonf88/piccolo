@@ -172,9 +172,9 @@ struct DistAccum : public Accumulator<Distribution> {
 
 static int KMeans(ConfigData& conf) {
   const int num_shards = conf.num_workers() * 4;
-  dists = TableRegistry::Get()->create_table<int, Distribution>(0, num_shards, new Sharding::Mod, new DistAccum);
-  points = TableRegistry::Get()->create_table<int, Point>(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);
-  actual = TableRegistry::Get()->create_table<int, Distribution>(2, num_shards, new Sharding::Mod, new DistAccum);
+  dists = CreateTable(0, num_shards, new Sharding::Mod, new DistAccum);
+  points = CreateTable(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);
+  actual = CreateTable(2, num_shards, new Sharding::Mod, new DistAccum);
 
   if (!StartWorker(conf)) {
     Master m(conf);

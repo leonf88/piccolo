@@ -251,8 +251,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  GlobalView* curr = TableRegistry::Get()->create_table<PageId, float>(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
-  GlobalView* next = TableRegistry::Get()->create_table<PageId, float>(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalView* curr = CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalView* next = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
 
   StartWorker(conf);
 

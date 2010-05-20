@@ -65,7 +65,7 @@ REGISTER_METHOD(SortKernel, Partition);
 REGISTER_METHOD(SortKernel, Sort);
 
 int IntegerSort(ConfigData& conf) {
-  dst = TableRegistry::Get()->create_table<KeyType, ValueType>(0, conf.num_workers(),
+  dst = CreateTable(0, conf.num_workers(),
       new Sharding::UintMod, new BucketMerge);
 
   if (!StartWorker(conf)) {

@@ -10,6 +10,10 @@
 #include "kernel/table-internal.h"
 #include "kernel/table-registry.h"
 
+#include "kernel/table.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
+
 #ifndef SWIG
 DECLARE_int32(shards);
 DECLARE_int32(iterations);

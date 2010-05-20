@@ -6,6 +6,8 @@
 #include "util/rpc.h"
 #include "kernel/kernel.h"
 #include "kernel/table.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
 #include "kernel/table-registry.h"
 
 namespace dsm {

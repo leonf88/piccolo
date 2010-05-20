@@ -202,15 +202,8 @@ public:
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
 }
 
-%extend TableRegistry {
-  TypedGlobalTable<string, string>* CreateStringTable(int id, int shards, Sharder<string> *sharder, Accumulator<string> *accum) {
-    return $self->create_table<string, string>(id, shards, sharder, accum);
-  }
-  
-  TypedGlobalTable<string, int64_t>* CreateIntTable(int id, int shards, Sharder<string> *sharder, Accumulator<int64_t> *accum) {
-    return $self->create_table<string, int64_t>(id, shards, sharder, accum);
-  }
-}
+%template(CreateStringTable) CreateTable<string, string>;
+%template(CreateIntTable) CreateTable<string, int64_t>;
 
 %extend Master {
   void py_run_all(const string& code, void *locality) {
