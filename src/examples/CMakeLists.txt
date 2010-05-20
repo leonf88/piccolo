@@ -5,9 +5,14 @@ set(DYNAMICLIBS lzo2 pthread rt dl numa)
 protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 
 add_library(example 
-            k-means.cc matmul.cc pagerank.cc shortest-path.cc
+            k-means.cc 
+            matmul.cc 
+            pagerank.cc 
+            wordcount.cc
+            shortest-path.cc
             test-tables.cc 
-            nas/isort.cc nas/n-body.cc
+            nas/isort.cc 
+            nas/n-body.cc
             ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
 add_dependencies(example worker_proto common_proto)
 
