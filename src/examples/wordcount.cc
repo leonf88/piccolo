@@ -87,7 +87,7 @@ REGISTER_METHOD(WordcountKernel, runWordcount);
 static int WordCount(ConfigData& conf){
 
 	conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
-	wcount = TableRegistry::Get()->create_table<string, int>(0, 1, new Sharding::String, new Accumulators<int>::Sum);
+	wcount = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
 	if (!StartWorker(conf))
 	{
 		Master m(conf);
