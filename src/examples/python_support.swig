@@ -155,11 +155,6 @@ public:
 
 bool StartWorker(const ConfigData& conf);
 
-struct GlobalView {
-private:
-  GlobalView();
-};
-
 template <class K, class V>
 struct TypedIterator {
 private:
@@ -175,7 +170,7 @@ public:
 }; 
 
 template <class K, class V> 
-struct TypedGlobalTable<K, V> : public GlobalView {
+struct TypedGlobalTable<K, V>  {
 private:
   TypedGlobalTable();
 public:
@@ -207,15 +202,15 @@ public:
 
 %extend Master {
   void py_run_all(const string& code, void *locality) {
-    RunDescriptor r("PythonKernel", "run_python_code", (GlobalView*)locality);
+    RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
     r.params["python_code"] = code;
-    r.shards = range(((GlobalView*)locality)->num_shards());
+    r.shards = range(((GlobalTable*)locality)->num_shards());
     $self->run(r);
   }
 
   // Run the given kernel function on one (arbitrary) worker node.
   void py_run_one(const string& code, void*locality) {
-    RunDescriptor r("PythonKernel", "run_python_code", (GlobalView*)locality);
+    RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
     r.params["python_code"] = code;
     r.shards = range(1);
     $self->run(r);

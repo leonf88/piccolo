@@ -34,6 +34,10 @@ DEFINE_bool(run_tests, false, "");
 
 namespace dsm {
 
+const double Histogram::kMinVal = 1e-9;
+const double Histogram::kLogBase = 1.1;
+
+
 int Histogram::bucketForVal(double v) {
   if (v < kMinVal) { return 0; }
 

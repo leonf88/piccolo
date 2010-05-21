@@ -5,9 +5,11 @@
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
 
+#include "util/file.h"
 #include "util/rpc.h"
 
 namespace dsm {
+
 static const int kWriteFlushCount = 1000000;
 
 struct HashPutCoder {
@@ -26,11 +28,11 @@ struct HashPutCoder {
 template<class K, class V>
 class RemoteIterator : public TypedIterator<K, V> {
 public:
-  RemoteIterator(GlobalView *table, int shard) :
+  RemoteIterator(GlobalTable *table, int shard) :
     owner_(table), shard_(shard), done_(false) {
     request_.set_table(table->id());
     request_.set_shard(shard_);
-    int target_worker = owner_->get_owner(shard_);
+    int target_worker = table->get_partition_info(shard)->owner;
 
     NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
     NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
@@ -51,7 +53,7 @@ public:
   }
 
   void Next() {
-    int target_worker = owner_->get_owner(shard_);
+    int target_worker = owner_->get_partition_info(shard_)->owner;
     NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
     NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
     ++index_;
@@ -68,7 +70,7 @@ public:
   }
 
 private:
-  GlobalView* owner_;
+  GlobalTable* owner_;
   IteratorRequest request_;
   IteratorResponse response_;
   int id_;
@@ -79,12 +81,6 @@ private:
   V value_;
   bool done_;
 };
-
-template<class K, class V>
-TypedLocalTable<K, V>::TypedLocalTable(const TableDescriptor &tinfo) : LocalTable(tinfo) {
-  data_.rehash(1);//tinfo.default_shard_size);
-  owner = -1;
-}
 
 template<class K, class V>
 bool TypedLocalTable<K, V>::contains(const K &k) {
@@ -148,8 +144,19 @@ void TypedLocalTable<K, V>::resize(int64_t new_size) {
 
 template<class K, class V>
 void TypedLocalTable<K, V>::start_checkpoint(const string& f) {
-  data_.checkpoint(f);
+  Timer t;
+  LZOFile lz(f, "w");
+  Encoder e(&lz);
+  e.write(data_.size());
+
+  for (typename DataMap::iterator i = data_.begin(); i != data_.end(); ++i) {
+    e.write_string(this->key_to_string(i->first));
+    e.write_string(this->value_to_string(i->second));
+  }
+
+  lz.sync();
   delta_file_ = new RecordFile(f + ".delta", "w");
+  //  LOG(INFO) << "Flushed " << file << " to disk in: " << t.elapsed();
 }
 
 template<class K, class V>
@@ -161,8 +168,19 @@ void TypedLocalTable<K, V>::finish_checkpoint() {
 }
 
 template<class K, class V> void TypedLocalTable<K, V>::restore(const string& f) {
+  LZOFile lz(f, "r");
+  Decoder d(&lz);
+  int size;
+  d.read(&size);
+  data_.clear();
+  data_.rehash(size);
 
-  data_.restore(f);
+  string k, v;
+  for (uint32_t i = 0; i < size; ++i) {
+    d.read_string(&k);
+    d.read_string(&v);
+    data_.put(this->key_from_string(k), this->value_from_string(v));
+  }
 
   // Replay delta log.
   RecordFile rf(f + ".delta", "r");
@@ -223,7 +241,7 @@ int TypedGlobalTable<K, V>::get_shard(const K& k) {
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::get_shard_str(StringPiece k) {
-  return get_shard(key_from_string(k));
+  return get_shard(unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k));
 }
 
 template<class K, class V>
@@ -233,15 +251,6 @@ V TypedGlobalTable<K, V>::get_local(const K& k) {
   CHECK(is_local_shard(shard)) << " non-local for shard: " << shard;
 
   return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->get(k);
-}
-
-template<class K, class V>
-TypedGlobalTable<K, V>::TypedGlobalTable(const TableDescriptor& tinfo) : GlobalTable(tinfo) {
-  for (int i = 0; i < partitions_.size(); ++i) {
-    partitions_[i] = (TypedLocalTable<K, V>*)create_local(i);
-  }
-
-  pending_writes_ = 0;
 }
 
 // Store the given key-value pair in this hash. If 'k' has affinity for a
@@ -304,15 +313,17 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   }
 
   string v_str;
-  get_remote(shard, key_to_string(k), &v_str);
-  return value_from_string(v_str);
+  get_remote(shard,
+             marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
+             &v_str);
+  return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v_str);
 }
 
 template<class K, class V>
 bool TypedGlobalTable<K, V>::contains(const K &k) {
   int shard = this->get_shard(k);
 
-  // If we received a requestfor this shard; but we haven't received all of the
+  // If we received a request for this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
   while (tainted(shard)) {
     this->HandlePutRequests();
@@ -326,7 +337,9 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   }
 
   string v_str;
-  return get_remote(shard, key_to_string(k), &v_str);
+  return get_remote(shard,
+                     marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
+                     &v_str);
 }
 
 template<class K, class V>
@@ -343,7 +356,8 @@ template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
   TableDescriptor linfo = ((GlobalTable*) this)->info();
   linfo.shard = shard;
-  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>(linfo);
+  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>();
+  t->Init(linfo);
   return t;
 }
 
@@ -356,58 +370,6 @@ TypedIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
   }
 }
 
-#define WRAPPER_IMPL(klass)\
-template<class K, class V>\
-bool klass<K, V>::contains_str(const StringPiece& k) {\
-  return contains(key_from_string(k));\
-}\
-template<class K, class V>\
-string klass<K, V>::get_str(const StringPiece &k) {\
-  return value_to_string(get(key_from_string(k)));\
-}\
-template<class K, class V>\
-void klass<K, V>::put_str(const StringPiece &k, const StringPiece &v) {\
-  const K& kt = key_from_string(k);\
-  const V& vt = value_from_string(v);\
-  put(kt, vt);\
-}\
-template<class K, class V>\
-void klass<K, V>::remove_str(const StringPiece &k) {\
-  remove(key_from_string(k));\
-}\
-template<class K, class V>\
-void klass<K, V>::update_str(const StringPiece &k, const StringPiece &v) {\
-  const K& kt = key_from_string(k);\
-  const V& vt = value_from_string(v);\
-  update(kt, vt);\
-}\
-template<class K, class V>\
-string klass<K, V>::key_to_string(const K& t) { \
-  string s;\
-  static_cast<Marshal<K>* >(this->info().key_marshal)->marshal(t, &s);\
-  return s;\
-}\
-template<class K, class V>\
-string klass<K, V>::value_to_string(const V& t) { \
-  string s;\
-  static_cast<Marshal<V>* >(this->info().value_marshal)->marshal(t, &s);\
-  return s;\
-}\
-template<class K, class V>\
-K klass<K, V>::key_from_string(const StringPiece& t) { \
-  K k;\
-  static_cast<Marshal<K>* >(this->info().key_marshal)->unmarshal(t, &k);\
-  return k;\
-}\
-template<class K, class V>\
-V klass<K, V>::value_from_string(const StringPiece& t) { \
-  V v;\
-  static_cast<Marshal<V>* >(this->info().value_marshal)->unmarshal(t, &v);\
-  return v;\
-}
-
-WRAPPER_IMPL(TypedLocalTable);
-WRAPPER_IMPL(TypedGlobalTable);
 }
 
 #endif

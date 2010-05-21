@@ -19,7 +19,7 @@ struct RunDescriptor {
    string kernel;
    string method;
 
-   GlobalView *table;
+   GlobalTable *table;
    CheckpointType checkpoint_type;
    int checkpoint_interval;
 
@@ -36,7 +36,7 @@ struct RunDescriptor {
    RunDescriptor() {}
    RunDescriptor(const string& kernel,
                  const string& method,
-                 GlobalView *table,
+                 GlobalTable *table,
                  CheckpointType c_type=CP_NONE, int c_interval=-1) {
      this->kernel = kernel;
      this->method = method;
@@ -52,14 +52,14 @@ public:
   ~Master();
 
   // N.B.  All run_* methods are blocking.
-  void run_all(const string& kernel, const string& method, GlobalView* locality);
+  void run_all(const string& kernel, const string& method, GlobalTable* locality);
 
   // Run the given kernel function on one (arbitrary) worker node.
-  void run_one(const string& kernel, const string& method, GlobalView* locality);
+  void run_one(const string& kernel, const string& method, GlobalTable* locality);
 
   // Run the kernel function on the given set of shards.
   void run_range(const string& kernel, const string& method,
-                 GlobalView* locality, vector<int> shards);
+                 GlobalTable* locality, vector<int> shards);
 
   void run(RunDescriptor r);
 

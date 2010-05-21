@@ -86,14 +86,15 @@ static ostream & operator<< (ostream &out, const pos& p) {
   out << MP(p.x, p.y, p.z);
   return out;
 }
-}
-  
-namespace dsm { namespace data {
+
+namespace tr1 {
 template <>
-uint32_t hash(pos p) {
-  return p.hash();
+struct hash<pos> {
+  size_t operator()(const pos& k) { return k.hash(); }
+};
 }
-} }
+
+}
 
 namespace dsm {
 template <>

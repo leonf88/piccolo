@@ -22,6 +22,8 @@ public:
   uint32_t hash() const;
   string AsString() const;
 
+  int size() const { return len; }
+
   const char* data;
   int len;
 

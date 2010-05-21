@@ -45,13 +45,15 @@ static ostream & operator<< (ostream &out, const PageId& p) {
   out << MP(p.site, p.page);
   return out;
 }
-}
 
-namespace dsm { namespace data {
-template<>
-  uint32_t hash(PageId p) {
-    return hash(p.site) ^ hash(p.page);
+namespace tr1 {
+template <>
+struct hash<PageId> {
+  hash<uint32_t> h;
+  size_t operator()(PageId p) {
+    return h(p.site) ^ h(p.page);
   }
+};
 }
 }
 
@@ -251,8 +253,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  GlobalView* curr = CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
-  GlobalView* next = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalTable* curr = CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  GlobalTable* next = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
 
   StartWorker(conf);
 

@@ -341,7 +341,7 @@ void Master::flush_checkpoint(const ArgMap& pmap) {
 }
 
 bool Master::restore(ArgMap *args) {
-  vector<string> matches = File::Glob(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
+  vector<string> matches = File::MatchingFilenames(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
     return false;
   }
@@ -372,15 +372,15 @@ bool Master::restore(ArgMap *args) {
   return true;
 }
 
-void Master::run_all(const string& kernel, const string& method, GlobalView* locality) {
+void Master::run_all(const string& kernel, const string& method, GlobalTable* locality) {
   run_range(kernel, method, locality, range(locality->num_shards()));
 }
 
-void Master::run_one(const string& kernel, const string& method, GlobalView* locality) {
+void Master::run_one(const string& kernel, const string& method, GlobalTable* locality) {
   run_range(kernel, method, locality, range(1));
 }
 
-void Master::run_range(const string& kernel, const string& method, GlobalView* locality, vector<int> shards) {
+void Master::run_range(const string& kernel, const string& method, GlobalTable* locality, vector<int> shards) {
   RunDescriptor r(kernel, method, locality);
   r.shards = shards;
   run(r);
@@ -612,7 +612,7 @@ void Master::run(RunDescriptor r) {
 
       for (int i = 0; i < done_msg.shards_size(); ++i) {
         const ShardInfo &si = done_msg.shards(i);
-        tables_[si.table()]->UpdateShardinfo(si);
+        tables_[si.table()]->UpdatePartitions(si);
       }
 
       w.set_finished(task_id);
