@@ -5,6 +5,7 @@
 #include "kernel/table.h"
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
+#include "kernel/disk-table.h"
 
 namespace dsm {
 
@@ -14,19 +15,28 @@ class TableRegistry : private boost::noncopyable {
 private:
   TableRegistry() {}
 public:
-  typedef map<int, GlobalView*> Map;
+  typedef map<int, GlobalTable*> Map;
 
   static TableRegistry* Get();
 
   Map& tables();
-  GlobalView* table(int id);
+  GlobalTable* table(int id);
 
 private:
   Map tmap_;
 };
 
+template <class T>
+static RecordTable<T>* CreateRecordTable(int id, StringPiece file_pattern, bool split_large_files=true) {
+  return NULL;
+}
+
+static TextTable* CreateTextTable(int id, StringPiece file_pattern, bool split_large_files=true) {
+  return NULL;
+}
+
 template<class K, class V>
-TypedGlobalTable<K, V>* CreateTable(int id,
+static TypedGlobalTable<K, V>* CreateTable(int id,
                                       int shards,
                                       Sharder<K>* sharding,
                                       Accumulator<V>* accum) {
@@ -34,7 +44,7 @@ return CreateTable(id, shards, sharding, accum, new Marshal<K>, new Marshal<V>);
 }
 
 template<class K, class V>
-TypedGlobalTable<K, V>* CreateTable(int id,
+static TypedGlobalTable<K, V>* CreateTable(int id,
                                       int shards,
                                       Sharder<K>* sharding,
                                       Accumulator<V>* accum,
@@ -48,7 +58,8 @@ TypedGlobalTable<K, V>* CreateTable(int id,
   info.key_marshal = key_marshal;
   info.value_marshal = value_marshal;
 
-  TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>(info);
+  TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>();
+  t->Init(info);
   TableRegistry::Get()->tables().insert(make_pair(id, t));
   return t;
 }

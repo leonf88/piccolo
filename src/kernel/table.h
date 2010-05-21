@@ -46,6 +46,12 @@ struct Marshal<google::protobuf::Message> {
   void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
 };
 
+template <class T>
+string marshal(Marshal<T>* m, const T& t) { string out; m->marshal(t, &out); return out; }
+
+template <class T>
+T unmarshal(Marshal<T>* m, const StringPiece& s) { T out; m->unmarshal(s, &out); return out; }
+
 
 #ifndef SWIG
 // Commonly used accumulation operators.
@@ -116,10 +122,10 @@ struct TypedIterator : public Table_Iterator {
 };
 
 // Methods common to both global table views and local shards
-class TableView {
+class Table {
 public:
   typedef Table_Iterator Iterator;
-  TableView(const TableDescriptor& info) : info_(info) {}
+  void Init(const TableDescriptor& info) { info_ = info; }
 
   const TableDescriptor& info() const { return info_; }
   void set_info(const TableDescriptor& t) { info_ = t; }
@@ -140,18 +146,16 @@ public:
   virtual void restore(const string& f) = 0;
 };
 
-
-// Wrapper to add string methods based on key/value typed methods.
-#define WRAPPER_FUNCTION_DECL \
-bool contains_str(const StringPiece& k);\
-string get_str(const StringPiece &k);\
-void put_str(const StringPiece &k, const StringPiece &v);\
-void remove_str(const StringPiece &k);\
-void update_str(const StringPiece &k, const StringPiece &v);\
-string key_to_string(const K& t);\
-string value_to_string(const V& t);\
-K key_from_string(const StringPiece& t);\
-V value_from_string(const StringPiece& t);
+// Methods for manipulating table entries as opaque byte arrays.
+class UntypedTable {
+public:
+  virtual bool contains_str(const StringPiece& k) = 0;
+  virtual string get_str(const StringPiece &k) = 0;
+  virtual void put_str(const StringPiece &k, const StringPiece &v) = 0;
+  virtual void remove_str(const StringPiece &k) = 0;
+  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+};
 
 }
+
 #endif

@@ -16,7 +16,7 @@ TableRegistry::Map& TableRegistry::tables() {
   return tmap_;
 }
 
-GlobalView* TableRegistry::table(int id) {
+GlobalTable* TableRegistry::table(int id) {
   CHECK(tmap_.find(id) != tmap_.end());
   return tmap_[id];
 }

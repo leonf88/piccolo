@@ -1,8 +1,7 @@
+#include "util/common.h"
 #include "util/hashmap.h"
 #include "util/static-initializers.h"
 #include <gflags/gflags.h>
-
-#include <tr1/unordered_map>
 
 using std::tr1::unordered_map;
 using namespace dsm;
@@ -42,10 +41,12 @@ static void TestHashMap() {
   TEST_PERF(HashGet, h.get(source[i]));
   TEST_PERF(STLHashPut, umap[source[i]] = i);
   TEST_PERF(ArrayPut, array_test[source[i]] = i);
-  TEST_PERF(ArrayPut, array_test[data::hash<int>(i) % FLAGS_test_table_size] = i);
+
+  std::tr1::hash<int> hasher;
+  TEST_PERF(ArrayPut, array_test[hasher(i) % FLAGS_test_table_size] = i);
 
   optimizer_hack = 0;
-  TEST_PERF(ArrayPut, optimizer_hack += array_test[data::hash<int>(i) % FLAGS_test_table_size]);
+  TEST_PERF(ArrayPut, optimizer_hack += array_test[hasher(i) % FLAGS_test_table_size]);
 }
 
 REGISTER_TEST(HashMap, TestHashMap());

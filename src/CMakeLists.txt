@@ -1,8 +1,9 @@
 cmake_minimum_required (VERSION 2.6) 
+cmake_policy(SET CMP0014 OLD)
+
 project (PICCOLO) 
 
 set(ENV{LANG} "C")
-#cmake_policy(SET CMP0014 OLD)
 
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
 find_package(ProtoBuf REQUIRED)
@@ -33,6 +34,8 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
 SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 link_directories( /home/power/share/lib )
+
+include_directories( ${PICCOLO_SOURCE_DIR}/external/libunwind/include )
 
 add_subdirectory (external/google-flags)
 add_subdirectory (external/google-logging)

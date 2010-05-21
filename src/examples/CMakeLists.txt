@@ -2,7 +2,8 @@ set(MPILIBS mpi_cxx mpi open-rte open-pal)
 set(STATICLIBS protobuf boost_thread-mt util)
 set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
-protobuf_generate_cpp( EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
+protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
+add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
 
 add_library(example 
             k-means.cc 
@@ -14,7 +15,9 @@ add_library(example
             test-tables.cc
             nas/isort.cc 
             nas/n-body.cc
-            ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC})
+            ${EXAMPLE_PB_HDR} 
+            ${EXAMPLE_PB_SRC})
+            
 add_dependencies(example worker_proto common_proto)
 add_executable(example-dsm example-main.cc)
 
@@ -51,7 +54,7 @@ ADD_CUSTOM_COMMAND(
  ${include_flag}
  -o ${swig_out}
  ${CMAKE_CURRENT_SOURCE_DIR}/python_support.swig
- DEPENDS python_support.swig worker master common kernel)
+ DEPENDS python_support.swig worker master common kernel ${EXAMPLE_PB_SRC})
  
 ADD_CUSTOM_COMMAND(
   OUTPUT _piccolo.so

@@ -47,7 +47,7 @@ Worker::Worker(const ConfigData &c) {
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
-  return TableRegistry::Get()->tables()[table]->get_owner(shard);
+  return TableRegistry::Get()->tables()[table]->owner(shard);
 }
 
 void Worker::Run() {
@@ -132,7 +132,7 @@ void Worker::KernelLoop() {
     kd.mutable_kernel()->CopyFrom(kreq);
     TableRegistry::Map &tmap = TableRegistry::Get()->tables();
     for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-      GlobalView* t = i->second;
+      GlobalTable* t = i->second;
       for (int j = 0; j < t->num_shards(); ++j) {
         if (t->is_local_shard(j)) {
           ShardInfo *si = kd.add_shards();
@@ -167,7 +167,7 @@ void Worker::CheckNetwork() {
   HandlePutRequests();
 
   // Flush any tables we no longer own.
-  for (set<GlobalView*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
+  for (set<GlobalTable*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
     (*i)->SendUpdates();
   }
 
@@ -239,7 +239,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_chec
   for (int i = 0; i < to_checkpoint.size(); ++i) {
     LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch)
         << " : " << to_checkpoint[i];
-    GlobalView* table = t[to_checkpoint[i]];
+    GlobalTable* table = t[to_checkpoint[i]];
     table->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                                      FLAGS_checkpoint_write_dir.c_str(),
                                      epoch_, to_checkpoint[i]));
@@ -276,7 +276,7 @@ void Worker::FinishCheckpoint() {
   }
 
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-     GlobalView* t = i->second;
+     GlobalTable* t = i->second;
      t->finish_checkpoint();
   }
 
@@ -291,7 +291,7 @@ void Worker::Restore(int epoch) {
 
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-    GlobalView* t = i->second;
+    GlobalTable* t = i->second;
     t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table_%d",
                             FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
   }
@@ -314,7 +314,7 @@ void Worker::HandlePutRequests() {
     stats_.set_put_in(stats_.put_in() + 1);
     stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
 
-    GlobalView *t = TableRegistry::Get()->table(put.table());
+    GlobalTable *t = TableRegistry::Get()->table(put.table());
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
@@ -325,7 +325,7 @@ void Worker::HandlePutRequests() {
 
     if (put.done() && t->tainted(put.shard())) {
       VLOG(1) << "Clearing taint on: " << MP(put.table(), put.shard());
-      t->clear_tainted(put.shard());
+      t->get_partition_info(put.shard())->tainted = false;
     }
   }
 }
@@ -348,7 +348,7 @@ void Worker::HandleGetRequests() {
     get_resp.set_epoch(epoch_);
 
     {
-      GlobalView * t = TableRegistry::Get()->table(get_req.table());
+      GlobalTable * t = TableRegistry::Get()->table(get_req.table());
       t->handle_get(get_req, &get_resp);
     }
 
@@ -362,7 +362,7 @@ void Worker::HandleGetRequests() {
     int table = iterator_req.table();
     int shard = iterator_req.shard();
 
-    GlobalView * t = TableRegistry::Get()->table(table);
+    GlobalTable * t = TableRegistry::Get()->table(table);
     Table_Iterator* it = NULL;
     if (iterator_req.id() == -1) {
       it = t->get_iterator(shard);
@@ -388,9 +388,10 @@ void Worker::HandleGetRequests() {
   while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {
       const ShardAssignment &a = shard_req.assign(i);
-      GlobalView *t = TableRegistry::Get()->table(a.table());
-      int old_owner = t->get_owner(a.shard());
-      t->set_owner(a.shard(), a.new_worker());
+      GlobalTable *t = TableRegistry::Get()->table(a.table());
+      int old_owner = t->owner(a.shard());
+      t->get_partition_info(a.shard())->owner = a.new_worker();
+
 //      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
@@ -400,12 +401,12 @@ void Worker::HandleGetRequests() {
         // from the old owner.
         if (old_owner != -1) {
           LOG(INFO) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
-          t->set_tainted(a.shard());
+          t->get_partition_info(a.shard())->tainted = true;
         }
       } else if (old_owner == id() && a.new_worker() != id()) {
         VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
         // A new worker has taken ownership of this shard.  Flush our data out.
-        t->set_dirty(a.shard());
+        t->get_partition_info(a.shard())->dirty = true;
         dirty_tables_.insert(t);
       }
     }

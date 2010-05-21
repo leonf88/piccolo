@@ -14,31 +14,39 @@
 #include "table.h"
 #include "global-table.h"
 
-namespace dsm {
-class DiskTable : public GlobalView {
-public:
-  DiskTable(StringPiece filepattern);
+namespace google { namespace protobuf { class Message; } }
 
-  virtual TableView::Iterator *get_iterator(int shard) = 0;
+namespace dsm {
+
+class DiskTable : public GlobalTable {
+public:
+  class Partition;
+
+  DiskTable(StringPiece filepattern, uint64_t split_files_at);
 
   int64_t shard_size(int shard);
   void UpdateShardinfo(const ShardInfo & sinfo);
-private:
-  HashMap<int, int> owner_map_;
+protected:
+  vector<Partition*> partitions_;
 };
 
-template<class T>
+TypedIterator<uint64_t, google::protobuf::Message*>*
+  CreateRecordIterator(DiskTable::Partition info, google::protobuf::Message* msg);
+
+template <class MessageClass>
 class RecordTable : public DiskTable, private boost::noncopyable {
 public:
-  TypedIterator<string, T*> *get_iterator(int shard);
+  RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
+  TypedIterator<uint64_t, google::protobuf::Message*> *get_iterator(int shard) {
+    return CreateRecordIterator(partitions_[shard], new MessageClass);
+  }
 private:
-
 };
 
 class TextTable : public DiskTable, private boost::noncopyable {
 public:
-  TypedIterator<int, string> *get_iterator(int shard);
-
+  TextTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
+  TypedIterator<uint64_t, string> *get_iterator(int shard);
 };
 }
 

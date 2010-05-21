@@ -10,10 +10,11 @@
 #include <string>
 #include <list>
 #include <set>
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "glog/logging.h"
 #include "google/gflags.h"
@@ -23,10 +24,27 @@
 #include "util/static-initializers.h"
 #include "util/stringpiece.h"
 #include "util/timer.h"
+#include "util/hashmap.h"
 
-using std::tr1::unordered_map;
-using std::tr1::unordered_multimap;
-using std::tr1::unordered_set;
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+
+namespace std { namespace tr1 {
+template <>
+struct hash<dsm::StringPiece> {
+  size_t operator()(const dsm::StringPiece& k) { return k.hash(); }
+};
+
+template <class A, class B>
+struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
+  hash<A> ha;
+  hash<B> hb;
+
+  size_t operator()(const pair<A, B> & k) const {
+    return ha(k.a) ^ hb(k.b);
+  }
+};
+} }
 
 using std::set;
 using std::map;
@@ -38,6 +56,8 @@ using std::pair;
 using std::make_pair;
 using std::min;
 using std::max;
+using std::tr1::unordered_map;
+using std::tr1::unordered_set;
 
 namespace dsm {
 
@@ -67,8 +87,8 @@ private:
 
   int count;
   vector<int> buckets;
-  static const double kMinVal = 1e-9;
-  static const double kLogBase = 1.1;
+  static const double kMinVal;
+  static const double kLogBase;
 };
 
 class SpinLock {
@@ -177,26 +197,6 @@ static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
 }
 }
 #endif
-
-
-namespace std {  namespace tr1 {
-template <>
-struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {
-  size_t operator()(const dsm::StringPiece& k) const {
-    return k.hash();
-  }
-};
-
-template <class A, class B>
-struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
-  hash<A> ha;
-  hash<B> hb;
-
-  size_t operator()(const pair<A, B> & k) const {
-    return ha(k.a) ^ hb(k.b);
-  }
-};
-}}
 
 #define COMPILE_ASSERT(x) extern int __dummy[(int)x]
 

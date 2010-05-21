@@ -7,6 +7,12 @@
 #include <lzo/lzo1x.h>
 
 #include <stdio.h>
+#include <glob.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 
 namespace google { namespace protobuf { class Message; } }
 
@@ -35,10 +41,17 @@ public:
     return out;
   }
 
+  struct Info {
+    string name;
+    struct stat stat;
+  };
+
   static string Slurp(const string& file);
   static void Dump(const string& file, StringPiece data);
   static void Mkdirs(const string& path);
-  static vector<string> Glob(const string& dir);
+  static vector<string> MatchingFilenames(StringPiece glob);
+  static vector<Info> MatchingFileinfo(StringPiece glob);
+
   static bool Exists(const string& path);
   static void Move(const string& src, const string&dst);
 private:
@@ -84,7 +97,7 @@ public:
   template <class T>
   void write(const T& v);
 
-  void write_string(const string& v);
+  void write_string(StringPiece v);
   void write_bytes(StringPiece s);
   void write_bytes(const char *a, int len);
 
@@ -231,7 +244,7 @@ public:
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
-  typedef unordered_map<string, string> AttrMap;
+  typedef HashMap<string, string> AttrMap;
   AttrMap attributes;
 
   virtual void write(const google::protobuf::Message &m);
@@ -240,6 +253,12 @@ public:
 
   bool eof() { return fp->eof(); }
   void sync() { fp->sync(); }
+
+  void seek(uint64_t pos) {
+    while (fp->tell() < pos) {
+      read(NULL);
+    }
+  }
 
   File *fp;
 private:

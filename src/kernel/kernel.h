@@ -189,5 +189,6 @@ struct RunnerRegistrationHelper {
 
 #define REGISTER_RUNNER(r)\
   static RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
+
 }
 #endif /* KERNELREGISTRY_H_ */

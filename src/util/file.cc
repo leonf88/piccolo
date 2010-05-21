@@ -8,15 +8,26 @@ namespace dsm {
 
 static const int kFileBufferSize = 4 * 1024 * 1024;
 
-vector<string> File::Glob(const string& pattern) {
+vector<string> File::MatchingFilenames(StringPiece pattern) {
   glob_t globbuf;
   globbuf.gl_offs = 0;
-  glob(pattern.c_str(), 0, NULL, &globbuf);
+  glob(pattern.AsString().c_str(), 0, NULL, &globbuf);
   vector<string> out;
   for (int i = 0; i < globbuf.gl_pathc; ++i) {
     out.push_back(globbuf.gl_pathv[i]);
   }
   globfree(&globbuf);
+  return out;
+}
+
+vector<File::Info> File::MatchingFileinfo(StringPiece glob) {
+  vector<string> names = MatchingFilenames(glob);
+  vector<File::Info> out(names.size());
+  for (int i = 0; i < names.size(); ++i) {
+    out[i].name = names[i];
+    stat(names[i].c_str(), &out[i].stat);
+  }
+
   return out;
 }
 
@@ -115,13 +126,22 @@ void Encoder::write(const T& v) {
 }
 
 #define INSTANTIATE(T) template void Encoder::write<T>(const T& t)
+INSTANTIATE(int32_t);
+INSTANTIATE(int64_t);
 INSTANTIATE(double);
 INSTANTIATE(uint64_t);
 INSTANTIATE(uint32_t);
 INSTANTIATE(float);
 #undef INSTANTIATE
 
-void Encoder::write_string(const string& v) {
+template <>
+void Encoder::write(const string& v) { write_string(v); }
+
+template <>
+void Encoder::write(const StringPiece& v) { write_string(v); }
+
+
+void Encoder::write_string(StringPiece v) {
   write((uint32_t)v.size());
   write_bytes(v);
 }

@@ -6,7 +6,7 @@ static const int kMaxNetworkPending = 1 << 26;
 
 namespace dsm {
 
-static void SerializePartial(HashPut& r, TableView::Iterator *it) {
+static void SerializePartial(HashPut& r, Table::Iterator *it) {
   int bytes_used = 0;
   HashPutCoder h(&r);
   string k, v;
@@ -20,17 +20,7 @@ static void SerializePartial(HashPut& r, TableView::Iterator *it) {
   r.set_done(it->done());
 }
 
-void GlobalView::set_dirty(int shard) { partinfo_[shard].dirty = true; }
-bool GlobalView::dirty(int shard) { return partinfo_[shard].dirty; }
-
-void GlobalView::set_tainted(int shard) { partinfo_[shard].tainted = true; }
-void GlobalView::clear_tainted(int shard) { partinfo_[shard].tainted = false; }
-bool GlobalView::tainted(int shard) { return partinfo_[shard].tainted; }
-
-void GlobalView::set_owner(int shard, int worker) { partinfo_[shard].owner = worker; }
-int GlobalView::get_owner(int shard) { return partinfo_[shard].owner; }
-
-void GlobalView::UpdateShardinfo(const ShardInfo& info) {
+void GlobalTable::UpdatePartitions(const ShardInfo& info) {
   partinfo_[info.shard()].sinfo.CopyFrom(info);
 }
 
@@ -49,16 +39,18 @@ Table_Iterator* GlobalTable::get_iterator(int shard) {
 }
 
 bool GlobalTable::is_local_shard(int shard) {
-  return get_owner(shard) == worker_id_;
+  return owner(shard) == worker_id_;
 }
 
 bool GlobalTable::is_local_key(const StringPiece &k) {
   return is_local_shard(get_shard_str(k));
 }
 
-GlobalTable::GlobalTable(const dsm::TableDescriptor &info) : GlobalView(info) {
+void GlobalTable::Init(const dsm::TableDescriptor &info) {
+  Table::Init(info);
   worker_id_ = -1;
   partitions_.resize(info.num_shards);
+  partinfo_.resize(info.num_shards);
 }
 
 int64_t GlobalTable::shard_size(int shard) {
@@ -194,10 +186,10 @@ void GlobalTable::SendUpdates() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
-    if (!is_local_shard(i) && (dirty(i) || !t->empty())) {
-      VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << get_owner(i);
+    if (!is_local_shard(i) && (get_partition_info(i)->dirty || !t->empty())) {
+      VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i);
 
-      TableView::Iterator *it = t->get_iterator();
+      Table::Iterator *it = t->get_iterator();
 
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.
@@ -209,7 +201,7 @@ void GlobalTable::SendUpdates() {
         put.set_epoch(w_->epoch());
 
         SerializePartial(put, it);
-        NetworkThread::Get()->Send(get_owner(i) + 1, MTYPE_PUT_REQUEST, put);
+        NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
       } while(!it->done());
       delete it;
 
@@ -240,7 +232,7 @@ void GlobalTable::ApplyUpdates(const dsm::HashPut& req) {
   if (!is_local_shard(req.shard())) {
     LOG_EVERY_N(INFO, 1000)
         << "Forwarding push request from: " << MP(id(), req.shard())
-        << " to " << get_owner(req.shard());
+        << " to " << owner(req.shard());
   }
 
   partitions_[req.shard()]->ApplyUpdates(req);

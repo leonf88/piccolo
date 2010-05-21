@@ -6,36 +6,11 @@
 namespace dsm {
 class LocalTable;
 
-class GlobalView : public TableView, public Checkpointable {
+class GlobalTable  : public Table,  public UntypedTable {
 public:
-  GlobalView(const TableDescriptor& info) : TableView(info) {
-    partinfo_.resize(num_shards());
-  }
+  void Init(const TableDescriptor& tinfo);
+  virtual ~GlobalTable();
 
-  void clear_tainted(int shard);
-  void set_tainted(int shard);
-  bool tainted(int shard);
-  bool dirty(int shard);
-  void set_dirty(int shard);
-  void set_owner(int shard, int worker);
-  int get_owner(int shard);
-  void UpdateShardinfo(const ShardInfo& sinfo);
-
-  virtual TableView::Iterator* get_iterator(int shard) = 0;
-  virtual int64_t shard_size(int shard) = 0;
-  virtual int pending_write_bytes() = 0;
-
-  virtual void ApplyUpdates(const HashPut& req) = 0;
-  virtual void SendUpdates() = 0;
-  virtual void HandlePutRequests() = 0;
-
-  virtual int get_shard_str(StringPiece k) = 0;
-  virtual bool is_local_shard(int shard) = 0;
-  virtual void handle_get(const HashGet& req, HashPut* resp) = 0;
-  virtual void set_worker(Worker* w) = 0;
-
-
-protected:
   struct PartitionInfo {
     PartitionInfo() : dirty(false), tainted(false), owner(-1) {}
     bool dirty;
@@ -44,25 +19,27 @@ protected:
     ShardInfo sinfo;
   };
 
-  vector<PartitionInfo> partinfo_;
-};
+  virtual PartitionInfo* get_partition_info(int shard) {
+    return &partinfo_[shard];
+  }
 
-class GlobalTable : public GlobalView {
-public:
-  GlobalTable(const TableDescriptor& tinfo);
-  virtual ~GlobalTable();
+  bool tainted(int shard) { return get_partition_info(shard)->tainted; }
+  bool owner(int shard) { return get_partition_info(shard)->owner; }
 
   LocalTable *get_partition(int shard);
-  Table_Iterator* get_iterator(int shard);
+  virtual Table_Iterator* get_iterator(int shard);
+
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
 
   // Fill in a response from a remote worker for the given key.
   void handle_get(const HashGet& req, HashPut* resp);
 
-  // Transmit any buffered update data to remote peers.
+  // Handle updates from the master or other workers.
   void SendUpdates();
   void ApplyUpdates(const HashPut& req);
+  void HandlePutRequests();
+  void UpdatePartitions(const ShardInfo& sinfo);
 
   int pending_write_bytes();
 
@@ -72,17 +49,18 @@ public:
   bool empty();
   void resize(int64_t new_size);
 
-  void start_checkpoint(const string& f);
-  void write_delta(const HashPut& d);
-  void finish_checkpoint();
-  void restore(const string& f);
+  virtual void start_checkpoint(const string& f);
+  virtual void write_delta(const HashPut& d);
+  virtual void finish_checkpoint();
+  virtual void restore(const string& f);
 
   int64_t shard_size(int shard);
 
   virtual int get_shard_str(StringPiece k) = 0;
 
-  void HandlePutRequests();
 protected:
+  vector<PartitionInfo> partinfo_;
+
   virtual LocalTable* create_local(int shard) = 0;
   boost::recursive_mutex& mutex() { return m_; }
   vector<LocalTable*> partitions_;
@@ -104,11 +82,21 @@ protected:
   bool get_remote(int shard, const StringPiece &k, string* v);
 };
 
+template <class K, class V>
+class TypedLocalTable;
 
 template <class K, class V>
 class TypedGlobalTable : public GlobalTable, private boost::noncopyable {
 public:
-  TypedGlobalTable(const TableDescriptor& tinfo);
+  void Init(const TableDescriptor &tinfo) {
+    GlobalTable::Init(tinfo);
+    for (int i = 0; i < partitions_.size(); ++i) {
+      partitions_[i] = (TypedLocalTable<K, V>*)create_local(i);
+    }
+
+    pending_writes_ = 0;
+  }
+
   int get_shard(const K& k);
   int get_shard_str(StringPiece k);
   V get_local(const K& k);
@@ -126,10 +114,22 @@ public:
   Table_Iterator* get_iterator(int shard);
   TypedIterator<K, V>* get_typed_iterator(int shard);
 
-  WRAPPER_FUNCTION_DECL;
+  K key_from_string(StringPiece k) { return unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k); }
+  V value_from_string(StringPiece v) { return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v); }
+  string key_to_string(const K& k) { return marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k); }
+  string value_to_string(const V& v) { return marshal(static_cast<Marshal<V>* >(this->info().value_marshal), v); }
+
+  // String wrappers
+  bool contains_str(const StringPiece& k) { return contains(key_from_string(k)); }
+  string get_str(const StringPiece &k) { return value_to_string(get(key_from_string(k))); }
+  void put_str(const StringPiece &k, const StringPiece &v) { return put(key_from_string(k), value_from_string(v)); }
+  void remove_str(const StringPiece &k) { remove(key_from_string(k)); }
+  void update_str(const StringPiece &k, const StringPiece &v) { return update(key_from_string(k), value_from_string(v)); }
+
 protected:
   LocalTable* create_local(int shard);
 };
-}
+
+};
 
 #endif /* GLOBALTABLE_H_ */

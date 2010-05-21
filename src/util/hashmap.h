@@ -1,33 +1,19 @@
 #ifndef HASHMAP_H_
 #define HASHMAP_H_
 
-#include "util/common.h"
-#include "util/file.h"
 #include "util/hash.h"
+
 #include <boost/noncopyable.hpp>
-#include <tr1/type_traits>
+#include <vector>
+#include <algorithm>
+#include <string>
+#include <tr1/unordered_map>
+#include "glog/logging.h"
+#include "google/gflags.h"
 
 namespace dsm {
 
-namespace data {
-template <class K>
-static uint32_t hash(K k) {
-  k = (k ^ 61) ^ (k >> 16);
-  k = k + (k << 3);
-  k = k ^ (k >> 4);
-  k = k * 0x27d4eb2d;
-  return k ^ (k >> 15);
-}
-
-template<>
-uint32_t hash(string s) {
-  return SuperFastHash(s.data(), s.size());
-}
-
-} }
-
-
-namespace dsm {
+static const double kLoadFactor = 0.8;
 
 template <class K, class V>
 class HashMap : private boost::noncopyable {
@@ -86,17 +72,15 @@ public:
   }
 
   void erase(iterator pos) {
-    pos.in_use = false;
+    pos->in_use = false;
     --entries_;
   }
 
-  void checkpoint(const string& file);
-  void restore(const string& file);
+  void checkpoint(const std::string& file);
+  void restore(const std::string& file);
 private:
-  static const double kLoadFactor = 0.8;
-
   uint32_t bucket_idx(K k) {
-    return dsm::data::hash<K>(k) % size_;
+    return hashobj_(k) % size_;
   }
 
   int bucket_for_key(const K& k) {
@@ -126,11 +110,13 @@ private:
   };
 #pragma pack(pop)
 
-  vector<Bucket> buckets_;
+  std::vector<Bucket> buckets_;
 
   uint32_t entries_;
   uint32_t size_;
   iterator *end_;
+
+  std::tr1::hash<K> hashobj_;
 };
 
 template <class K, class V>
@@ -168,9 +154,9 @@ void HashMap<K, V>::rehash(uint32_t size) {
   if (size_ == size)
     return;
 
-  size = max(size_, size);
+  size = std::max(size_, size);
 
-  vector<Bucket> old_b = buckets_;
+  std::vector<Bucket> old_b = buckets_;
 
   int old_entries = entries_;
 
@@ -249,43 +235,5 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
 
   return buckets_[b].v;
 }
-
-template <class K, class V>
-void HashMap<K, V>::checkpoint(const string& file) {
-  Timer t;
-
-  LZOFile f(file, "w");
-  Encoder e(&f);
-  e.write(size_);
-  e.write(entries_);
-
-  for (uint32_t i = 0; i < size_; ++i) {
-    if (buckets_[i].in_use) {
-      e.write(i);
-      e.write_bytes((char*)&buckets_[i], sizeof(Bucket));
-    }
-  }
-
-  f.sync();
-//  LOG(INFO) << "Flushed " << file << " to disk in: " << t.elapsed();
-}
-
-template <class K, class V>
-void HashMap<K, V>::restore(const string& file) {
-  LZOFile f(file, "r");
-  Decoder d(&f);
-  d.read(&size_);
-  d.read(&entries_);
-
-  buckets_.resize(size_);
-
-  for (uint32_t i = 0; i < entries_; ++i) {
-    uint32_t idx;
-    d.read(&idx);
-    buckets_[idx].in_use = 1;
-    d.read_bytes((char*)&buckets_[idx], sizeof(Bucket));
-  }
-}
-
 }
 #endif /* HASHMAP_H_ */

@@ -1,5 +1,6 @@
 #include "util/static-initializers.h"
-#include <tr1/unordered_map>
+#include "util/hashmap.h"
+
 #include <stdio.h>
 #include <gflags/gflags.h>
 
@@ -8,8 +9,8 @@ using namespace std;
 using namespace std::tr1;
 namespace dsm {
 
-typedef unordered_map<string, StaticInitHelper*> HelperMap;
-typedef unordered_map<string, StaticTestHelper*> TestMap;
+typedef HashMap<string, StaticInitHelper*> HelperMap;
+typedef HashMap<string, StaticTestHelper*> TestMap;
 
 HelperMap* helpers() {
   static HelperMap* h = NULL;
@@ -24,11 +25,11 @@ TestMap* tests() {
 }
 
 StaticInitHelper::StaticInitHelper(const string& name) {
-  helpers()->insert(make_pair(name, this));
+  helpers()->put(name, this);
 }
 
 StaticTestHelper::StaticTestHelper(const string& name) {
-  tests()->insert(make_pair(name, this));
+  tests()->put(name, this);
 }
 
 void RunInitializers() {
