@@ -2,14 +2,8 @@
 #define COMMON_H_
 
 #include <time.h>
-
-#include <cstdarg>
-#include <map>
 #include <vector>
-#include <deque>
 #include <string>
-#include <list>
-#include <set>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -46,16 +40,11 @@ struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
 };
 } }
 
-using std::set;
 using std::map;
 using std::vector;
-using std::deque;
-using std::list;
 using std::string;
 using std::pair;
 using std::make_pair;
-using std::min;
-using std::max;
 using std::tr1::unordered_map;
 using std::tr1::unordered_set;
 

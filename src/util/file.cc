@@ -75,11 +75,12 @@ void File::Move(const string& src, const string&dst) {
   PCHECK(rename(src.c_str(), dst.c_str()) == 0);
 }
 
-bool LocalFile::readLine(string *out) {
+bool LocalFile::read_line(string *out) {
+  out->clear();
   out->resize(8192);
   char* res = fgets(&(*out)[0], out->size(), fp);
   out->resize(strlen(out->data()));
-  return res == NULL;
+  return res != NULL;
 }
 
 int LocalFile::read(char *buffer, int len) {
@@ -93,7 +94,7 @@ int LocalFile::write(const char *buffer, int len) {
 void LocalFile::Printf(const char* p, ...) {
   va_list args;
   va_start(args, p);
-  writeString(VStringPrintf(p, args));
+  write_string(VStringPrintf(p, args));
   va_end(args);
 }
 

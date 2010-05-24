@@ -1,76 +1,40 @@
-/*
- * wordcount.cpp
- *
- *  Created on: May 19, 2010
- *      Author: yavcular
- */
-
 #include "client.h"
 
 using namespace std;
 using namespace dsm;
 
-static TypedGlobalTable<string, int>* wcount;
-class WordcountKernel: public DSMKernel {
+DEFINE_string(book_source, "/home/yavcular/books/520.txt", "");
 
+static TextTable* books;
+static TypedGlobalTable<string, int>* counts;
+
+class WordcountKernel: public DSMKernel {
 public:
   void InitKernel() {
-    wcount = this->get_table<string, int> (0);
-  }
-
-  LocalFile* get_reader() {
-    string file = StringPrintf("/home/yavcular/books/520.txt");
-    //FILE* lzo = popen(StringPrintf("lzop -d -c %s", file.c_str()).c_str(), "r");
-    //RecordFile * r = new RecordFile(lzo, "r");
-    return new LocalFile(file, "r");
-  }
-
-  void free_reader(LocalFile* r) {
-    //pclose(r->fp.filePointer());
-    delete r;
+    counts = this->get_table<string, int> (0);
   }
 
   void runWordcount() {
-    printf("in runWordCOunt!\n");
-    string w;
-    Timer t;
-
-    LocalFile *r = get_reader();
-
     int linec = 0, wordc = 0;
-    while (!r->readLine(&w)) {
-      linec++;
-      char warr[w.length()];
-      for (int i = 0; i < w.length(); i++)
-        warr[i] = w[i];
-
-      char * split;
-      split = strtok(warr, " 	");
-      while (split != NULL) {
-        wordc++;
-        wcount->update(split, 1);
-        split = strtok(NULL, " 	");
+    TextTable::Iterator *i = books->get_iterator(current_shard());
+    for (; !i->done(); i->Next(), ++linec) {
+      vector<StringPiece> words = StringPiece::split(i->value(), " ");
+      wordc += words.size();
+      for (int j = 0; j < words.size(); ++j) {
+        words[j].strip();
+        counts->update(words[j].AsString(), 1);
       }
     }
-    printf("%d lines %d words\n", linec, wordc);
+    LOG(INFO) << "Done: " << linec << "; " << wordc;
+  }
 
-    printf("------------HOPP2\n");
-    free_reader(r);
-    printf("------------HOPP3\n");
-    TypedIterator<string, int> *it =
-        wcount->get_typed_iterator(current_shard());
-    printf("------------HOPP4\n");
+  void printResults() {
+    TypedIterator<string, int> *it = counts->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       if (it->value() > 50) {
-        printf("%s", ((string) it->key()).c_str());
-        printf(":%d\n", (int) it->value());
+        printf("%20s : %d\n", it->key().c_str(), it->value());
       }
     }
-    printf("------------HOPP5\n");
-
-    char host[1024];
-    gethostname(host, 1024);
-    VLOG(1)<< "Finished shard " << current_shard() << " on " << host << " in " <<t.elapsed();
   }
 };
 
@@ -79,20 +43,20 @@ public:
 //why GlobakView in pagerank ? what is the difference ?
 //so main fuc runs on all the machines, how do I partition the table | how they read the data
 
-REGISTER_KERNEL(WordcountKernel) ;
-REGISTER_METHOD(WordcountKernel, InitKernel) ;
-REGISTER_METHOD(WordcountKernel, runWordcount) ;
+REGISTER_KERNEL(WordcountKernel);
+REGISTER_METHOD(WordcountKernel, runWordcount);
+REGISTER_METHOD(WordcountKernel, printResults);
 
 static int WordCount(ConfigData& conf) {
-
   conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
-  wcount = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
+  counts = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
+  books = CreateTextTable(1, FLAGS_book_source, false);
+
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("WordcountKernel", "InitKernel", wcount);
-    m.run_all("WordcountKernel", "runWordcount", wcount);
+    m.run_all("WordcountKernel", "runWordcount", books);
+    m.run_all("WordcountKernel", "printResults", books);
   }
   return 0;
 }
-REGISTER_RUNNER(WordCount)
-;
+REGISTER_RUNNER(WordCount);

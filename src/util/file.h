@@ -22,14 +22,14 @@ class File {
 public:
   virtual ~File() {}
   virtual int read(char *buffer, int len) = 0;
-  virtual bool readLine(string *out) = 0;
+  virtual bool read_line(string *out) = 0;
   virtual bool eof() = 0;
   virtual void seek(int64_t pos) = 0;
   virtual uint64_t tell() = 0;
   virtual const char* name() { return ""; }
   virtual void sync() = 0;
 
-  int writeString(const string& buffer) {
+  int write_string(const string& buffer) {
     return write(buffer.data(), buffer.size());
   }
 
@@ -37,7 +37,7 @@ public:
 
   string readLine() {
     string out;
-    readLine(&out);
+    read_line(&out);
     return out;
   }
 
@@ -70,7 +70,7 @@ public:
 
   void sync() { fsync(fileno(fp)); }
 
-  bool readLine(string *out);
+  bool read_line(string *out);
   int read(char *buffer, int len);
   int write(const char* buffer, int len);
   void seek(int64_t pos) { fseek(fp, pos, SEEK_SET); }
@@ -185,7 +185,7 @@ public:
     delete f_;
   }
 
-  bool readLine(string *out) {
+  bool read_line(string *out) {
     LOG(FATAL) << "Not implemented";
   }
 

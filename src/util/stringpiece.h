@@ -15,10 +15,15 @@ using std::string;
 class StringPiece {
 public:
   StringPiece();
+  StringPiece(const StringPiece& s);
   StringPiece(const string& s);
   StringPiece(const string& s, int len);
   StringPiece(const char* c);
   StringPiece(const char* c, int len);
+
+  // Remove whitespace from either side
+  void strip();
+
   uint32_t hash() const;
   string AsString() const;
 

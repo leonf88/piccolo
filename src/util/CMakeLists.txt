@@ -3,7 +3,7 @@ add_custom_target(common_proto DEPENDS ${COMMON_PB_HDR})
 add_library(common
             common.cc 
             file.cc 
-            string.cc
+            stringpiece.cc
             rpc.cc 
             static-initializers.cc 
             hashmap.cc 

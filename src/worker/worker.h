@@ -79,7 +79,7 @@ private:
   vector<Stub*> peers_;
 
   NetworkThread *network_;
-  set<GlobalTable*> dirty_tables_;
+  unordered_set<GlobalTable*> dirty_tables_;
 
   uint32_t iterator_id_;
   unordered_map<uint32_t, Table_Iterator*> iterators_;
