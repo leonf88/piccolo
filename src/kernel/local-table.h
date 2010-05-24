@@ -6,7 +6,7 @@
 namespace dsm {
 
 // Represents a single shard of a global table.
-class LocalTable : public Table, public Checkpointable, public UntypedTable {
+class LocalTable : public Table, public Checkpointable {
 public:
   void Init(const TableDescriptor &tinfo) {
     Table::Init(tinfo);
@@ -30,7 +30,7 @@ protected:
 };
 
 template <class K, class V>
-class TypedLocalTable : public LocalTable, private boost::noncopyable {
+class TypedLocalTable : public LocalTable, public UntypedTable, private boost::noncopyable {
 public:
   typedef HashMap<K, V> DataMap;
   struct Iterator;

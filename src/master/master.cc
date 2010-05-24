@@ -2,6 +2,8 @@
 #include "kernel/table-registry.h"
 #include "kernel/kernel.h"
 
+#include <set>
+
 DEFINE_bool(work_stealing, true, "");
 DEFINE_string(dead_workers, "",
               "Comma delimited list of workers to pretend have died.");
@@ -53,7 +55,7 @@ struct TaskState : private boost::noncopyable {
 };
 
 typedef map<Taskid, TaskState*> TaskMap;
-typedef set<Taskid> ShardSet;
+typedef std::set<Taskid> ShardSet;
 struct WorkerState : private boost::noncopyable {
   WorkerState(int w_id) : id(w_id), slots(0) {
     last_ping_time = Now();

@@ -169,7 +169,7 @@ void GlobalTable::handle_get(const HashGet& get_req, HashPut *get_resp) {
     LOG_EVERY_N(WARNING, 1000) << "Not local for shard: " << shard;
   }
 
-  LocalTable *t = partitions_[shard];
+  UntypedTable *t = (UntypedTable*)partitions_[shard];
   if (!t->contains_str(get_req.key())) {
     get_resp->set_missing_key(true);
   } else {
@@ -242,7 +242,7 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
 
-  LocalTable *h = partitions_[shard];
+  UntypedTable *h = (UntypedTable*)partitions_[shard];
 
   v->assign(h->get_str(k));
 }
@@ -300,7 +300,7 @@ void LocalTable::ApplyUpdates(const HashPut& req) {
   HashPutCoder h(req);
 
   for (int i = 0; i < h.size(); ++i) {
-    update_str(h.key(i), h.value(i));
+    ((UntypedTable*)this)->update_str(h.key(i), h.value(i));
   }
 }
 }

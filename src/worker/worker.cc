@@ -167,7 +167,7 @@ void Worker::CheckNetwork() {
   HandlePutRequests();
 
   // Flush any tables we no longer own.
-  for (set<GlobalTable*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
+  for (unordered_set<GlobalTable*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
     (*i)->SendUpdates();
   }
 
@@ -392,7 +392,7 @@ void Worker::HandleGetRequests() {
       int old_owner = t->owner(a.shard());
       t->get_partition_info(a.shard())->owner = a.new_worker();
 
-//      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
+      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
         VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
@@ -400,7 +400,9 @@ void Worker::HandleGetRequests() {
         // Don't consider ourselves canonical for this shard until we receive updates
         // from the old owner.
         if (old_owner != -1) {
-          LOG(INFO) << "Setting " << MP(a.table(), a.shard()) << " as tainted.  Old owner was: " << old_owner;
+          LOG(INFO) << "Setting " << MP(a.table(), a.shard())
+                   << " as tainted.  Old owner was: " << old_owner
+                   << " new owner is :  " << id();
           t->get_partition_info(a.shard())->tainted = true;
         }
       } else if (old_owner == id() && a.new_worker() != id()) {

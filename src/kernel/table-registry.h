@@ -28,11 +28,35 @@ private:
 
 template <class T>
 static RecordTable<T>* CreateRecordTable(int id, StringPiece file_pattern, bool split_large_files=true) {
-  return NULL;
+  RecordTable<T>* t = new RecordTable<T>(file_pattern, split_large_files);
+  TableDescriptor info;
+  info.num_shards = -1;
+  info.table_id = id;
+
+  info.key_marshal = NULL;
+  info.value_marshal = NULL;
+  info.accum = NULL;
+  info.sharder = NULL;
+
+  t->Init(info);
+  TableRegistry::Get()->tables().insert(make_pair(id, t));
+  return t;
 }
 
 static TextTable* CreateTextTable(int id, StringPiece file_pattern, bool split_large_files=true) {
-  return NULL;
+  TextTable* t = new TextTable(file_pattern, split_large_files);
+  TableDescriptor info;
+  info.num_shards = -1;
+  info.table_id = id;
+
+  info.key_marshal = NULL;
+  info.value_marshal = NULL;
+  info.accum = NULL;
+  info.sharder = NULL;
+
+  t->Init(info);
+  TableRegistry::Get()->tables().insert(make_pair(id, t));
+  return t;
 }
 
 template<class K, class V>

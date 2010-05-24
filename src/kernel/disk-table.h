@@ -21,11 +21,19 @@ namespace dsm {
 class DiskTable : public GlobalTable {
 public:
   class Partition;
-
   DiskTable(StringPiece filepattern, uint64_t split_files_at);
 
+  void Init(const TableDescriptor& tinfo);
+
   int64_t shard_size(int shard);
-  void UpdateShardinfo(const ShardInfo & sinfo);
+
+  // These are not currently implemented for disk based tables.
+  int get_shard_str(StringPiece k) { return -1; }
+  void start_checkpoint(const string& f) {}
+  void write_delta(const HashPut& d) {}
+  void finish_checkpoint() {}
+  void restore(const string& f) {}
+
 protected:
   vector<Partition*> partitions_;
 };
@@ -36,17 +44,20 @@ TypedIterator<uint64_t, google::protobuf::Message*>*
 template <class MessageClass>
 class RecordTable : public DiskTable, private boost::noncopyable {
 public:
+  typedef TypedIterator<uint64_t, MessageClass*> Iterator;
+
   RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
-  TypedIterator<uint64_t, google::protobuf::Message*> *get_iterator(int shard) {
-    return CreateRecordIterator(partitions_[shard], new MessageClass);
+  Iterator *get_iterator(int shard) {
+    return (Iterator*)CreateRecordIterator(partitions_[shard], new MessageClass);
   }
 private:
 };
 
 class TextTable : public DiskTable, private boost::noncopyable {
 public:
+  typedef TypedIterator<uint64_t, string> Iterator;
   TextTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
-  TypedIterator<uint64_t, string> *get_iterator(int shard);
+  Iterator *get_iterator(int shard);
 };
 }
 
