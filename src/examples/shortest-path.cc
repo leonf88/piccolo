@@ -7,7 +7,7 @@ DEFINE_int32(num_nodes, 10000, "");
 DEFINE_bool(dump_output, false, "");
 
 static int NUM_WORKERS = 0;
-static TypedGlobalTable<int, double>* distance;
+static TypedGlobalTable<int, double>* distance_map;
 
 static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
@@ -40,11 +40,11 @@ struct ShortestPathKernel : public DSMKernel {
   vector<PathNode> local_nodes;
   void Initialize() {
     for (int i = 0; i < FLAGS_num_nodes; ++i) {
-      distance->put(i, 1e9);
+      distance_map->update(i, 1e9);
     }
 
     // Initialize a root node.
-    distance->put(0, 0);
+    distance_map->update(0, 0);
   }
 
   void Propagate() {
@@ -59,7 +59,7 @@ struct ShortestPathKernel : public DSMKernel {
     for (int i = 0; i < local_nodes.size(); ++i) {
       const PathNode &n = local_nodes[i];
       for (int j = 0; j < n.target_size(); ++j) {
-        distance->put(n.target(j), distance->get(n.id()) + 1);
+        distance_map->update(n.target(j), distance_map->get(n.id()) + 1);
       }
     }
   }
@@ -70,7 +70,7 @@ struct ShortestPathKernel : public DSMKernel {
         fprintf(stderr, "\n%5d: ", i);
       }
 
-      int d = (int)distance->get(i);
+      int d = (int)distance_map->get(i);
       if (d >= 1000) { d = -1; }
       fprintf(stderr, "%3d ", d);
     }
@@ -85,7 +85,7 @@ REGISTER_METHOD(ShortestPathKernel, DumpDistances);
 int ShortestPath(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
-  distance = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);
+  distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);
 
   if (!StartWorker(conf)) {
     BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);
