@@ -6,7 +6,7 @@
 namespace dsm {
 class LocalTable;
 
-class GlobalTable  : public Table,  public UntypedTable {
+class GlobalTable  : public Table {
 public:
   void Init(const TableDescriptor& tinfo);
   virtual ~GlobalTable();
@@ -24,7 +24,7 @@ public:
   }
 
   bool tainted(int shard) { return get_partition_info(shard)->tainted; }
-  bool owner(int shard) { return get_partition_info(shard)->owner; }
+  int owner(int shard) { return get_partition_info(shard)->owner; }
 
   LocalTable *get_partition(int shard);
   virtual Table_Iterator* get_iterator(int shard);
@@ -54,14 +54,12 @@ public:
   virtual void finish_checkpoint();
   virtual void restore(const string& f);
 
-  int64_t shard_size(int shard);
+  virtual int64_t shard_size(int shard);
 
   virtual int get_shard_str(StringPiece k) = 0;
 
 protected:
   vector<PartitionInfo> partinfo_;
-
-  virtual LocalTable* create_local(int shard) = 0;
   boost::recursive_mutex& mutex() { return m_; }
   vector<LocalTable*> partitions_;
   vector<LocalTable*> cache_;
@@ -86,7 +84,7 @@ template <class K, class V>
 class TypedLocalTable;
 
 template <class K, class V>
-class TypedGlobalTable : public GlobalTable, private boost::noncopyable {
+class TypedGlobalTable : public GlobalTable, public UntypedTable, private boost::noncopyable {
 public:
   void Init(const TableDescriptor &tinfo) {
     GlobalTable::Init(tinfo);
