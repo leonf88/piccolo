@@ -49,13 +49,14 @@ vector<StringPiece> StringPiece::split(StringPiece sp, StringPiece delim) {
   return out;
 }
 
-REGISTER_TEST(StringPiece, {
+static void StringPieceTest() {
   vector<StringPiece> sp = StringPiece::split("a,b,c,d", ",");
   CHECK_EQ(sp[0].AsString(), "a");
   CHECK_EQ(sp[1].AsString(), "b");
   CHECK_EQ(sp[2].AsString(), "c");
   CHECK_EQ(sp[3].AsString(), "d");
-});
+}
+REGISTER_TEST(StringPiece, StringPieceTest());
 
 string StringPrintf(StringPiece fmt, ...) {
   va_list l;

@@ -1,5 +1,5 @@
-CXX = distcc g++
-CC = distcc gcc
+CXX = g++
+CC = gcc
 CMAKE = cmake
 export CXX CC
 
