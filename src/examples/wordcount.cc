@@ -29,7 +29,7 @@ public:
   }
 
   void printResults() {
-    TypedIterator<string, int> *it = counts->get_typed_iterator(current_shard());
+    TypedTableIterator<string, int> *it = counts->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       if (it->value() > 50) {
         printf("%20s : %d\n", it->key().c_str(), it->value());
@@ -50,7 +50,7 @@ REGISTER_METHOD(WordcountKernel, printResults);
 static int WordCount(ConfigData& conf) {
   conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
   counts = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
-  books = CreateTextTable(1, FLAGS_book_source, false);
+  TextTable* books = CreateTextTable(1, FLAGS_book_source, false);
 
   if (!StartWorker(conf)) {
     Master m(conf);

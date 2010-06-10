@@ -214,7 +214,7 @@ public:
     cache.clear();
 
     // Iterate over each box in this partition.
-    TypedIterator<pos, string>* it = curr->get_typed_iterator(current_shard());
+    TypedTableIterator<pos, string>* it = curr->get_typed_iterator(current_shard());
 //    int total = curr->get_partition(current_shard())->size();
 
     for (int count = 0; !it->done(); ++count) {

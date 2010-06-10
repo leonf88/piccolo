@@ -16,6 +16,8 @@
 
 namespace google { namespace protobuf { class Message; } }
 
+using google::protobuf::Message;
+
 namespace dsm {
 
 class DiskTable : public GlobalTable {
@@ -38,14 +40,12 @@ protected:
   vector<Partition*> partitions_;
 };
 
-TypedIterator<uint64_t, google::protobuf::Message*>*
-  CreateRecordIterator(DiskTable::Partition info, google::protobuf::Message* msg);
+TypedTableIterator<uint64_t, Message*>* CreateRecordIterator(DiskTable::Partition info, Message* msg);
 
 template <class MessageClass>
 class RecordTable : public DiskTable, private boost::noncopyable {
 public:
-  typedef TypedIterator<uint64_t, MessageClass*> Iterator;
-
+  typedef TypedTableIterator<uint64_t, MessageClass*> Iterator;
   RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
   Iterator *get_iterator(int shard) {
     return (Iterator*)CreateRecordIterator(partitions_[shard], new MessageClass);
@@ -55,9 +55,9 @@ private:
 
 class TextTable : public DiskTable, private boost::noncopyable {
 public:
-  typedef TypedIterator<uint64_t, string> Iterator;
+  typedef TypedTableIterator<uint64_t, string> Iterator;
   TextTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
-  Iterator *get_iterator(int shard);
+  TypedTableIterator<uint64_t, string> *get_iterator(int shard);
 };
 }
 

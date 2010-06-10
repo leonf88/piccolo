@@ -278,7 +278,7 @@ int Pagerank(ConfigData& conf) {
     LOG(INFO) << "Restoring pagerank at iteration: " << i;
   } else {
     i = 0;
-    m.run_all("PRKernel", " Initialize",  TableRegistry::Get()->table(0));
+    m.run_all("PRKernel", "Initialize",  TableRegistry::Get()->table(0));
   }
 
   for (; i < FLAGS_iterations; i++) {
@@ -298,8 +298,8 @@ int Pagerank(ConfigData& conf) {
     r.shards = range(curr->num_shards());
 
     m.run(r);
-    m.run_all("PRKernel", " ResetTable",  TableRegistry::Get()->table(curr_pr));
-    m.run_one("PRKernel", " WriteStatus",  TableRegistry::Get()->table(curr_pr));
+    m.run_all("PRKernel", "ResetTable",  TableRegistry::Get()->table(curr_pr));
+    m.run_one("PRKernel", "WriteStatus",  TableRegistry::Get()->table(curr_pr));
   }
 
   return 0;

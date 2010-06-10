@@ -49,7 +49,7 @@ public:
   }
 
   void Sort() {
-    TypedIterator<KeyType, ValueType> *i = dst->get_typed_iterator(current_shard());
+    TypedTableIterator<KeyType, ValueType> *i = dst->get_typed_iterator(current_shard());
     while (!i->done()) {
       Bucket b = i->value();
       uint32_t* t = b.mutable_value()->mutable_data();

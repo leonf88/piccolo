@@ -363,7 +363,7 @@ void Worker::HandleGetRequests() {
     int shard = iterator_req.shard();
 
     GlobalTable * t = TableRegistry::Get()->table(table);
-    Table_Iterator* it = NULL;
+    TableIterator* it = NULL;
     if (iterator_req.id() == -1) {
       it = t->get_iterator(shard);
       uint32_t id = iterator_id_++;
