@@ -62,7 +62,7 @@ public:
   }
 
   void initialize_expectation() {
-    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
+    TypedTableIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       it->value().min_dist = 2;
     }
@@ -76,7 +76,7 @@ public:
       local.push_back(dists->get(i));
     }
 
-    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
+    TypedTableIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       for (int i = 0; i < FLAGS_num_dists; ++i) {
         Distribution& d = local[i];
@@ -91,7 +91,7 @@ public:
   }
 
   void initialize_maximization() {
-    TypedIterator<int, Distribution> *it = dists->get_typed_iterator(current_shard());
+    TypedTableIterator<int, Distribution> *it = dists->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       Distribution &d = it->value();
 //      LOG(INFO) << "Distribution" << ":: " << it->key() << " :: "<< d.x << " : " << d.y;
@@ -112,7 +112,7 @@ public:
   // appropriate distribution.
   void compute_maximization() {
     Distribution d;
-    TypedIterator<int, Point> *it = points->get_typed_iterator(current_shard());
+    TypedTableIterator<int, Point> *it = points->get_typed_iterator(current_shard());
     for (; !it->done(); it->Next()) {
       const Point &p = it->value();
       d.x = p.x * FLAGS_num_dists / FLAGS_num_points;
@@ -178,12 +178,12 @@ static int KMeans(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("KMeansKernel", " initialize_world",  points);
+    m.run_all("KMeansKernel", "initialize_world",  points);
     for (int i = 0; i < FLAGS_iterations; i++) {
-      m.run_all("KMeansKernel", " initialize_expectation",  points);
-      m.run_all("KMeansKernel", " compute_expectation",  points);
-      m.run_all("KMeansKernel", " initialize_maximization",  dists);
-      m.run_all("KMeansKernel", " compute_maximization",  dists);
+      m.run_all("KMeansKernel", "initialize_expectation",  points);
+      m.run_all("KMeansKernel", "compute_expectation",  points);
+      m.run_all("KMeansKernel", "initialize_maximization",  dists);
+      m.run_all("KMeansKernel", "compute_maximization",  dists);
     }
   //    m.run_one("KMeansKernel", " print_results",  0);
   }

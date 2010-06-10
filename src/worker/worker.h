@@ -82,7 +82,7 @@ private:
   unordered_set<GlobalTable*> dirty_tables_;
 
   uint32_t iterator_id_;
-  unordered_map<uint32_t, Table_Iterator*> iterators_;
+  unordered_map<uint32_t, TableIterator*> iterators_;
 
   struct KernelId {
     string kname_;

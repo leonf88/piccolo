@@ -14,7 +14,7 @@ namespace dsm {
 template <class K, class V>
 class TypedGlobalTable;
 
-class Table;
+class TableBase;
 class Worker;
 
 

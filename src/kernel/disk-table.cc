@@ -36,7 +36,7 @@ void DiskTable::Init(const TableDescriptor& tinfo) {
   GlobalTable::Init(copy);
 }
 
-struct RecordIterator : public TypedIterator<uint64_t, Message*> {
+struct RecordIterator : public TypedTableIterator<uint64_t, Message*> {
   RecordIterator(const DiskTable::Partition& p, Message *msg) : p_(p), r_(p.info.name, "r") {
     r_.seek(p.start_pos);
     data_ = msg;
@@ -66,12 +66,12 @@ struct RecordIterator : public TypedIterator<uint64_t, Message*> {
   Marshal<Message> vmarshal_;
 };
 
-TypedIterator<uint64_t, Message*>* CreateRecordIterator(DiskTable::Partition p, Message *msg) {
+TypedTableIterator<uint64_t, Message*>* CreateRecordIterator(DiskTable::Partition p, Message *msg) {
   return new RecordIterator(p, msg);
 }
 
 
-struct TextIterator : public TypedIterator<uint64_t, string> {
+struct TextIterator : public TypedTableIterator<uint64_t, string> {
   TextIterator(const DiskTable::Partition& p) : p_(p), f_(p.info.name, "r") {
     f_.seek(p.start_pos);
     done_ = false;
@@ -99,7 +99,7 @@ struct TextIterator : public TypedIterator<uint64_t, string> {
   Marshal<string> vmarshal_;
 };
 
-TypedIterator<uint64_t, string> *TextTable::get_iterator(int shard) {
+TypedTableIterator<uint64_t, string> *TextTable::get_iterator(int shard) {
   return new TextIterator(*partitions_[shard]);
 }
 

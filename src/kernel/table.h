@@ -108,7 +108,7 @@ public:
   void *value_marshal;
 };
 
-struct Table_Iterator {
+struct TableIterator {
   virtual void key_str(string *out) = 0;
   virtual void value_str(string *out) = 0;
   virtual bool done() = 0;
@@ -116,15 +116,37 @@ struct Table_Iterator {
 };
 
 template <class K, class V>
-struct TypedIterator : public Table_Iterator {
+struct TypedTableIterator : public TableIterator {
   virtual const K& key() = 0;
   virtual V& value() = 0;
 };
 
-// Methods common to both global table views and local shards
-class Table {
+// Interface that typed tables should support.
+template <class K, class V>
+class TypedTable {
 public:
-  typedef Table_Iterator Iterator;
+  virtual bool contains(const K &k) = 0;
+  virtual V get(const K &k) = 0;
+  virtual void put(const K &k, const V &v) = 0;
+  virtual void update(const K &k, const V &v) = 0;
+  virtual void remove(const K &k) = 0;
+};
+
+// Methods for manipulating table entries as opaque byte arrays.
+class UntypedTable {
+public:
+  virtual bool contains_str(const StringPiece& k) = 0;
+  virtual string get_str(const StringPiece &k) = 0;
+  virtual void put_str(const StringPiece &k, const StringPiece &v) = 0;
+  virtual void remove_str(const StringPiece &k) = 0;
+  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+};
+
+
+// Methods common to both global table views and local shards
+class TableBase {
+public:
+  typedef TableIterator Iterator;
   void Init(const TableDescriptor& info) { info_ = info; }
 
   const TableDescriptor& info() const { return info_; }
@@ -144,16 +166,6 @@ public:
   virtual void write_delta(const HashPut& put) = 0;
   virtual void finish_checkpoint() = 0;
   virtual void restore(const string& f) = 0;
-};
-
-// Methods for manipulating table entries as opaque byte arrays.
-class UntypedTable {
-public:
-  virtual bool contains_str(const StringPiece& k) = 0;
-  virtual string get_str(const StringPiece &k) = 0;
-  virtual void put_str(const StringPiece &k, const StringPiece &v) = 0;
-  virtual void remove_str(const StringPiece &k) = 0;
-  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
 };
 
 }

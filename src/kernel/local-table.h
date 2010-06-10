@@ -6,14 +6,14 @@
 namespace dsm {
 
 // Represents a single shard of a global table.
-class LocalTable : public Table, public Checkpointable {
+class LocalTable : public TableBase, public Checkpointable {
 public:
   void Init(const TableDescriptor &tinfo) {
-    Table::Init(tinfo);
+    TableBase::Init(tinfo);
     delta_file_ = NULL;
   }
 
-  virtual Table::Iterator *get_iterator() = 0;
+  virtual TableBase::Iterator *get_iterator() = 0;
 
   void ApplyUpdates(const HashPut& req);
   void write_delta(const HashPut& put);
@@ -30,11 +30,11 @@ protected:
 };
 
 template <class K, class V>
-class TypedLocalTable : public LocalTable, public UntypedTable, private boost::noncopyable {
+class TypedLocalTable : public LocalTable, public TypedTable<K, V>, public UntypedTable, private boost::noncopyable {
 public:
-  typedef HashMap<K, V> DataMap;
-  struct Iterator;
+  struct LocalIterator;
 
+  typedef HashMap<K, V> DataMap;
   void Init(const TableDescriptor &tinfo) {
     LocalTable::Init(tinfo);
     data_.rehash(1);//tinfo.default_shard_size);
@@ -44,7 +44,7 @@ public:
   bool empty();
   int64_t size();
 
-  Table_Iterator* get_iterator();
+  TableIterator* get_iterator();
   Iterator* get_typed_iterator();
 
   bool contains(const K &k);

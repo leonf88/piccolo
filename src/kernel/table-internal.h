@@ -26,7 +26,7 @@ struct HashPutCoder {
 };
 
 template<class K, class V>
-class RemoteIterator : public TypedIterator<K, V> {
+class RemoteIterator : public TypedTableIterator<K, V> {
 public:
   RemoteIterator(GlobalTable *table, int shard) :
     owner_(table), shard_(shard), done_(false) {
@@ -82,6 +82,44 @@ private:
   bool done_;
 };
 
+
+template<class K, class V>
+struct TypedLocalTable<K, V>::LocalIterator  : public TypedTableIterator<K, V> {
+  LocalIterator(TypedLocalTable<K, V> *t) :
+    it_(t->data_.begin()) {
+    t_ = t;
+  }
+
+  void key_str(string *out) {
+    static_cast<Marshal<K>*>(this->owner()->info().key_marshal)->marshal(key(), out);
+  }
+  void value_str(string *out) {
+    static_cast<Marshal<V>*>(this->owner()->info().value_marshal)->marshal(value(), out);
+  }
+
+  bool done() {
+    return it_ == t_->data_.end();
+  }
+  void Next() {
+    ++it_;
+  }
+
+  const K& key() {
+    return it_->first;
+  }
+  V& value() {
+    return it_->second;
+  }
+
+  LocalTable* owner() {
+    return t_;
+  }
+
+private:
+  typename TypedLocalTable<K, V>::DataMap::iterator it_;
+  TypedLocalTable<K, V> *t_;
+};
+
 template<class K, class V>
 bool TypedLocalTable<K, V>::contains(const K &k) {
   return data_.find(k) != data_.end();
@@ -98,13 +136,13 @@ int64_t TypedLocalTable<K, V>::size() {
 }
 
 template<class K, class V>
-Table_Iterator* TypedLocalTable<K, V>::get_iterator() {
-  return new Iterator(this);
+TableIterator* TypedLocalTable<K, V>::get_iterator() {
+  return new LocalIterator(this);
 }
 
 template<class K, class V>
 typename TypedLocalTable<K, V>::Iterator* TypedLocalTable<K, V>::get_typed_iterator() {
-  return new Iterator(this);
+  return new LocalIterator(this);
 }
 
 template<class K, class V>
@@ -189,43 +227,6 @@ template<class K, class V> void TypedLocalTable<K, V>::restore(const string& f) 
     ApplyUpdates(p);
   }
 }
-
-template<class K, class V>
-struct TypedLocalTable<K, V>::Iterator: public TypedIterator<K, V> {
-  Iterator(TypedLocalTable<K, V> *t) :
-    it_(t->data_.begin()) {
-    t_ = t;
-  }
-
-  void key_str(string *out) {
-    static_cast<Marshal<K>*>(this->owner()->info().key_marshal)->marshal(key(), out);
-  }
-  void value_str(string *out) {
-    static_cast<Marshal<V>*>(this->owner()->info().value_marshal)->marshal(value(), out);
-  }
-
-  bool done() {
-    return it_ == t_->data_.end();
-  }
-  void Next() {
-    ++it_;
-  }
-
-  const K& key() {
-    return it_->first;
-  }
-  V& value() {
-    return it_->second;
-  }
-
-  LocalTable* owner() {
-    return t_;
-  }
-
-private:
-  typename DataMap::iterator it_;
-  TypedLocalTable<K, V> *t_;
-};
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::get_shard(const K& k) {
@@ -348,7 +349,7 @@ void TypedGlobalTable<K, V>::remove(const K &k) {
 }
 
 template<class K, class V>
-Table_Iterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
+TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
   return get_typed_iterator(shard);
 }
 
@@ -362,9 +363,9 @@ LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
 }
 
 template<class K, class V>
-TypedIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+TypedTableIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
   if (this->is_local_shard(shard)) {
-    return (TypedIterator<K, V>*) partitions_[shard]->get_iterator();
+    return (TypedTableIterator<K, V>*) partitions_[shard]->get_iterator();
   } else {
     return new RemoteIterator<K, V>(this, shard);
   }

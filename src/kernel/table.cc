@@ -6,7 +6,7 @@ static const int kMaxNetworkPending = 1 << 26;
 
 namespace dsm {
 
-static void SerializePartial(HashPut& r, Table::Iterator *it) {
+static void SerializePartial(HashPut& r, TableBase::Iterator *it) {
   int bytes_used = 0;
   HashPutCoder h(&r);
   string k, v;
@@ -34,7 +34,7 @@ LocalTable *GlobalTable::get_partition(int shard) {
   return partitions_[shard];
 }
 
-Table_Iterator* GlobalTable::get_iterator(int shard) {
+TableIterator* GlobalTable::get_iterator(int shard) {
   return partitions_[shard]->get_iterator();
 }
 
@@ -47,7 +47,7 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
 }
 
 void GlobalTable::Init(const dsm::TableDescriptor &info) {
-  Table::Init(info);
+  TableBase::Init(info);
   worker_id_ = -1;
   partitions_.resize(info.num_shards);
   partinfo_.resize(info.num_shards);
@@ -189,7 +189,7 @@ void GlobalTable::SendUpdates() {
     if (!is_local_shard(i) && (get_partition_info(i)->dirty || !t->empty())) {
       VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i);
 
-      Table::Iterator *it = t->get_iterator();
+      TableBase::Iterator *it = t->get_iterator();
 
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.

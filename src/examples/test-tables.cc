@@ -43,7 +43,7 @@ public:
   }
 
   void TestGetLocal() {
-    TypedIterator<int, int> *it = min_hash->get_typed_iterator(current_shard());
+    TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(current_shard());
     int num_shards = min_hash->num_shards();
 
     while (!it->done()) {

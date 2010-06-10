@@ -65,8 +65,8 @@ namespace dsm {
 typedef TypedGlobalTable<string, int64_t> IntTable;
 typedef TypedGlobalTable<string, string> StringTable;
 
-typedef TypedIterator<string, int64_t> IntIterator;
-typedef TypedIterator<string, string> StringIterator;
+typedef TypedTableIterator<string, int64_t> IntIterator;
+typedef TypedTableIterator<string, string> StringIterator;
 
 }%}
 
@@ -156,7 +156,7 @@ public:
 bool StartWorker(const ConfigData& conf);
 
 template <class K, class V>
-struct TypedIterator {
+struct TypedTableIterator {
 private:
   TypedIterator();
 public:
@@ -180,7 +180,7 @@ public:
   void update (const K& k, const V&);
   void put(const K& k, const V&);
   
-  TypedIterator<K, V>* get_iterator(int shard);
+  TypedTableIterator<K, V>* get_iterator(int shard);
   
   void SendUpdates();
   void HandlePutRequests();
@@ -189,8 +189,8 @@ public:
 %template(IntTable) TypedGlobalTable<string, int64_t>;
 %template(StringTable) TypedGlobalTable<string, string>;
 
-%template(IntIterator) TypedIterator<string, int64_t>;
-%template(StringIterator) TypedIterator<string, string>;
+%template(IntIterator) TypedTableIterator<string, int64_t>;
+%template(StringIterator) TypedTableIterator<string, string>;
 
 %extend DSMKernel {
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }

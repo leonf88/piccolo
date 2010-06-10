@@ -6,7 +6,7 @@
 namespace dsm {
 class LocalTable;
 
-class GlobalTable  : public Table {
+class GlobalTable  : public TableBase {
 public:
   void Init(const TableDescriptor& tinfo);
   virtual ~GlobalTable();
@@ -27,7 +27,7 @@ public:
   int owner(int shard) { return get_partition_info(shard)->owner; }
 
   LocalTable *get_partition(int shard);
-  virtual Table_Iterator* get_iterator(int shard);
+  virtual TableIterator* get_iterator(int shard);
 
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
@@ -84,7 +84,7 @@ template <class K, class V>
 class TypedLocalTable;
 
 template <class K, class V>
-class TypedGlobalTable : public GlobalTable, public UntypedTable, private boost::noncopyable {
+class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, public UntypedTable, private boost::noncopyable {
 public:
   void Init(const TableDescriptor &tinfo) {
     GlobalTable::Init(tinfo);
@@ -109,8 +109,8 @@ public:
   V get(const K &k);
   bool contains(const K &k);
   void remove(const K &k);
-  Table_Iterator* get_iterator(int shard);
-  TypedIterator<K, V>* get_typed_iterator(int shard);
+  TableIterator* get_iterator(int shard);
+  TypedTableIterator<K, V>* get_typed_iterator(int shard);
 
   K key_from_string(StringPiece k) { return unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k); }
   V value_from_string(StringPiece v) { return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v); }
