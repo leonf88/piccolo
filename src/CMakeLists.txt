@@ -6,7 +6,7 @@ project (PICCOLO)
 set(ENV{LANG} "C")
 
 set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
-find_package(ProtoBuf REQUIRED)
+#find_package(Protobuf REQUIRED)
 find_package(SWIG REQUIRED)
 find_package(PythonLibs REQUIRED)
 
@@ -24,27 +24,37 @@ else()
 endif()
 
 set(CMAKE_SWIG_FLAGS -ignoremissing -O -c++)
-
-include_directories( ${PYTHON_INCLUDE_PATH} )
-include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
-                     ${PICCOLO_BINARY_DIR}
-                     ${PROTOBUF_INCLUDE_DIRS}
-                     /home/power/share/include ) 
                      
 SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-link_directories( /home/power/share/lib )
-
-include_directories( ${PICCOLO_SOURCE_DIR}/external/libunwind/include )
-
+add_subdirectory (external/protobuf)
+add_subdirectory (external/google-test)
 add_subdirectory (external/google-flags)
 add_subdirectory (external/google-logging)
 add_subdirectory (external/google-perftools)
 add_subdirectory (external/libunwind)
 
-include_directories( ${PICCOLO_SOURCE_DIR}/external/google-flags )
-include_directories( ${PICCOLO_SOURCE_DIR}/external/google-logging )
-include_directories( ${PICCOLO_SOURCE_DIR}/external/google-perftools )
+include_directories (external/protobuf)
+include_directories (external/google-test)
+include_directories (external/google-flags)
+include_directories (external/google-logging)
+include_directories (external/google-perftools)
+include_directories (external/libunwind)
+
+exec_program("mpic++ -showme:compile" OUTPUT_VARIABLE MPI_COMPILE_FLAGS)
+exec_program("mpic++ -showme:incdirs" OUTPUT_VARIABLE MPI_INCDIRS)
+exec_program("mpic++ -showme:link" OUTPUT_VARIABLE MPI_LINK_FLAGS)
+
+string(REPLACE " " ";" MPI_INCDIRS "${MPI_INCDIRS}")
+string(REPLACE " " ";" MPI_LINK_FLAGS "${MPI_LINK_FLAGS}")
+
+include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
+                     ${PICCOLO_BINARY_DIR}
+                     ${PROTOBUF_INCLUDE_DIRS}
+                     ${PYTHON_INCLUDE_PATH})
+
+include_directories(${MPI_INCDIRS})
+
 
 add_subdirectory (util)
 add_subdirectory (worker)

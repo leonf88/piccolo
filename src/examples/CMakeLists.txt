@@ -23,7 +23,7 @@ add_executable(example-dsm example-main.cc)
 
 # we need to resolve static initializers, so glob all the symbols in
 target_link_libraries(example-dsm -Wl,-whole-archive common worker kernel master example -Wl,-no-whole-archive)
-target_link_libraries(example-dsm gflags glog profiler gperfbase unwind)
+target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind)
 
 # link statically if possible
 target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
@@ -52,6 +52,7 @@ ADD_CUSTOM_COMMAND(
  -w315 -w317 -w362 -w503 -w451 -w401
  -outdir ${CMAKE_CURRENT_BINARY_DIR} 
  ${include_flag}
+ ${MPI_COMPILE_FLAGS}
  -o ${swig_out}
  ${CMAKE_CURRENT_SOURCE_DIR}/python_support.swig
  DEPENDS python_support.swig worker master common kernel ${EXAMPLE_PB_SRC})
@@ -67,16 +68,17 @@ ADD_CUSTOM_COMMAND(
   ${link_flag}
   -o ${CMAKE_CURRENT_BINARY_DIR}/_piccolo.so
   ${swig_out} ${swig_shim} ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC}
+  ${MPI_LINK_FLAGS}
   ${CMAKE_BINARY_DIR}/util/libcommon.a
   ${CMAKE_BINARY_DIR}/worker/libworker.a
   ${CMAKE_BINARY_DIR}/kernel/libkernel.a
   ${CMAKE_BINARY_DIR}/master/libmaster.a
+  ${CMAKE_BINARY_DIR}/external/protobuf/libprotobuf.a
   ${CMAKE_BINARY_DIR}/external/google-flags/libgflags.a    
   ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a
   ${CMAKE_BINARY_DIR}/external/google-perftools/libprofiler.a
   ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
   -Wl,-Bstatic 
-  -lprotobuf  
   -lmpi_cxx -lmpi -lopen-rte -lopen-pal
   -Wl,-Bdynamic
   -lpthread -lutil -lnuma
