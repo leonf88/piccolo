@@ -24,11 +24,10 @@ def system(cmd):
 def make_graph(size, hostfile='fast_hostfile'):
   if memory_graph: return
   system(' '.join(
-                  ['/home/power/share/bin/mpirun',
+                  ['mpirun',
                    '-hostfile %s' % hostfile,
                    '-bynode',
                    '-n %s' % runutil.hostfile_info(hostfile)[1],
-                   'bash -c "LD_LIBRARY_PATH=/home/power/share/lib',
                    'bin/release/examples/example-dsm',
                    '--runner=Pagerank',
                    '--build_graph',
@@ -36,7 +35,7 @@ def make_graph(size, hostfile='fast_hostfile'):
                    '--shards=%s' % shards,
                    '--iterations=0',
                    '--work_stealing=false',
-                   '--graph_prefix=/scratch/pagerank_test/%sM/pr"' % size]))
+                   '--graph_prefix=/scratch/pagerank_test/%sM/pr' % size]))
 
 def run_pr(fname, size, n, args=None, **kw):
   try:

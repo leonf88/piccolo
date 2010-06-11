@@ -56,7 +56,7 @@ def run_example(runner,
   log("Parallelism: %s", n)
   log("Processor affinity: %s", affinity)
 
-  cmd = ' '.join(['/home/power/share/bin/mpirun',
+  cmd = ' '.join(['mpirun',
                   '-mca mpi_paffinity_alone %s' % affinity,
                   '-hostfile %s' % hostfile,
                   '-bynode',
