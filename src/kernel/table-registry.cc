@@ -1,7 +1,8 @@
 #include <stdio.h>
 
 #include "kernel/table-registry.h"
-#include "kernel/table-internal.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
 
 static const int kStatsTableId = 1000000;
 
