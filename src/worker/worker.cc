@@ -392,7 +392,7 @@ void Worker::HandleGetRequests() {
       int old_owner = t->owner(a.shard());
       t->get_partition_info(a.shard())->owner = a.new_worker();
 
-      VLOG(2) << "Setting owner: " << MP(a.shard(), a.new_worker());
+      VLOG(3) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
       if (a.new_worker() == id() && old_owner != id()) {
         VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
@@ -451,7 +451,7 @@ void Worker::CheckForMasterUpdates() {
     Restore(restore_msg.epoch());
   }
 
-  // Check for new kernels to run, and report finished kernels to the master.
+  // Flush all pending updates if the master requests it.
   while (network_->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &empty)) {
     Flush();
     network_->Send(config_.master_id(), MTYPE_WORKER_FLUSH_DONE, empty);
