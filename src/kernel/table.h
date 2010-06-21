@@ -132,17 +132,6 @@ public:
   virtual void remove(const K &k) = 0;
 };
 
-// Methods for manipulating table entries as opaque byte arrays.
-class UntypedTable {
-public:
-  virtual bool contains_str(const StringPiece& k) = 0;
-  virtual string get_str(const StringPiece &k) = 0;
-  virtual void put_str(const StringPiece &k, const StringPiece &v) = 0;
-  virtual void remove_str(const StringPiece &k) = 0;
-  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
-};
-
-
 // Methods common to both global table views and local shards
 class TableBase {
 public:

@@ -2,9 +2,12 @@
 #define GLOBALTABLE_H_
 
 #include "table.h"
+#include "local-table.h"
+
+#include "util/file.h"
+#include "util/rpc.h"
 
 namespace dsm {
-class LocalTable;
 
 class GlobalTable  : public TableBase {
 public:
@@ -81,10 +84,7 @@ protected:
 };
 
 template <class K, class V>
-class TypedLocalTable;
-
-template <class K, class V>
-class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, public UntypedTable, private boost::noncopyable {
+class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, private boost::noncopyable {
 public:
   void Init(const TableDescriptor &tinfo) {
     GlobalTable::Init(tinfo);
@@ -111,23 +111,213 @@ public:
   void remove(const K &k);
   TableIterator* get_iterator(int shard);
   TypedTableIterator<K, V>* get_typed_iterator(int shard);
-
-  K key_from_string(StringPiece k) { return unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k); }
-  V value_from_string(StringPiece v) { return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v); }
-  string key_to_string(const K& k) { return marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k); }
-  string value_to_string(const V& v) { return marshal(static_cast<Marshal<V>* >(this->info().value_marshal), v); }
-
-  // String wrappers
-  bool contains_str(const StringPiece& k) { return contains(key_from_string(k)); }
-  string get_str(const StringPiece &k) { return value_to_string(get(key_from_string(k))); }
-  void put_str(const StringPiece &k, const StringPiece &v) { return put(key_from_string(k), value_from_string(v)); }
-  void remove_str(const StringPiece &k) { remove(key_from_string(k)); }
-  void update_str(const StringPiece &k, const StringPiece &v) { return update(key_from_string(k), value_from_string(v)); }
-
 protected:
   LocalTable* create_local(int shard);
 };
 
+static const int kWriteFlushCount = 1000000;
+
+template<class K, class V>
+class RemoteIterator : public TypedTableIterator<K, V> {
+public:
+  RemoteIterator(GlobalTable *table, int shard) :
+    owner_(table), shard_(shard), done_(false) {
+    request_.set_table(table->id());
+    request_.set_shard(shard_);
+    int target_worker = table->get_partition_info(shard)->owner;
+
+    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+
+    request_.set_id(response_.id());
+  }
+
+  void key_str(string *out) {
+    *out = response_.key();
+  }
+
+  void value_str(string *out) {
+    *out = response_.value();
+  }
+
+  bool done() {
+    return response_.done();
+  }
+
+  void Next() {
+    int target_worker = owner_->get_partition_info(shard_)->owner;
+    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+    ++index_;
+  }
+
+  const K& key() {
+    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
+    return key_;
+  }
+
+  V& value() {
+    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
+    return value_;
+  }
+
+private:
+  GlobalTable* owner_;
+  IteratorRequest request_;
+  IteratorResponse response_;
+  int id_;
+
+  int shard_;
+  int index_;
+  K key_;
+  V value_;
+  bool done_;
 };
+
+
+template<class K, class V>
+int TypedGlobalTable<K, V>::get_shard(const K& k) {
+  DCHECK(this != NULL);
+  DCHECK(this->info().sharder != NULL);
+
+  Sharder<K> *sharder = (Sharder<K>*)(this->info().sharder);
+  int shard = (*sharder)(k, this->info().num_shards);
+  DCHECK_GE(shard, 0);
+  DCHECK_LT(shard, this->num_shards());
+  return shard;
+}
+
+template<class K, class V>
+int TypedGlobalTable<K, V>::get_shard_str(StringPiece k) {
+  return get_shard(unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k));
+}
+
+template<class K, class V>
+V TypedGlobalTable<K, V>::get_local(const K& k) {
+  int shard = this->get_shard(k);
+
+  CHECK(is_local_shard(shard)) << " non-local for shard: " << shard;
+
+  return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->get(k);
+}
+
+// Store the given key-value pair in this hash. If 'k' has affinity for a
+// remote thread, the application occurs immediately on the local host,
+// and the update is queued for transmission to the owner.
+template<class K, class V>
+void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
+  LOG(FATAL) << "Need to implement.";
+  int shard = this->get_shard(k);
+
+  //  boost::recursive_mutex::scoped_lock sl(mutex());
+  static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->put(k, v);
+
+  if (!is_local_shard(shard)) {
+    ++pending_writes_;
+  }
+
+  if (pending_writes_ > kWriteFlushCount) {
+    SendUpdates();
+  }
+
+  PERIODIC(0.1, {this->HandlePutRequests();});
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
+  int shard = this->get_shard(k);
+
+  //  boost::recursive_mutex::scoped_lock sl(mutex());
+  static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->update(k, v);
+
+  if (!is_local_shard(shard)) {
+    ++pending_writes_;
+  }
+
+  if (pending_writes_ > kWriteFlushCount) {
+    SendUpdates();
+  }
+
+  PERIODIC(0.1, {this->HandlePutRequests();});
+}
+
+// Return the value associated with 'k', possibly blocking for a remote fetch.
+template<class K, class V>
+V TypedGlobalTable<K, V>::get(const K &k) {
+  int shard = this->get_shard(k);
+
+  // If we received a get for this shard; but we haven't received all of the
+  // data for it yet. Continue reading from other workers until we do.
+  while (tainted(shard)) {
+    this->HandlePutRequests();
+    sched_yield();
+  }
+
+  PERIODIC(0.1, this->HandlePutRequests());
+
+  if (is_local_shard(shard)) {
+    //    boost::recursive_mutex::scoped_lock sl(mutex());
+    return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->get(k);
+  }
+
+  string v_str;
+  get_remote(shard,
+             marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
+             &v_str);
+  return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v_str);
+}
+
+template<class K, class V>
+bool TypedGlobalTable<K, V>::contains(const K &k) {
+  int shard = this->get_shard(k);
+
+  // If we received a request for this shard; but we haven't received all of the
+  // data for it yet. Continue reading from other workers until we do.
+  while (tainted(shard)) {
+    this->HandlePutRequests();
+    sched_yield();
+  }
+
+  if (is_local_shard(shard)) {
+    //    boost::recursive_mutex::scoped_lock sl(mutex());
+    return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->contains(
+                                                                               k);
+  }
+
+  string v_str;
+  return get_remote(shard,
+                     marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
+                     &v_str);
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::remove(const K &k) {
+  LOG(FATAL) << "Not implemented!";
+}
+
+template<class K, class V>
+TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
+  return get_typed_iterator(shard);
+}
+
+template<class K, class V>
+LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
+  TableDescriptor linfo = ((GlobalTable*) this)->info();
+  linfo.shard = shard;
+  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>();
+  t->Init(linfo);
+  return t;
+}
+
+template<class K, class V>
+TypedTableIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+  if (this->is_local_shard(shard)) {
+    return (TypedTableIterator<K, V>*) partitions_[shard]->get_iterator();
+  } else {
+    return new RemoteIterator<K, V>(this, shard);
+  }
+}
+
+}
 
 #endif /* GLOBALTABLE_H_ */
