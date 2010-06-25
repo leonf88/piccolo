@@ -1,7 +1,7 @@
 #include <python2.6/Python.h>
 #include <boost/python.hpp>
 
-#include "client.h"
+#include "client/client.h"
 #include "examples/python_support.i"
 using namespace dsm;
 using namespace boost::python;

@@ -3,7 +3,7 @@
  * distributions.
  */
 
-#include "client.h"
+#include "client/client.h"
 
 DEFINE_int64(num_dists, 2, "");
 DEFINE_int64(num_points, 100, "");

@@ -1,4 +1,4 @@
-#include "client.h"
+#include "client/client.h"
 
 using namespace std;
 using namespace dsm;

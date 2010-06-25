@@ -1,4 +1,4 @@
-#include "client.h"
+#include "client/client.h"
 #include <cblas.h>
 
 using namespace dsm;

@@ -529,7 +529,7 @@ bool IsBoolFlag(bool from);
       s_##name[0].s, new (s_##name[1].s) std::string(*FLAGS_no##name));   \
     extern std::string& FLAGS_##name;                                     \
     using fLS::FLAGS_##name;                                              \
-    std::string& FLAGS_##name = *(reinterpret_cast<std::string*>(s_##name[0].s));   \
+    std::string& FLAGS_##name = *(const_cast<std::string*>(FLAGS_no##name));   \
   }                                                                       \
   using fLS::FLAGS_##name
 

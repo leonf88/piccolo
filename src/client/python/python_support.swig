@@ -1,6 +1,6 @@
 %module piccolo
 
-#include "examples/python_support.h"
+#include "client/python/python_support.h"
 
 using namespace std;
 
@@ -58,7 +58,7 @@ namespace std {
 }
 
 %{
-#include "examples/python_support.h"
+#include "client/python/python_support.h"
 #include "kernel/table.h"
 
 namespace dsm {
@@ -81,7 +81,7 @@ typedef long int64_t;
 %include "kernel/table-registry.h"
 
 %include "master/master.h"
-%include "examples/python_support.h"
+%include "client/python/python_support.h"
 
 %inline %{
   namespace dsm {
