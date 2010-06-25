@@ -57,7 +57,7 @@ struct TaskState : private boost::noncopyable {
 typedef map<Taskid, TaskState*> TaskMap;
 typedef std::set<Taskid> ShardSet;
 struct WorkerState : private boost::noncopyable {
-  WorkerState(int w_id) : id(w_id), slots(0) {
+  WorkerState(int w_id) : id(w_id) {
     last_ping_time = Now();
     last_task_start = 0;
     total_runtime = 0;
@@ -73,8 +73,6 @@ struct WorkerState : private boost::noncopyable {
 
   int status;
   int id;
-
-  int slots;
 
   double last_task_start;
   double total_runtime;
@@ -108,8 +106,6 @@ struct WorkerState : private boost::noncopyable {
 
     return Now() - last_ping_time;
   }
-
-  bool full() const { return work.size() >= slots; }
 
   void assign_shard(int shard, bool should_service) {
     TableRegistry::Map &tables = TableRegistry::Get()->tables();
@@ -224,7 +220,6 @@ Master::Master(const ConfigData &conf) :
     RegisterWorkerRequest req;
     int src = 0;
     network_->Read(MPI::ANY_SOURCE, MTYPE_REGISTER_WORKER, &req, &src);
-    workers_[src - 1]->slots = req.slots();
     VLOG(1) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
 
@@ -409,8 +404,7 @@ WorkerState* Master::assign_worker(int table, int shard) {
   WorkerState* best = NULL;
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
-    if (w.alive() && !w.full() &&
-       (best == NULL || w.shards.size() < best->shards.size())) {
+    if (w.alive() && (best == NULL || w.shards.size() < best->shards.size())) {
       best = workers_[i];
     }
   }
@@ -419,10 +413,6 @@ WorkerState* Master::assign_worker(int table, int shard) {
 
 //  LOG(INFO) << "Assigned " << MP(table, shard, best->id);
   CHECK(best->alive());
-
-  if (best->full()) {
-    LOG(FATAL) << "Failed to assign work - no available workers!";
-  }
 
   VLOG(1) << "Assigning " << MP(table, shard) << " to " << best->id;
   best->assign_shard(shard, true);
@@ -639,7 +629,6 @@ void Master::run(RunDescriptor r) {
         if (mstats.shard_invocations() > 10 &&
             avg_completion_time > 0.2 &&
             !checkpointing_ &&
-            !w.full() &&
             w.idle_time() > 0.5) {
           if (steal_work(r, w.id, avg_completion_time)) {
             need_update = true;

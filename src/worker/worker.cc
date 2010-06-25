@@ -76,7 +76,6 @@ void Worker::KernelLoop() {
   VLOG(1) << "Worker " << config_.worker_id() << " registering...";
   RegisterWorkerRequest req;
   req.set_id(id());
-  req.set_slots(config_.slots());
   network_->Send(0, MTYPE_REGISTER_WORKER, req);
 
 
