@@ -1,4 +1,4 @@
-#include "client.h"
+#include "client/client.h"
 #include "examples/examples.pb.h"
 
 using namespace dsm;

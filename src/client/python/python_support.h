@@ -1,7 +1,7 @@
 #include <python2.6/Python.h>
 
 #include <gflags/gflags.h>
-#include "client.h"
+#include "client/client.h"
 #include "examples/examples.h"
 #include "examples/examples.pb.h"
 #include "kernel/table.h"
