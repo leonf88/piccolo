@@ -23,23 +23,6 @@
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 
-namespace std { namespace tr1 {
-template <>
-struct hash<dsm::StringPiece> {
-  size_t operator()(const dsm::StringPiece& k) { return k.hash(); }
-};
-
-template <class A, class B>
-struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
-  hash<A> ha;
-  hash<B> hb;
-
-  size_t operator()(const pair<A, B> & k) const {
-    return ha(k.a) ^ hb(k.b);
-  }
-};
-} }
-
 using std::map;
 using std::vector;
 using std::string;
@@ -95,26 +78,41 @@ static double rand_double() {
 
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
+template <class A, class B>
+struct tuple2 {
+  A a_; B b_;
+  bool operator==(const tuple2& o) { return o.a_ == a_ && o.b_ == b_; }
+};
+
 template <class A, class B, class C>
 struct tuple3 {
   A a_; B b_; C c_;
-  tuple3(const A& a, const B& b, const C& c) : a_(a), b_(b), c_(c) {}
+  bool operator==(const tuple3& o) { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_; }
 };
 
 template <class A, class B, class C, class D>
 struct tuple4 {
   A a_; B b_; C c_; D d_;
-  tuple4(const A& a, const B& b, const C& c, const D& d) : a_(a), b_(b), c_(c), d_(d) {}
+  bool operator==(const tuple4& o) { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_ && o.d_ == d_; }
 };
 
 template<class A, class B>
-inline pair<A, B> MP(A x, B y) { return pair<A, B>(x, y); }
+inline tuple2<A, B> MP(A x, B y) {
+  tuple2<A, B> t = { x, y };
+  return t;
+}
 
 template<class A, class B, class C>
-inline tuple3<A, B, C> MP(A x, B y, C z) { return tuple3<A, B, C>(x, y, z); }
+inline tuple3<A, B, C> MP(A x, B y, C z) {
+  tuple3<A, B, C> t = { x, y, z };
+  return t;
+}
 
 template<class A, class B, class C, class D>
-inline tuple4<A, B, C, D> MP(A x, B y, C z, D a) { return tuple4<A, B, C, D>(x, y, z, a); }
+inline tuple4<A, B, C, D> MP(A x, B y, C z, D a) {
+  tuple4<A, B, C, D> t = {x, y, z, a};
+  return t;
+}
 
 template<class A>
 inline vector<A> MakeVector(const A&x) {
@@ -144,6 +142,46 @@ inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
 #ifndef SWIG
 #include <google/protobuf/message.h>
 
+
+namespace std { namespace tr1 {
+template <>
+struct hash<dsm::StringPiece> {
+  size_t operator()(const dsm::StringPiece& k) { return k.hash(); }
+};
+
+template <class A, class B>
+struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
+  hash<A> ha;
+  hash<B> hb;
+
+  size_t operator()(const pair<A, B> & k) const {
+    return ha(k.first) ^ hb(k.second);
+  }
+};
+
+template <class A, class B>
+struct hash<dsm::tuple2<A, B> > : public unary_function<dsm::tuple2<A, B> , size_t> {
+  hash<A> ha;
+  hash<B> hb;
+
+  size_t operator()(const dsm::tuple2<A, B> & k) const {
+    return ha(k.a_) ^ hb(k.b_);
+  }
+};
+
+template <class A, class B, class C>
+struct hash<dsm::tuple3<A, B, C> > : public unary_function<dsm::tuple3<A, B, C> , size_t> {
+  hash<A> ha;
+  hash<B> hb;
+  hash<C> hc;
+
+  size_t operator()(const dsm::tuple3<A, B, C> & k) const {
+    return ha(k.a_) ^ hb(k.b_) ^ hc(k.c_);
+  }
+};
+
+} }
+
 namespace dsm {
 static vector<int> range(int from, int to, int step=1) {
   vector<int> out;
@@ -170,6 +208,12 @@ static ostream & operator<< (ostream &out, const google::protobuf::Message &q) {
 template <class A, class B>
 static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
   out << "(" << p.first << "," << p.second << ")";
+  return out;
+}
+
+template <class A, class B>
+static ostream & operator<< (ostream &out, const dsm::tuple2<A, B> &p) {
+  out << "(" << p.a_ << "," << p.b_ << ")";
   return out;
 }
 
