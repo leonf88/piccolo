@@ -248,8 +248,6 @@ REGISTER_METHOD(PRKernel, ResetTable);
 DEFINE_bool(checkpoint, false, "Checkpoint between iterations.");
 
 int Pagerank(ConfigData& conf) {
-  conf.set_slots(256);
-
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 

@@ -57,5 +57,4 @@ message ConfigData {
   required int32 num_workers = 1;
   required int32 worker_id = 2;
   required int32 master_id = 3;
-  optional int32 slots = 4 [default = 10];
 }

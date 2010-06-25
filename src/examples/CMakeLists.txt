@@ -9,10 +9,10 @@ add_library(example
             k-means.cc 
             matmul.cc 
             pagerank.cc 
-            wordcount.cc
-            shortest-path.cc
+            raytrace.cc
             shortest-path.cc
             test-tables.cc
+            wordcount.cc
             nas/isort.cc 
             nas/n-body.cc
             ${EXAMPLE_PB_HDR} 

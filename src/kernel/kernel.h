@@ -177,7 +177,7 @@ private:
 
 struct RunnerRegistrationHelper {
   RunnerRegistrationHelper(RunnerRegistry::KernelRunner k, const char* name) {
-    RunnerRegistry::Get()->runners().insert(MP(name, k));
+    RunnerRegistry::Get()->runners().insert(make_pair(name, k));
   }
 };
 

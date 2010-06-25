@@ -130,9 +130,6 @@ public:
 
   int master_id() const;
   void set_master_id(int value);
-
-  int slots() const;
-  void set_slots(int value);
 };
 
 class RecordFile {

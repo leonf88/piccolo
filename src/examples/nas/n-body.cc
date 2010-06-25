@@ -243,7 +243,6 @@ REGISTER_METHOD(NBodyKernel, Simulate);
 REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
-  conf.set_slots(256);
   CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions, 
                                       new PosSharding, new AppendAccum);
   

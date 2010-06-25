@@ -461,7 +461,6 @@ def main():
   fetch_counts = tr.CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
 
   conf = ConfigData()
-  conf.set_slots(10)
   conf.set_num_workers(num_workers)
   if not StartWorker(conf):
     m = Master(conf)

@@ -42,7 +42,6 @@ REGISTER_METHOD(WordcountKernel, runWordcount);
 REGISTER_METHOD(WordcountKernel, printResults);
 
 static int WordCount(ConfigData& conf) {
-  conf.set_slots(FLAGS_shards * 2 / conf.num_workers());
   counts = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
   TextTable* books = CreateTextTable(1, FLAGS_book_source, false);
 
