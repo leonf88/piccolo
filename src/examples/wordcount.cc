@@ -37,12 +37,6 @@ public:
     }
   }
 };
-
-//I need to resister the methods that are used in main
-//more info about configuration settings maybe ?
-//why GlobakView in pagerank ? what is the difference ?
-//so main fuc runs on all the machines, how do I partition the table | how they read the data
-
 REGISTER_KERNEL(WordcountKernel);
 REGISTER_METHOD(WordcountKernel, runWordcount);
 REGISTER_METHOD(WordcountKernel, printResults);

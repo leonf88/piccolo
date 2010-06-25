@@ -19,7 +19,7 @@ add_library(example
             ${EXAMPLE_PB_SRC})
             
 add_dependencies(example worker_proto common_proto)
-add_executable(example-dsm example-main.cc)
+add_executable(example-dsm main.cc)
 
 # we need to resolve static initializers, so glob all the symbols in
 target_link_libraries(example-dsm -Wl,-whole-archive common worker kernel master example -Wl,-no-whole-archive)
