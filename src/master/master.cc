@@ -369,16 +369,15 @@ bool Master::restore(ArgMap *args) {
   return true;
 }
 
-void Master::run_all(const string& kernel, const string& method, GlobalTable* locality) {
-  run_range(kernel, method, locality, range(locality->num_shards()));
+void Master::run_all(RunDescriptor r) {
+  run_range(r, range(r.table->num_shards()));
 }
 
-void Master::run_one(const string& kernel, const string& method, GlobalTable* locality) {
-  run_range(kernel, method, locality, range(1));
+void Master::run_one(RunDescriptor r) {
+  run_range(r, range(1));
 }
 
-void Master::run_range(const string& kernel, const string& method, GlobalTable* locality, vector<int> shards) {
-  RunDescriptor r(kernel, method, locality);
+void Master::run_range(RunDescriptor r, vector<int> shards) {
   r.shards = shards;
   run(r);
 }
