@@ -51,15 +51,25 @@ public:
   Master(const ConfigData &conf);
   ~Master();
 
+  void run_all(RunDescriptor r);
+  void run_one(RunDescriptor r);
+  void run_range(RunDescriptor r, vector<int> shards);
+
   // N.B.  All run_* methods are blocking.
-  void run_all(const string& kernel, const string& method, GlobalTable* locality);
+  void run_all(const string& kernel, const string& method, GlobalTable* locality) {
+    run_all(RunDescriptor(kernel, method, locality));
+  }
 
   // Run the given kernel function on one (arbitrary) worker node.
-  void run_one(const string& kernel, const string& method, GlobalTable* locality);
+  void run_one(const string& kernel, const string& method, GlobalTable* locality) {
+    run_one(RunDescriptor(kernel, method, locality));
+  }
 
   // Run the kernel function on the given set of shards.
   void run_range(const string& kernel, const string& method,
-                 GlobalTable* locality, vector<int> shards);
+                 GlobalTable* locality, vector<int> shards) {
+    run_range(RunDescriptor(kernel, method, locality), shards);
+  }
 
   void run(RunDescriptor r);
 
