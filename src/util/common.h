@@ -165,7 +165,8 @@ struct hash<dsm::tuple2<A, B> > : public unary_function<dsm::tuple2<A, B> , size
   hash<B> hb;
 
   size_t operator()(const dsm::tuple2<A, B> & k) const {
-    return ha(k.a_) ^ hb(k.b_);
+    size_t res[] = { ha(k.a_), hb(k.b_) };
+    return dsm::SuperFastHash((char*)&res, sizeof(res));
   }
 };
 
@@ -176,7 +177,8 @@ struct hash<dsm::tuple3<A, B, C> > : public unary_function<dsm::tuple3<A, B, C> 
   hash<C> hc;
 
   size_t operator()(const dsm::tuple3<A, B, C> & k) const {
-    return ha(k.a_) ^ hb(k.b_) ^ hc(k.c_);
+    size_t res[] = { ha(k.a_), hb(k.b_), hc(k.c_) };
+    return dsm::SuperFastHash((char*)&res, sizeof(res));
   }
 };
 
