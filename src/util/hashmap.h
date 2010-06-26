@@ -160,6 +160,8 @@ void HashMap<K, V>::rehash(uint32_t size) {
 
   int old_entries = entries_;
 
+//  LOG(INFO) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
+
   buckets_.resize(size);
   size_ = size;
   clear();
@@ -204,6 +206,7 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   int start = bucket_idx(k);
   int b = start;
   bool found = false;
+
   do {
     if (!buckets_[b].in_use) {
       break;
