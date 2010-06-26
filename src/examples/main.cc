@@ -7,7 +7,11 @@ DEFINE_string(runner, "", "");
 DEFINE_int32(shards, 10, "");
 DEFINE_int32(iterations, 10, "");
 
+DECLARE_bool(log_prefix);
+
 int main(int argc, char** argv) {
+  FLAGS_log_prefix = false;
+
   Init(argc, argv);
 
   ConfigData conf;
