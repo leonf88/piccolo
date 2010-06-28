@@ -33,13 +33,13 @@ enum MessageTypes {
 
 message EmptyMessage {}
 
-message Param {
+message Arg {
   required bytes key = 1;
   required bytes value = 2;
 }
 
-message Params {
-  repeated Param param = 1;
+message Args {
+  repeated Arg param = 1;
 }
 
 enum CompressionFormat {
@@ -49,7 +49,7 @@ enum CompressionFormat {
 };
 
 message FileParams {
-  repeated Param attr = 1;
+  repeated Arg attr = 1;
   optional int32 compression = 2 [default=0];
 }
 

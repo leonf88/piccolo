@@ -319,7 +319,7 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
 }
 
 void Master::flush_checkpoint(const ArgMap& pmap) {
-  Params *params = pmap.ToMessage();
+  Args *args = pmap.ToMessage();
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_), "w");
 
@@ -328,13 +328,13 @@ void Master::flush_checkpoint(const ArgMap& pmap) {
   cinfo.set_kernel_epoch(kernel_epoch_);
 
   rf.write(cinfo);
-  rf.write(*params);
+  rf.write(*args);
   rf.sync();
 
   LOG(INFO) << "Checkpoint: " << cp_timer_.elapsed() << " seconds elapsed; ";
   checkpointing_ = false;
   last_checkpoint_ = Now();
-  delete params;
+  delete args;
 }
 
 bool Master::restore(ArgMap *args) {
@@ -353,9 +353,9 @@ bool Master::restore(ArgMap *args) {
 
   RecordFile rf(matches.back(), "r");
   CheckpointInfo info;
-  Params params;
+  Args checkpoint_args;
   CHECK(rf.read(&info));
-  CHECK(rf.read(&params));
+  CHECK(rf.read(&checkpoint_args));
 
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
 
@@ -365,7 +365,7 @@ bool Master::restore(ArgMap *args) {
   StartRestore req;
   req.set_epoch(epoch);
   network_->SyncBroadcast(MTYPE_RESTORE, MTYPE_RESTORE_DONE, req);
-  args->FromMessage(params);
+  args->FromMessage(checkpoint_args);
   return true;
 }
 
@@ -523,7 +523,7 @@ void Master::dispatch_work(const RunDescriptor& r) {
     WorkerState& w = *workers_[i];
     if (w.num_pending() > 0 && w.num_active() == 0) {
       w.get_next(r, &w_req);
-      Params* p = r.params.ToMessage();
+      Args* p = r.params.ToMessage();
       w_req.mutable_args()->CopyFrom(*p);
       delete p;
       network_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);

@@ -21,7 +21,7 @@ class Worker;
 class ArgMap {
 public:
   ArgMap() {}
-  ArgMap(const Params& p) {
+  ArgMap(const Args& p) {
     FromMessage(p);
   }
 
@@ -41,17 +41,17 @@ public:
     return boost::lexical_cast<T>(i->second);
   }
 
-  Params* ToMessage() const {
-    Params* out = new Params;
+  Args* ToMessage() const {
+    Args* out = new Args;
     for (unordered_map<string, string>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
-      Param *p = out->add_param();
+      Arg *p = out->add_param();
       p->set_key(i->first);
       p->set_value(i->second);
     }
     return out;
   }
 
-  void FromMessage(const Params& p) {
+  void FromMessage(const Args& p) {
     for (int i = 0; i < p.param_size(); ++i) {
       p_[p.param(i).key()] = p.param(i).value();
     }
@@ -68,19 +68,19 @@ public:
   virtual void InitKernel() {}
 
   // Called before worker begins writing checkpoint data for the table
-  // this kernel is working on.  Values stored in 'params' will be made
+  // this kernel is working on.  Values stored in 'args' will be made
   // available in the corresponding Restore() call.
-  virtual void Checkpoint(ArgMap* params) {}
+  virtual void Checkpoint(ArgMap* args) {}
 
   // Called after worker has restored table state from a previous checkpoint
   // with this kernel active.
-  virtual void Restore(const ArgMap& params) {}
+  virtual void Restore(const ArgMap& args) {}
 
   // The table and shard being processed.
   int current_shard() const { return shard_; }
   int current_table() const { return table_id_; }
 
-  const ArgMap& args() const { return params_; }
+  const ArgMap& args() const { return args_; }
 
   GlobalTable* get_table(int id);
 
@@ -95,12 +95,12 @@ private:
   void initialize_internal(Worker* w,
                            int table_id, int shard);
 
-  void set_args(const ArgMap& params);
+  void set_args(const ArgMap& args);
 
   Worker *w_;
   int shard_;
   int table_id_;
-  ArgMap params_;
+  ArgMap args_;
 };
 
 struct KernelInfo {
