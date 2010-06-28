@@ -275,7 +275,7 @@ void RecordFile::Init(const string& mode) {
 
 void RecordFile::writeHeader() {
   for (AttrMap::iterator i = attributes.begin(); i != attributes.end(); ++i) {
-    Param *p = params_.add_attr();
+    Arg *p = params_.add_attr();
     p->set_key(i->first);
     p->set_value(i->second);
   }

@@ -13,20 +13,6 @@ message RegisterWorkerRequest {
   required int32 id = 1;
 }
 
-message Stats {
-  optional int64 bytes_out = 1;
-  optional int64 bytes_in = 2;
-	
-  optional int64 put_out = 3;
-  optional int64 put_in = 4;
-	
-  optional int64 get_out = 5;
-  optional int64 get_in = 6;
-
-  optional double idle_time = 7;
-  optional double network_time = 8;
-}
-
 message ShardAssignment {
   required int32 table = 1;
   required int32 shard = 2;
@@ -57,7 +43,7 @@ message KernelRequest {
   required string method = 2;
   optional int32 table = 3;
   optional int32 shard = 4;
-  required Params args = 5;
+  required Args args = 5;
 }
 
 message KernelDone {
