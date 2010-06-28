@@ -16,6 +16,8 @@ struct RGB {
 };
 typedef tuple2<int, int> Pixel;
 
+
+// Always write pixels to the first partition.
 struct PixelSharder : public Sharder<Pixel> {
   int operator()(const Pixel& k, int shards) { return 0; }
 };
@@ -40,14 +42,15 @@ public:
 
     int frame = args().get<int>("frame");
 
-    string cmd = StringPrintf("povray -V +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFF%d +W%d +H%d %s 2>/dev/null",
+    string cmd = StringPrintf("povray +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFI1 +KFF%d +W%d +H%d %s 2>/dev/null",
                               c, min(c + FLAGS_block_size, FLAGS_width),
                               r, min(r + FLAGS_block_size, FLAGS_height),
                               frame, frame, FLAGS_frames,
                               FLAGS_width, FLAGS_height,
-                              FLAGS_source.c_str());
+                              FLAGS_source.c_str(),
+                              current_shard());
 
-    LOG(INFO) << cmd;
+//    LOG(INFO) << cmd;
     FILE *f = popen(cmd.c_str(), "r");
 
     int h, w, maxval;
@@ -61,16 +64,17 @@ public:
         CHECK_EQ(fread(&up.r, 2, 1, f), 1);
         CHECK_EQ(fread(&up.g, 2, 1, f), 1);
         CHECK_EQ(fread(&up.b, 2, 1, f), 1);
-//        LOG(INFO) << i + r << " : " << j + c << " : " << up.r << ", " << up.g << ", " << up.b;
-        if (j >= c && j < c + FLAGS_width) {
+        if (j >= c && j < c + FLAGS_block_size) {
           pixels->update(MP(r + i, j), up);
         }
       }
     }
+
     pclose(f);
   }
 
   void DrawFrame() {
+    return;
     FILE* f = fopen("frame.ppm", "w");
     Pixel k;
     fprintf(f, "P6\n%d %d\n65535\n", FLAGS_width, FLAGS_height);
@@ -85,6 +89,8 @@ public:
       }
     }
     fclose(f);
+
+    system("display -remote frame.ppm");
   }
 };
 REGISTER_KERNEL(RayTraceKernel);
@@ -93,7 +99,7 @@ REGISTER_METHOD(RayTraceKernel, DrawFrame);
 
 static int RayTrace(ConfigData &conf) {
   int shards = (FLAGS_height * FLAGS_width) / (FLAGS_block_size * FLAGS_block_size);
-  pixels = CreateTable(0, shards, new PixelSharder, new Accumulators<RGB>::Replace);
+  pixels = CreateTable(0, 1, new PixelSharder, new Accumulators<RGB>::Replace);
   geom = CreateTable(1, shards, new Sharding::Mod, new Accumulators<int>::Replace);
 
   ArgMap args;
