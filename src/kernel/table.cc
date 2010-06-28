@@ -15,9 +15,10 @@ static void SerializePartial(HashPut& r, TableBase::Iterator *it) {
     it->key_str(&k);
     it->value_str(&v);
     h.add_pair(k, v);
-    bytes_used += k.size() + v.size();
   }
 
+  VLOG(2) << StringPrintf("Serialized %d pairs; used %d bytes.",
+                            r.key_offset_size(), r.ByteSize());
   r.set_done(it->done());
 }
 
