@@ -108,9 +108,10 @@ void NetworkThread::CollectActive() {
 
   boost::recursive_mutex::scoped_lock sl(send_lock);
   unordered_set<RPCRequest*>::iterator i = active_sends_.begin();
+  VLOG(1) << "Pending sends: " << active_sends_.size();
   while (i != active_sends_.end()) {
     RPCRequest *r = (*i);
-    VLOG(2) << "Pending: " << MP(id(), MP(r->target, r->rpc_type));
+    VLOG(3) << "Pending: " << MP(id(), MP(r->target, r->rpc_type));
     if (r->finished()) {
       if (r->failures > 0) {
         LOG(INFO) << "Send " << MP(id(), r->target) << " of size " << r->payload.size()
@@ -145,6 +146,9 @@ void NetworkThread::Run() {
         EmptyMessage msg;
         Send(source, MTYPE_SYNC_REPLY, msg);
       }
+
+      stats["bytes_received"] += bytes;
+      stats[StringPrintf("received.%s", MessageTypes_Name((MessageTypes)tag).c_str())] += 1;
 
       boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
       CHECK_LT(source, kMaxHosts);
@@ -217,6 +221,8 @@ bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
 void NetworkThread::Send(RPCRequest *req) {
   boost::recursive_mutex::scoped_lock sl(send_lock);
 //    LOG(INFO) << "Sending... " << MP(req->target, req->rpc_type);
+  stats["bytes_sent"] += req->payload.size();
+  stats[StringPrintf("sends.%s", MessageTypes_Name((MessageTypes)(req->rpc_type)).c_str())] += 1;
   pending_sends_.push_back(req);
 }
 

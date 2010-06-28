@@ -24,10 +24,11 @@ public:
   ArgMap(const Args& p) {
     FromMessage(p);
   }
-
+#ifndef SWIG
   string& operator[](const string& key) {
     return p_[key];
   }
+#endif
 
   template <class T>
   void set(const string& k, const T& v) {
