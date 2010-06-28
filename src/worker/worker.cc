@@ -92,7 +92,7 @@ void Worker::KernelLoop() {
         return;
       }
     }
-    stats_.set_idle_time(stats_.idle_time() + idle.elapsed());
+    stats_["idle_time"] += idle.elapsed();
 
     VLOG(1) << "Received run request for " << kreq;
 
@@ -119,13 +119,8 @@ void Worker::KernelLoop() {
       Sleep(FLAGS_sleep_hack);
     }
 
+    // Run the user kernel
     helper->Run(d, kreq.method());
-
-    // Flush any table updates leftover.
-    for (TableRegistry::Map::iterator i = TableRegistry::Get()->tables().begin();
-         i != TableRegistry::Get()->tables().end(); ++i) {
-      i->second->SendUpdates();
-    }
 
     KernelDone kd;
     kd.mutable_kernel()->CopyFrom(kreq);
@@ -150,7 +145,7 @@ void Worker::KernelLoop() {
 }
 
 void Worker::Flush() {
-  Timer idle;
+  Timer net;
 
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
@@ -158,7 +153,7 @@ void Worker::Flush() {
   }
 
   network_->Flush();
-  stats_.set_network_time(stats_.network_time() + idle.elapsed());
+  stats_["network_time"] += net.elapsed();
 }
 
 void Worker::CheckNetwork() {
@@ -310,9 +305,6 @@ void Worker::HandlePutRequests() {
     VLOG(2) << "Read put request of size: "
             << put.key_data().size() << " for " << MP(put.table(), put.shard());
 
-    stats_.set_put_in(stats_.put_in() + 1);
-    stats_.set_bytes_in(stats_.bytes_in() + put.ByteSize());
-
     GlobalTable *t = TableRegistry::Get()->table(put.table());
     t->ApplyUpdates(put);
 
@@ -335,9 +327,6 @@ void Worker::HandleGetRequests() {
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
     HashPut get_resp;
 //    LOG(INFO) << "Get request: " << get_req;
-
-    stats_.set_get_in(stats_.get_in() + 1);
-    stats_.set_bytes_in(stats_.bytes_in() + get_req.ByteSize());
 
     get_resp.Clear();
     get_resp.set_source(config_.worker_id());
@@ -463,7 +452,9 @@ bool StartWorker(const ConfigData& conf) {
 
   Worker w(conf);
   w.Run();
-  LOG(INFO) << "Worker stats: " << conf.worker_id() << " :: " << w.get_stats();
+  Stats s = w.get_stats();
+  s.Merge(NetworkThread::Get()->stats);
+  LOG(INFO) << "Worker stats: \n" << s.ToString(StringPrintf("[W%d]", conf.worker_id()));
   exit(0);
 }
 

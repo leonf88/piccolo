@@ -46,6 +46,8 @@ public:
   int size() const;
 
   static NetworkThread *Get();
+
+  Stats stats;
 private:
   static const int kMaxHosts = 512;
   static const int kMaxMethods = 32;

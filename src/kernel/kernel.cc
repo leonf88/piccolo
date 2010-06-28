@@ -12,8 +12,8 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
   shard_ = shard;
 }
 
-void DSMKernel::set_args(const ArgMap& params) {
-  params_ = params;
+void DSMKernel::set_args(const ArgMap& args) {
+  args_ = args;
 }
 
 GlobalTable* DSMKernel::get_table(int id) {
