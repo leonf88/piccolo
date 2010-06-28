@@ -20,16 +20,18 @@ uint32_t StringPiece::hash() const { return SuperFastHash(data, len); }
 string StringPiece::AsString() const { return string(data, len); }
 
 void StringPiece::strip() {
-  while (len > 0 && isspace(data[0])) { LOG(INFO) << len << " : " << *data; ++data; --len; }
-  while (len > 0 && isspace(data[len - 1])) { LOG(INFO) << len << " : " << data[len];  --len; }
+  while (len > 0 && isspace(data[0])) { ++data; --len; }
+  while (len > 0 && isspace(data[len - 1])) {  --len; }
 }
 
 static void StringPieceTestStrip() {
   StringPiece p = "abc def;";
-  p.strip(); CHECK_EQ(p.AsString(), "abc def;");
+  p.strip();
+  CHECK_EQ(p.AsString(), "abc def;");
 
   StringPiece q = "   abc def;   ";
-  q.strip(); CHECK_EQ(q.AsString(), "abc def;");
+  q.strip();
+  CHECK_EQ(q.AsString(), "abc def;");
 }
 REGISTER_TEST(StringPieceStrip, StringPieceTestStrip());
 
