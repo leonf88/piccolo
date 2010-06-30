@@ -1,9 +1,10 @@
 CXX = distcc g++
 CC = distcc gcc
 CMAKE = cmake
-export CXX CC
-
+#OPROFILE = 1
 MAKE := $(MAKE) --no-print-directory
+
+export CXX CC CFLAGS CPPFLAGS OPROFILE
 
 all: release debug
 

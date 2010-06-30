@@ -44,6 +44,7 @@ include_directories (external/libunwind)
 exec_program("mpic++ -showme:compile" OUTPUT_VARIABLE MPI_COMPILE_FLAGS)
 exec_program("mpic++ -showme:incdirs" OUTPUT_VARIABLE MPI_INCDIRS)
 exec_program("mpic++ -showme:link" OUTPUT_VARIABLE MPI_LINK_FLAGS)
+exec_program("mpic++ -showme:libdirs" OUTPUT_VARIABLE MPI_LIBDIRS)
 
 string(REPLACE " " ";" MPI_INCDIRS "${MPI_INCDIRS}")
 string(REPLACE " " ";" MPI_LINK_FLAGS "${MPI_LINK_FLAGS}")
@@ -51,7 +52,10 @@ string(REPLACE " " ";" MPI_LINK_FLAGS "${MPI_LINK_FLAGS}")
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${PICCOLO_BINARY_DIR}
                      ${PROTOBUF_INCLUDE_DIRS}
-                     ${PYTHON_INCLUDE_PATH})
+                     ${PYTHON_INCLUDE_PATH}
+                     ${MPI_INCDIRS} )
+
+link_directories( ${MPI_LIBDIRS} )
 
 include_directories(${MPI_INCDIRS})
 

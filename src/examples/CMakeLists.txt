@@ -27,4 +27,4 @@ target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind)
 
 # link statically if possible
 target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
-target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPILIBS})		      
+target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPI_LINK_FLAGS})    
