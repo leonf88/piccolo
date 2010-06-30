@@ -319,8 +319,8 @@ static void TestLocalTable() {
   td.table_id = 0;
   td.key_marshal = td.value_marshal = td.sharder = NULL;
   vector<tuple2<int, int> > source;
-  for (int i = 0; i < 50; ++i) {
-    for (int j = 0; j < 50; ++j) {
+  for (int i = 0; i < 500; ++i) {
+    for (int j = 0; j < 500; ++j) {
       source.push_back(MP(i, j));
     }
   }
@@ -332,16 +332,21 @@ static void TestLocalTable() {
   h->Init(td);
   h->resize(500000);
 
-  for (int j = 0; j < 2500; ++j) {
+  for (int j = 0; j < 250000; ++j) {
     h->update(source[j], b);
   }
 
   Timer t;
   for (int i = 0; i < 100; ++i) {
-    for (int j = 0; j < 2500; ++j) {
-      CHECK(h->contains(source[j]));
+    for (int j = 0; j < 10000; ++j) {
       h->update(source[j], b);
-      CHECK(h->contains(source[j]));
+    }
+
+    for (int j = 0; j < 250000; ++j) {
+      h->update(source[j], b);
+    }
+
+    for (int j = 0; j < 250000; ++j) {
       h->get(source[j]);
     }
   }
