@@ -1,4 +1,6 @@
 #include "client/client.h"
+#include <SDL/SDL.h>
+
 
 using namespace dsm;
 
@@ -24,6 +26,7 @@ struct PixelSharder : public Sharder<Pixel> {
 
 static TypedGlobalTable<Pixel, RGB>* pixels = NULL;
 static TypedGlobalTable<int, int>* geom = NULL;
+static SDL_Surface *screen = NULL;
 
 class RayTraceKernel : public DSMKernel {
 public:
@@ -31,6 +34,9 @@ public:
     GlobalTable *t = get_table(0);
     if (t->is_local_shard(0)) {
       t->get_partition(0)->resize(FLAGS_width * FLAGS_height);
+
+      SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO);
+      screen = SDL_SetVideoMode(FLAGS_width, FLAGS_height, 32, SDL_SWSURFACE);
     }
   }
 
@@ -42,6 +48,8 @@ public:
 
     int frame = args().get<int>("frame");
 
+    Timer t;
+
     string cmd = StringPrintf("povray +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFI1 +KFF%d +W%d +H%d %s 2>/dev/null",
                               c, min(c + FLAGS_block_size, FLAGS_width),
                               r, min(r + FLAGS_block_size, FLAGS_height),
@@ -50,7 +58,6 @@ public:
                               FLAGS_source.c_str(),
                               current_shard());
 
-//    LOG(INFO) << cmd;
     FILE *f = popen(cmd.c_str(), "r");
 
     int h, w, maxval;
@@ -64,6 +71,7 @@ public:
         CHECK_EQ(fread(&up.r, 2, 1, f), 1);
         CHECK_EQ(fread(&up.g, 2, 1, f), 1);
         CHECK_EQ(fread(&up.b, 2, 1, f), 1);
+
         if (j >= c && j < c + FLAGS_block_size) {
           pixels->update(MP(r + i, j), up);
         }
@@ -74,23 +82,18 @@ public:
   }
 
   void DrawFrame() {
-    return;
-    FILE* f = fopen("frame.ppm", "w");
     Pixel k;
-    fprintf(f, "P6\n%d %d\n65535\n", FLAGS_width, FLAGS_height);
     for (int i = 0; i < FLAGS_height; ++i) {
       for (int j = 0; j < FLAGS_width; ++j) {
         k.a_  = i; k.b_ = j;
         RGB r = pixels->get_local(k);
-//        LOG(INFO) << i << " : " << j << " : " << r.r << ", " << r.g << ", " << r.b;
-        fwrite(&r.r, 2, 1, f);
-        fwrite(&r.g, 2, 1, f);
-        fwrite(&r.b, 2, 1, f);
+
+        Uint32 *bufp = (Uint32 *)screen->pixels + i*screen->pitch/4 + j;
+        *bufp = SDL_MapRGB(screen->format, r.r, r.g, r.b);
       }
     }
-    fclose(f);
 
-    system("display -remote frame.ppm");
+    SDL_UpdateRect(screen, 0, 0, FLAGS_width, FLAGS_height);
   }
 };
 REGISTER_KERNEL(RayTraceKernel);
