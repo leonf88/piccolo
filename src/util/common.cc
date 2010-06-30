@@ -192,7 +192,6 @@ void Init(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 
-  RunInitializers();
 
 #ifdef CPUPROF
   if (FLAGS_cpu_profile) {
@@ -203,23 +202,16 @@ void Init(int argc, char** argv) {
   }
 #endif
 
+
+
+  RunInitializers();
+
+  srandom(time(NULL));
+
   if (FLAGS_run_tests) {
     RunTests();
     exit(0);
   }
 
-  struct sigaction sig_action;
-  bzero(&sig_action, sizeof(sig_action));
-  sigfillset(&sig_action.sa_mask);
-  sig_action.sa_flags |= SA_ONSTACK;
-  sig_action.sa_handler = &FatalSignalHandler;
-
-  sigaction(SIGSEGV, &sig_action, NULL);
-  sigaction(SIGILL, &sig_action, NULL);
-  sigaction(SIGFPE, &sig_action, NULL);
-  sigaction(SIGABRT, &sig_action, NULL);
-  sigaction(SIGBUS, &sig_action, NULL);
-
-  srandom(time(NULL));
 }
 }
