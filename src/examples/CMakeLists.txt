@@ -1,5 +1,5 @@
 set(MPILIBS mpi_cxx mpi open-rte open-pal)
-set(STATICLIBS protobuf boost_thread-mt util)
+set(STATICLIBS protobuf boost_thread-mt util SDL)
 set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
