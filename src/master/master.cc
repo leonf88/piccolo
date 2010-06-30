@@ -532,6 +532,8 @@ void Master::dispatch_work(const RunDescriptor& r) {
 }
 
 void Master::run(RunDescriptor r) {
+  Timer t;
+
   current_run_ = r;
   KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
@@ -539,7 +541,7 @@ void Master::run(RunDescriptor r) {
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
 
 
-  LOG(INFO) << "Running: " << r.kernel << " : " << r.method << " : " << *r.params.ToMessage();
+  VLOG(1) << "Running: " << r.kernel << " : " << r.method << " : " << *r.params.ToMessage();
 
   vector<int> shards = r.shards;
 
@@ -552,8 +554,6 @@ void Master::run(RunDescriptor r) {
       r.checkpoint_tables.push_back(i->first);
     }
   }
-
-  Timer t;
 
   assign_tables();
   assign_tasks(r, shards);
