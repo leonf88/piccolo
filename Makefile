@@ -1,5 +1,5 @@
-CXX = distcc g++
-CC = distcc gcc
+CXX = g++
+CC = gcc
 CMAKE = cmake
 #OPROFILE = 1
 MAKE := $(MAKE) --no-print-directory
