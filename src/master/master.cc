@@ -504,14 +504,15 @@ void Master::assign_tables() {
       assign_worker(i->first, j);
     }
   }
-
-  for (int i = 0; i < workers_.size(); ++i) {
-    WorkerState& w = *workers_[i];
-    w.clear_tasks();
-  }
 }
 
 void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
+
+	for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = *workers_[i];
+    w.clear_tasks(); //XXX: did not delete task state, memory leak
+  }
+
   for (int i = 0; i < shards.size(); ++i) {
     assign_worker(r.table->id(), shards[i]);
   }
@@ -555,9 +556,13 @@ void Master::run(RunDescriptor r) {
     }
   }
 
-  assign_tables();
+	if (!kernel_epoch_) {
+		//only perform table assignment before the first kernel run
+		assign_tables();
+		send_table_assignments();
+	}
+
   assign_tasks(r, shards);
-  send_table_assignments();
   dispatch_work(r);
 
   KernelDone done_msg;
