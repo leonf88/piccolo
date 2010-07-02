@@ -126,8 +126,8 @@ public:
     request_.set_shard(shard_);
     int target_worker = table->get_partition_info(shard)->owner;
 
-    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
-    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+    NetworkThread::Get()->Send(target_worker+1, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker+1, MTYPE_ITERATOR_RESP, &response_);
 
     request_.set_id(response_.id());
   }
@@ -146,8 +146,8 @@ public:
 
   void Next() {
     int target_worker = owner_->get_partition_info(shard_)->owner;
-    NetworkThread::Get()->Send(target_worker, MTYPE_ITERATOR_REQ, request_);
-    NetworkThread::Get()->Read(target_worker, MTYPE_ITERATOR_RESP, &response_);
+    NetworkThread::Get()->Send(target_worker+1, MTYPE_ITERATOR_REQ, request_);
+    NetworkThread::Get()->Read(target_worker+1, MTYPE_ITERATOR_RESP, &response_);
     ++index_;
   }
 
