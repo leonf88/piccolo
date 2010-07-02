@@ -360,6 +360,8 @@ void Worker::HandleGetRequests() {
     } else {
       it = iterators_[iterator_req.id()];
       iterator_resp.set_id(iterator_req.id());
+			CHECK_NE(it, (void *)NULL);
+			it->Next();
     }
 
     iterator_resp.set_done(it->done());

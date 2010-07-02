@@ -66,6 +66,19 @@ public:
     replace_hash->clear(current_shard());
     string_hash->clear(current_shard());
   }
+
+	void TestIterator() {
+		int n = min_hash->num_shards();
+		for (int k = 0; k < n; k++) {
+			TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(k);
+			int i = 0;
+			while (i < 100 && !it->done()) {
+				assert(it->key()==it->value());
+				i++;
+				it->Next();
+			}
+		}
+	}
 };
 
 REGISTER_KERNEL(TableKernel);
@@ -73,6 +86,7 @@ REGISTER_METHOD(TableKernel, TestPut);
 REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
 REGISTER_METHOD(TableKernel, TestClear);
+REGISTER_METHOD(TableKernel, TestIterator);
 
 static int TestTables(ConfigData &conf) {
   min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
@@ -94,6 +108,8 @@ static int TestTables(ConfigData &conf) {
 
     //m.checkpoint();
     m.run_all("TableKernel", "TestGet",  min_hash);
+
+		m.run_one("TableKernel", "TestIterator",  min_hash);
   }
   return 0;
 }
