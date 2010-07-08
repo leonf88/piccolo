@@ -446,6 +446,11 @@ void Worker::CheckForMasterUpdates() {
     Flush();
     network_->Send(config_.master_id(), MTYPE_WORKER_FLUSH_DONE, empty);
   }
+
+  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_APPLY, &empty)) {
+		HandlePutRequests();
+    network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, empty);
+	}
 }
 
 bool StartWorker(const ConfigData& conf) {

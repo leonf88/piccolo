@@ -20,6 +20,9 @@ struct RunDescriptor {
    string method;
 
    GlobalTable *table;
+
+	 bool barrier;
+
    CheckpointType checkpoint_type;
    int checkpoint_interval;
 
@@ -37,10 +40,12 @@ struct RunDescriptor {
    RunDescriptor(const string& kernel,
                  const string& method,
                  GlobalTable *table,
+								 bool barrier = true,
                  CheckpointType c_type=CP_NONE, int c_interval=-1) {
      this->kernel = kernel;
      this->method = method;
      this->table = table;
+		 this->barrier = barrier;
      this->checkpoint_type = c_type;
      this->checkpoint_interval = c_interval;
    }
@@ -73,6 +78,9 @@ public:
 
   void run(RunDescriptor r);
 
+	void barrier();
+	void cp_barrier();
+
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
   void checkpoint();
@@ -92,6 +100,9 @@ private:
   int kernel_epoch_;
 
   RunDescriptor current_run_;
+	double current_run_start_;
+	int dispatched_; //# of dispatched tasks
+	int finished_; //# of finished tasks
 
   Timer cp_timer_;
   bool checkpointing_;
@@ -110,7 +121,11 @@ private:
   bool steal_work(const RunDescriptor& r, int idle_worker, double avg_time);
   void assign_tables();
   void assign_tasks(const RunDescriptor& r, vector<int> shards);
-  void dispatch_work(const RunDescriptor& r);
+  int dispatch_work(const RunDescriptor& r);
+
+	void dump_stats();
+	int reap_one_task();
+
   vector<WorkerState*> workers_;
 
   typedef map<string, MethodStats> MethodStatsMap;
