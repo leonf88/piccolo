@@ -1,28 +1,40 @@
-#ifndef HASHMAP_H_
-#define HASHMAP_H_
+#ifndef SPARSE_MAP_H_
+#define SPARSE_MAP_H_
 
-#include "util/hash.h"
-
+#include "util/common.h"
+#include "worker/worker.pb.h"
 #include <boost/noncopyable.hpp>
-#include <vector>
-#include <algorithm>
-#include <string>
-#include <tr1/unordered_map>
-#include "glog/logging.h"
-#include "google/gflags.h"
 
 namespace dsm {
 
 static const double kLoadFactor = 0.8;
 
 template <class K, class V>
-class HashMap : private boost::noncopyable {
+class SparseMap : private boost::noncopyable {
 public:
-  // Construct a hashmap with the given initial size; it will be expanded as necessary.
-  HashMap(int size=1);
-  ~HashMap() {
-    delete end_;
-  }
+  struct STLView {
+     K first;
+     V second;
+     bool in_use;
+   };
+
+  struct iterator {
+    iterator(SparseMap<K, V>& parent) : pos(-1), parent_(parent) { ++(*this); }
+    iterator(SparseMap<K, V>& parent, int p) : pos(p), parent_(parent) {}
+
+    bool operator==(const iterator &o) { return o.pos == pos; }
+    bool operator!=(const iterator &o) { return o.pos != pos; }
+
+    iterator& operator++();
+    STLView* operator->();
+
+    int pos;
+    SparseMap<K, V> &parent_;
+  };
+
+  // Construct a SparseMap with the given initial size; it will be expanded as necessary.
+  SparseMap(int size=1);
+  ~SparseMap() { delete end_; }
 
   V& operator[](const K& k);
   bool contains(const K& k);
@@ -40,44 +52,17 @@ public:
     entries_ = 0;
   }
 
-#pragma pack(push, 1)
-     struct STLView {
-       K first;
-       V second;
-       bool in_use;
-     };
-#pragma pack(pop)
-
-  struct iterator {
-    iterator(HashMap<K, V>& parent) : pos(-1), parent_(parent) { ++(*this); }
-    iterator(HashMap<K, V>& parent, int p) : pos(p), parent_(parent) {}
-
-     bool operator==(const iterator &o) { return o.pos == pos; }
-     bool operator!=(const iterator &o) { return o.pos != pos; }
-
-     iterator& operator++();
-     STLView* operator->();
-
-     int pos;
-     HashMap<K, V> &parent_;
-  };
-
   iterator begin() { return iterator(*this); }
   const iterator& end() { return *end_; }
 
-  iterator find(const K& k) {
-    int b = bucket_for_key(k);
-    if (b == -1) { return *end_; }
-    return iterator(*this, b);
-  }
+  iterator find(const K& k);
+  void erase(iterator pos);
 
-  void erase(iterator pos) {
-    pos->in_use = false;
-    --entries_;
-  }
+  void SerializePartial(TableData *out, Marshal<K> &kmarshal, Marshal<V> &vmarshal);
+  void ApplyUpdates(const TableData& req,
+                      Marshal<K> &kmarshal, Marshal<V> &vmarshal,
+                      Accumulator<V> &accum);
 
-  void checkpoint(const std::string& file);
-  void restore(const std::string& file);
 private:
   uint32_t bucket_idx(K k) {
     return hashobj_(k) % size_;
@@ -120,7 +105,20 @@ private:
 };
 
 template <class K, class V>
-typename HashMap<K, V>::iterator& HashMap<K, V>::iterator::operator++() {
+typename SparseMap<K, V>::iterator SparseMap<K, V>::find(const K& k) {
+  int b = bucket_for_key(k);
+  if (b == -1) { return *end_; }
+  return iterator(*this, b);
+}
+
+template <class K, class V>
+void SparseMap<K, V>::erase(typename SparseMap<K, V>::iterator pos) {
+  pos->in_use = false;
+  --entries_;
+}
+
+template <class K, class V>
+typename SparseMap<K, V>::iterator& SparseMap<K, V>::iterator::operator++() {
   do {
     ++pos;
   } while (pos < parent_.size_ && !parent_.buckets_[pos].in_use);
@@ -128,12 +126,12 @@ typename HashMap<K, V>::iterator& HashMap<K, V>::iterator::operator++() {
 }
 
 template <class K, class V>
-typename HashMap<K, V>::STLView* HashMap<K, V>::iterator::operator->()  {
+typename SparseMap<K, V>::STLView* SparseMap<K, V>::iterator::operator->()  {
   return (STLView*)&parent_.buckets_[pos];
 }
 
 template <class K, class V>
-HashMap<K, V>::HashMap(int size)
+SparseMap<K, V>::SparseMap(int size)
   : buckets_(0), entries_(0), size_(0) {
   clear();
 
@@ -143,6 +141,41 @@ HashMap<K, V>::HashMap(int size)
   rehash(size);
 }
 
+template <class K, class V>
+void SparseMap<K, V>::SerializePartial(TableData *out, Marshal<K> &kmarshal, Marshal<V> &vmarshal) {
+  iterator i = begin();
+  while (i != end()) {
+    Arg *kv = out->add_kv_data();
+    kmarshal.marshal(i->first, kv->mutable_key());
+    vmarshal.marshal(i->second, kv->mutable_value());
+    ++i;
+  }
+
+  clear();
+}
+
+template <class K, class V>
+void SparseMap<K, V>::ApplyUpdates(const TableData& req,
+                                      Marshal<K> &kmarshal,
+                                      Marshal<V> &vmarshal,
+                                      Accumulator<V> &accum) {
+  K k;
+  V v;
+  for (int i = 0; i < req.kv_data_size(); ++i) {
+    const Arg& kv = req.kv_data(i);
+    kmarshal.unmarshal(kv.key(), &k);
+    vmarshal.unmarshal(kv.value(), &v);
+
+    int b = bucket_for_key(k);
+    if (b == -1) {
+      put(k, v);
+    } else {
+      accum(&buckets_[b].v, v);
+    }
+  }
+}
+
+
 static int log2(int s) {
   int l = 0;
   while (s >>= 1) { ++l; }
@@ -150,7 +183,7 @@ static int log2(int s) {
 }
 
 template <class K, class V>
-void HashMap<K, V>::rehash(uint32_t size) {
+void SparseMap<K, V>::rehash(uint32_t size) {
   if (size_ == size)
     return;
 
@@ -178,7 +211,7 @@ void HashMap<K, V>::rehash(uint32_t size) {
 }
 
 template <class K, class V>
-V& HashMap<K, V>::operator[](const K& k) {
+V& SparseMap<K, V>::operator[](const K& k) {
   if (contains(k)) {
     return get(k);
   }
@@ -187,22 +220,20 @@ V& HashMap<K, V>::operator[](const K& k) {
 }
 
 template <class K, class V>
-bool HashMap<K, V>::contains(const K& k) {
+bool SparseMap<K, V>::contains(const K& k) {
   return bucket_for_key(k) != -1;
 }
 
 template <class K, class V>
-V& HashMap<K, V>::get(const K& k) {
+V& SparseMap<K, V>::get(const K& k) {
   int b = bucket_for_key(k);
-  if (b == -1) {
-    LOG(FATAL) << "No entry for key.";
-  }
+  CHECK_NE(b, -1) << "No entry for requested key: " << k;
 
   return buckets_[b].v;
 }
 
 template <class K, class V>
-V& HashMap<K, V>::put(const K& k, const V& v) {
+V& SparseMap<K, V>::put(const K& k, const V& v) {
   int start = bucket_idx(k);
   int b = start;
   bool found = false;
@@ -239,4 +270,4 @@ V& HashMap<K, V>::put(const K& k, const V& v) {
   return buckets_[b].v;
 }
 }
-#endif /* HASHMAP_H_ */
+#endif /* SPARSE_MAP_H_ */

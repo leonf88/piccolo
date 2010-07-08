@@ -18,7 +18,6 @@
 #include "util/static-initializers.h"
 #include "util/stringpiece.h"
 #include "util/timer.h"
-#include "util/hashmap.h"
 
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
@@ -98,6 +97,51 @@ struct Stats {
 private:
   unordered_map<string, double> p_;
 };
+
+
+
+template <class T>
+struct Marshal {
+  virtual void marshal(const T& t, string* out) {
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
+    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
+  }
+
+  virtual void unmarshal(const StringPiece& s, T *t) {
+    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
+    *t = *reinterpret_cast<const T*>(s.data);
+  }
+};
+
+template <class V>
+struct Accumulator {
+  virtual void operator()(V* a, const V& b) = 0;
+};
+
+template <class K>
+struct Sharder {
+  virtual int operator()(const K& k, int shards) = 0;
+};
+
+
+template <>
+struct Marshal<string> {
+  void marshal(const string& t, string *out) { *out = t; }
+  void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
+};
+
+template <>
+struct Marshal<google::protobuf::Message> {
+  void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
+  void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
+};
+
+template <class T>
+string marshal(Marshal<T>* m, const T& t) { string out; m->marshal(t, &out); return out; }
+
+template <class T>
+T unmarshal(Marshal<T>* m, const StringPiece& s) { T out; m->unmarshal(s, &out); return out; }
+
 
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
 
@@ -255,6 +299,7 @@ static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
 }
 }
 #endif
+
 
 #define COMPILE_ASSERT(x) extern int __dummy[(int)x]
 

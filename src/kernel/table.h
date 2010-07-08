@@ -2,56 +2,11 @@
 #define ACCUMULATOR_H
 
 #include "util/common.h"
-#include "util/hashmap.h"
 #include "util/file.h"
 #include "worker/worker.pb.h"
 #include <boost/thread.hpp>
 
 namespace dsm {
-
-class HashPut;
-
-template <class V>
-struct Accumulator {
-  virtual void operator()(V* a, const V& b) = 0;
-};
-
-template <class K>
-struct Sharder {
-  virtual int operator()(const K& k, int shards) = 0;
-};
-
-template <class T>
-struct Marshal {
-  virtual void marshal(const T& t, string* out) {
-    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
-    out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
-  }
-
-  virtual void unmarshal(const StringPiece& s, T *t) {
-    GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
-    *t = *reinterpret_cast<const T*>(s.data);
-  }
-};
-
-template <>
-struct Marshal<string> {
-  void marshal(const string& t, string *out) { *out = t; }
-  void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
-};
-
-template <>
-struct Marshal<google::protobuf::Message> {
-  void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
-  void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
-};
-
-template <class T>
-string marshal(Marshal<T>* m, const T& t) { string out; m->marshal(t, &out); return out; }
-
-template <class T>
-T unmarshal(Marshal<T>* m, const StringPiece& s) { T out; m->unmarshal(s, &out); return out; }
-
 
 #ifndef SWIG
 // Commonly used accumulation operators.
@@ -148,11 +103,13 @@ protected:
   TableDescriptor info_;
 };
 
+class TableData;
+
 class Checkpointable {
 public:
   // Checkpoint and restoration.
   virtual void start_checkpoint(const string& f) = 0;
-  virtual void write_delta(const HashPut& put) = 0;
+  virtual void write_delta(const TableData& put) = 0;
   virtual void finish_checkpoint() = 0;
   virtual void restore(const string& f) = 0;
 };
