@@ -206,6 +206,7 @@ Master::Master(const ConfigData &conf) :
   config_.CopyFrom(conf);
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
+	finished_ = dispatched_ = 0;
   last_checkpoint_ = Now();
   checkpointing_ = false;
   network_ = NetworkThread::Get();
@@ -518,7 +519,9 @@ void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
   }
 }
 
-void Master::dispatch_work(const RunDescriptor& r) {
+int Master::dispatch_work(const RunDescriptor& r) {
+
+	int num_dispatched = 0;
   KernelRequest w_req;
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
@@ -527,15 +530,77 @@ void Master::dispatch_work(const RunDescriptor& r) {
       Args* p = r.params.ToMessage();
       w_req.mutable_args()->CopyFrom(*p);
       delete p;
+			num_dispatched++;
       network_->Send(w.id + 1, MTYPE_RUN_KERNEL, w_req);
     }
   }
+	return num_dispatched;
+}
+
+void Master::dump_stats() {
+
+	string status;
+	for (int k = 0; k < config_.num_workers(); ++k) {
+		status += StringPrintf("%d/%d ",
+				workers_[k]->num_finished(),
+				workers_[k]->num_assigned());
+	}
+	LOG(INFO) << StringPrintf("Running %s (%d); %s; assigned: %d done: %d", 
+			current_run_.method.c_str(), current_run_.shards.size(), 
+			status.c_str(), 
+			finished_, dispatched_);
+
+}
+
+int Master::reap_one_task() {
+
+  MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
+  KernelDone done_msg;
+  int w_id = 0;
+
+	if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
+
+		w_id -= 1;
+
+		WorkerState& w = *workers_[w_id];
+
+		Taskid task_id(done_msg.kernel().table(), done_msg.kernel().shard());
+		//      TaskState* task = w.work[task_id];
+		//
+		//      LOG(INFO) << "TASK_FINISHED "
+		//                << r.method << " "
+		//                << task_id.table << " " << task_id.shard << " on "
+		//                << w_id << " in "
+		//                << Now() - w.last_task_start << " size "
+		//                << task->size <<
+		//                " worker " << w.total_size();
+
+		for (int i = 0; i < done_msg.shards_size(); ++i) {
+			const ShardInfo &si = done_msg.shards(i);
+			tables_[si.table()]->UpdatePartitions(si);
+		}
+
+		w.set_finished(task_id);
+
+		w.total_runtime += Now() - w.last_task_start;
+		mstats.set_total_shard_time(mstats.total_shard_time() + Now() - w.last_task_start);
+		mstats.set_shard_invocations(mstats.shard_invocations() + 1);
+		w.ping();
+		return w_id;
+	} else {
+		Sleep(FLAGS_sleep_time);
+		return -1;
+	}
+
 }
 
 void Master::run(RunDescriptor r) {
-  Timer t;
 
+	CHECK_EQ(current_run_.shards.size(), finished_) << " Cannot start kernel before previous one is finished ";
   current_run_ = r;
+	current_run_start_ = Now();
+	finished_ = dispatched_ = 0;
+
   KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
@@ -561,123 +626,110 @@ void Master::run(RunDescriptor r) {
 		assign_tables();
 		send_table_assignments();
 	}
+  kernel_epoch_++;
 
   assign_tasks(r, shards);
-  dispatch_work(r);
 
-  KernelDone done_msg;
+	dispatched_ = dispatch_work(r);
 
-  int count = 0;
-  while (count < shards.size()) {
-    PERIODIC(10, {
-       DumpProfile();
-       string status;
-       for (int k = 0; k < config_.num_workers(); ++k) {
-         status += StringPrintf("%d/%d ",
-                                workers_[k]->num_finished(),
-                                workers_[k]->num_assigned());
-       }
-       LOG(INFO) << StringPrintf("Running %s; %s; left: %d", r.method.c_str(), status.c_str(), shards.size() - count);
-    });
+	//XXX:in its current state, does not make sense not to call barrier at the end
+	if (r.barrier) {
+		barrier();
+	}
 
+}
 
+void Master::cp_barrier() {
+	current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+	barrier();
+}
 
-    if (r.checkpoint_type == CP_ROLLING &&
-        Now() - last_checkpoint_ > r.checkpoint_interval) {
+void Master::barrier() {
+
+  MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
+
+  while (finished_ < current_run_.shards.size()) {
+    PERIODIC(10, { 
+			DumpProfile(); 
+			dump_stats(); 
+		});
+      
+    if (current_run_.checkpoint_type == CP_ROLLING &&
+        Now() - last_checkpoint_ > current_run_.checkpoint_interval) {
       checkpoint();
     }
 
-    int w_id = 0;
-    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
-      ++count;
+		if (reap_one_task() >= 0)  {
+			finished_++;
 
-      w_id -= 1;
+			PERIODIC(0.1, {
+				double avg_completion_time = 
+					mstats.total_shard_time() / mstats.shard_invocations();
 
-      WorkerState& w = *workers_[w_id];
+				bool need_update = false;
+				for (int i = 0; i < workers_.size(); ++i) {
+					WorkerState& w = *workers_[i];
 
-      Taskid task_id(done_msg.kernel().table(), done_msg.kernel().shard());
-//      TaskState* task = w.work[task_id];
-//
-//      LOG(INFO) << "TASK_FINISHED "
-//                << r.method << " "
-//                << task_id.table << " " << task_id.shard << " on "
-//                << w_id << " in "
-//                << Now() - w.last_task_start << " size "
-//                << task->size <<
-//                " worker " << w.total_size();
+					// Don't try to steal tasks if the payoff is too small.
+					if (mstats.shard_invocations() > 10 &&
+								avg_completion_time > 0.2 &&
+								!checkpointing_ &&
+								w.idle_time() > 0.5) {
+						if (steal_work(current_run_, w.id, avg_completion_time)) {
+							need_update = true;
+						}
+					}
 
-      for (int i = 0; i < done_msg.shards_size(); ++i) {
-        const ShardInfo &si = done_msg.shards(i);
-        tables_[si.table()]->UpdatePartitions(si);
-      }
+					if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED &&
+								0.7 * current_run_.shards.size() < finished_ &&
+								w.idle_time() > 0 &&
+								!w.checkpointing) {
+						start_worker_checkpoint(w.id, current_run_);
+					}
 
-      w.set_finished(task_id);
+				}
+				
+				if (need_update) {
+					// Update the table assignments.
+					send_table_assignments();
+				}
 
-      w.total_runtime += Now() - w.last_task_start;
-      mstats.set_total_shard_time(mstats.total_shard_time() + Now() - w.last_task_start);
-      mstats.set_shard_invocations(mstats.shard_invocations() + 1);
-      w.ping();
-    } else {
-      Sleep(FLAGS_sleep_time);
-    }
+			});
 
-    PERIODIC(0.1, {
-      double avg_completion_time =
-          mstats.total_shard_time() / mstats.shard_invocations();
+			if (dispatched_ < current_run_.shards.size())
+				dispatched_ += dispatch_work(current_run_);
 
-      bool need_update = false;
-      for (int i = 0; i < workers_.size(); ++i) {
-        WorkerState& w = *workers_[i];
+		}
 
-        // Don't try to steal tasks if the payoff is too small.
-        if (mstats.shard_invocations() > 10 &&
-            avg_completion_time > 0.2 &&
-            !checkpointing_ &&
-            w.idle_time() > 0.5) {
-          if (steal_work(r, w.id, avg_completion_time)) {
-            need_update = true;
-          }
-        }
-
-        if (r.checkpoint_type == CP_MASTER_CONTROLLED &&
-            0.7 * shards.size() < count &&
-            w.idle_time() > 0 &&
-            !w.checkpointing) {
-          start_worker_checkpoint(w.id, r);
-        }
-      }
-      if (need_update) {
-        // Update the table assignments.
-        send_table_assignments();
-      }
-    });
-
-
-    dispatch_work(r);
   }
 
-  mstats.set_total_time(mstats.total_time() + t.elapsed());
+  mstats.set_total_time(Now()-current_run_start_);
 
-  if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
+  if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
     for (int i = 0; i < workers_.size(); ++i) {
       WorkerState& w = *workers_[i];
       if (!w.checkpointing) {
-        start_worker_checkpoint(w.id, r);
+        start_worker_checkpoint(w.id, current_run_);
       }
     }
 
     for (int i = 0; i < workers_.size(); ++i) {
       WorkerState& w = *workers_[i];
-      finish_worker_checkpoint(w.id, r);
+      finish_worker_checkpoint(w.id, current_run_);
     }
 
-    flush_checkpoint(r.params);
+    flush_checkpoint(current_run_.params);
   }
 
   EmptyMessage empty;
+	//1st round-trip to make sure all workers have flushed everything
   network_->SyncBroadcast(MTYPE_WORKER_FLUSH, MTYPE_WORKER_FLUSH_DONE, empty);
-  kernel_epoch_++;
-  LOG(INFO) << "Kernel '" << r.method << "' finished in " << t.elapsed();
+	//2nd round-trip to make sure all workers have applied all updates
+	//XXX: incorrect if MPI does not guarantee remote delivery
+  network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
+
+  LOG(INFO) << "Kernel '" << current_run_.method 
+					  << "' finished in " << (Now()-current_run_start_);
 }
 
 static void TestTaskSort() {

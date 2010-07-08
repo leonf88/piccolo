@@ -46,7 +46,7 @@ public:
   Stats stats;
 private:
   static const int kMaxHosts = 512;
-  static const int kMaxMethods = 32;
+  static const int kMaxMethods = 36;
 
   typedef deque<string> Queue;
 

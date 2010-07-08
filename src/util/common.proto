@@ -29,6 +29,10 @@ enum MessageTypes {
 
   MTYPE_SYNC_REPLY = 31;
   MTYPE_MAX = 32;
+
+  MTYPE_WORKER_APPLY = 33;
+  MTYPE_WORKER_APPLY_DONE = 34;
+
 };
 
 message EmptyMessage {}

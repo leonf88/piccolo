@@ -175,6 +175,7 @@ void NetworkThread::Run() {
 
 bool NetworkThread::check_queue(int src, int type, Message* data) {
   CHECK_LT(src, kMaxHosts);
+	CHECK_LT(type, kMaxMethods);
 
   Queue& q = incoming[type][src];
   if (!q.empty()) {
