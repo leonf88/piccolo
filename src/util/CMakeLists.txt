@@ -6,6 +6,5 @@ add_library(common
             stringpiece.cc
             rpc.cc 
             static-initializers.cc 
-            hashmap.cc 
             ${COMMON_PB_SRC} 
             ${COMMON_PB_HDR})

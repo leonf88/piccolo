@@ -244,7 +244,7 @@ public:
 
   // Arbitrary key-value pairs to be attached to this file; these are written
   // prior to any message data.
-  typedef HashMap<string, string> AttrMap;
+  typedef unordered_map<string, string> AttrMap;
   AttrMap attributes;
 
   virtual void write(const google::protobuf::Message &m);

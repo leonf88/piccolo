@@ -36,11 +36,11 @@ public:
   bool is_local_key(const StringPiece &k);
 
   // Fill in a response from a remote worker for the given key.
-  void handle_get(const HashGet& req, HashPut* resp);
+  void handle_get(const HashGet& req, TableData* resp);
 
   // Handle updates from the master or other workers.
   void SendUpdates();
-  void ApplyUpdates(const HashPut& req);
+  void ApplyUpdates(const TableData& req);
   void HandlePutRequests();
   void UpdatePartitions(const ShardInfo& sinfo);
 
@@ -53,7 +53,7 @@ public:
   void resize(int64_t new_size);
 
   virtual void start_checkpoint(const string& f);
-  virtual void write_delta(const HashPut& d);
+  virtual void write_delta(const TableData& d);
   virtual void finish_checkpoint();
   virtual void restore(const string& f);
 
@@ -230,6 +230,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   //  boost::recursive_mutex::scoped_lock sl(mutex());
   static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->update(k, v);
 
+//  LOG(INFO) << "local: " << k << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
     ++pending_writes_;
   }

@@ -1,0 +1,5 @@
+^.*\.(o|lo|la|a|dirstamp|Po|Plo|lai)$
+^extlib/.*_unittest
+^extlib/.*_test
+^bin/.*
+^.*/.*\.(pyc|orig|aux|log|nav|out|ps|pdf|snm|toc|bbl|blg|dvi)

@@ -1,12 +1,10 @@
 #include "util/static-initializers.h"
-#include "util/hashmap.h"
 
 #include <stdio.h>
 #include <gflags/gflags.h>
 
-
 using namespace std;
-using namespace std::tr1;
+
 namespace dsm {
 
 typedef Registry<InitHelper>::Map InitMap;
