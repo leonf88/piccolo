@@ -32,7 +32,7 @@ public:
   // These are not currently implemented for disk based tables.
   int get_shard_str(StringPiece k) { return -1; }
   void start_checkpoint(const string& f) {}
-  void write_delta(const HashPut& d) {}
+  void write_delta(const TableData& d) {}
   void finish_checkpoint() {}
   void restore(const string& f) {}
 

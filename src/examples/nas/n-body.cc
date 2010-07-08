@@ -124,7 +124,7 @@ public:
   TypedGlobalTable<pos, string> *curr;
   TypedGlobalTable<pos, string> *next;
 
-  HashMap<pos, string> cache;
+  SparseMap<pos, string> cache;
 
   void CreatePoints() {
     curr = this->get_table<pos, string>(0);
@@ -281,7 +281,7 @@ static void TestPos() {
     CHECK_EQ(pb.get_box(), p.get_box());
   }
 
-  HashMap<pos, int> t(1000);
+  SparseMap<pos, int> t(1000);
   for (int i = 0; i < 100; ++i) {
     t.put(pos(0, 0, i + 0.5), i);
   }

@@ -1,26 +1,10 @@
-#include "kernel/local-table.h"
 #include "kernel/global-table.h"
 #include "worker/worker.h"
 
-static const int kMaxNetworkChunk = 1 << 20;
 static const int kMaxNetworkPending = 1 << 26;
+static const int kMaxNetworkChunk = 1 << 20;
 
 namespace dsm {
-
-static void SerializePartial(HashPut& r, TableBase::Iterator *it) {
-  int bytes_used = 0;
-  HashPutCoder h(&r);
-  string k, v;
-  for (; !it->done() && bytes_used < kMaxNetworkChunk; it->Next()) {
-    it->key_str(&k);
-    it->value_str(&v);
-    h.add_pair(k, v);
-  }
-
-  VLOG(2) << StringPrintf("Serialized %d pairs; used %d bytes.",
-                            r.key_offset_size(), r.ByteSize());
-  r.set_done(it->done());
-}
 
 void GlobalTable::UpdatePartitions(const ShardInfo& info) {
   partinfo_[info.shard()].sinfo.CopyFrom(info);
@@ -95,7 +79,7 @@ void GlobalTable::set_worker(Worker* w) {
 
 bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   HashGet req;
-  HashPut resp;
+  TableData resp;
 
   req.set_key(k.AsString());
   req.set_table(info().table_id);
@@ -114,8 +98,7 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
     return false;
   }
 
-  HashPutCoder h(&resp);
-  v->assign(h.value(0).data, h.value(0).len);
+  *v = resp.kv_data(0).value();
   return true;
 }
 
@@ -129,7 +112,7 @@ void GlobalTable::start_checkpoint(const string& f) {
   }
 }
 
-void GlobalTable::write_delta(const HashPut& d) {
+void GlobalTable::write_delta(const TableData& d) {
   if (!is_local_shard(d.shard())) {
     LOG_EVERY_N(INFO, 1000)
         << "Ignoring delta write for forwarded data";
@@ -161,10 +144,8 @@ void GlobalTable::restore(const string& f) {
   }
 }
 
-void GlobalTable::handle_get(const HashGet& get_req, HashPut *get_resp) {
+void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
   boost::recursive_mutex::scoped_lock sl(mutex());
-
-  HashPutCoder h(get_resp);
 
   int shard = get_req.shard();
   if (!is_local_shard(shard)) {
@@ -175,7 +156,9 @@ void GlobalTable::handle_get(const HashGet& get_req, HashPut *get_resp) {
   if (!t->contains_str(get_req.key())) {
     get_resp->set_missing_key(true);
   } else {
-    h.add_pair(get_req.key(), t->get_str(get_req.key()));
+    Arg *kv = get_resp->add_kv_data();
+    kv->set_key(get_req.key());
+    kv->set_value(t->get_str(get_req.key()));
   }
 }
 
@@ -184,14 +167,12 @@ void GlobalTable::HandlePutRequests() {
 }
 
 void GlobalTable::SendUpdates() {
-  HashPut put;
+  TableData put;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
     if (!is_local_shard(i) && (get_partition_info(i)->dirty || !t->empty())) {
       VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i);
-
-      TableBase::Iterator *it = t->get_iterator();
 
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.
@@ -202,10 +183,9 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(w_->epoch());
 
-        SerializePartial(put, it);
+        t->SerializePartial(&put);
         NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
-      } while(!it->done());
-      delete it;
+      } while(!t->empty());
 
       VLOG(2) << "Done with update for " << MP(t->id(), t->shard());
       t->clear();
@@ -228,7 +208,7 @@ int GlobalTable::pending_write_bytes() {
   return s;
 }
 
-void GlobalTable::ApplyUpdates(const dsm::HashPut& req) {
+void GlobalTable::ApplyUpdates(const dsm::TableData& req) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
   if (!is_local_shard(req.shard())) {
@@ -248,109 +228,4 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
 
   v->assign(h->get_str(k));
 }
-
-HashPutCoder::HashPutCoder(HashPut *h) : h_(h) {
-  h_->add_key_offset(0);
-  h_->add_value_offset(0);
 }
-
-HashPutCoder::HashPutCoder(const HashPut& h) : h_((HashPut*)&h) {
-  CHECK_EQ(h_->value_offset_size(), h_->key_offset_size());
-}
-
-void HashPutCoder::add_pair(const string& k, const string& v) {
-  h_->mutable_key_data()->append(k);
-  h_->mutable_value_data()->append(v);
-
-  h_->add_key_offset(h_->key_data().size());
-  h_->add_value_offset(h_->value_data().size());
-
-//  CHECK_EQ(key(size() - 1).AsString(), k);
-//  CHECK_EQ(value(size() - 1).AsString(), v);
-}
-
-StringPiece HashPutCoder::key(int i) {
-  int start = h_->key_offset(i);
-  int end = h_->key_offset(i + 1);
-//  CHECK_GT(end, start);
-
-  return StringPiece(h_->key_data().data() + start, end - start);
-}
-
-StringPiece HashPutCoder::value(int i) {
-  int start = h_->value_offset(i);
-  int end = h_->value_offset(i + 1);
-
-//  CHECK_GT(end, start);
-  return StringPiece(h_->value_data().data() + start, end - start);
-}
-
-int HashPutCoder::size() {
-  return h_->key_offset_size() - 1;
-}
-
-void LocalTable::write_delta(const HashPut& req) {
-  if (!delta_file_) {
-    LOG_EVERY_N(ERROR, 100) << "Shard: " << this->info().shard << " is somehow missing it's delta file?";
-  } else {
-    delta_file_->write(req);
-  }
-}
-
-void LocalTable::ApplyUpdates(const HashPut& req) {
-  CHECK_EQ(req.key_offset_size(), req.value_offset_size());
-  HashPutCoder h(req);
-
-  for (int i = 0; i < h.size(); ++i) {
-    update_str(h.key(i), h.value(i));
-  }
-}
-}
-
-using namespace dsm;
-struct TableTestRGB { int r; int g; int b; };
-
-static void TestLocalTable() {
-  TableDescriptor td;
-  td.accum = new Accumulators<TableTestRGB>::Replace;
-  td.num_shards = 1;
-  td.shard = 0;
-  td.default_shard_size = 1;
-  td.table_id = 0;
-  td.key_marshal = td.value_marshal = td.sharder = NULL;
-  vector<tuple2<int, int> > source;
-  for (int i = 0; i < 500; ++i) {
-    for (int j = 0; j < 500; ++j) {
-      source.push_back(MP(i, j));
-    }
-  }
-
-  TableTestRGB b = { 1, 2, 3 };
-
-
-  TypedLocalTable<tuple2<int, int>, TableTestRGB> *h = new TypedLocalTable<tuple2<int, int>, TableTestRGB>;
-  h->Init(td);
-  h->resize(500000);
-
-  for (int j = 0; j < 250000; ++j) {
-    h->update(source[j], b);
-  }
-
-  Timer t;
-  for (int i = 0; i < 100; ++i) {
-    for (int j = 0; j < 10000; ++j) {
-      h->update(source[j], b);
-    }
-
-    for (int j = 0; j < 250000; ++j) {
-      h->update(source[j], b);
-    }
-
-    for (int j = 0; j < 250000; ++j) {
-      h->get(source[j]);
-    }
-  }
-  LOG(INFO) << "Time: " << t.elapsed();
-}
-
-REGISTER_TEST(LocalTable, TestLocalTable());
