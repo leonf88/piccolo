@@ -244,7 +244,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, vector<int> to_chec
   // For rolling checkpoints, send out a marker to other workers indicating
   // that we have switched epochs.
   if (type == CP_ROLLING) {
-    HashPut epoch_marker;
+    TableData epoch_marker;
     epoch_marker.set_source(id());
     epoch_marker.set_table(-1);
     epoch_marker.set_shard(-1);
@@ -295,7 +295,7 @@ void Worker::Restore(int epoch) {
 }
 
 void Worker::HandlePutRequests() {
-  HashPut put;
+  TableData put;
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
     if (put.marker() != -1) {
       UpdateEpoch(put.source(), put.marker());
@@ -303,7 +303,7 @@ void Worker::HandlePutRequests() {
     }
 
     VLOG(2) << "Read put request of size: "
-            << put.key_data().size() << " for " << MP(put.table(), put.shard());
+            << put.table_data().size() << " for " << MP(put.table(), put.shard());
 
     GlobalTable *t = TableRegistry::Get()->table(put.table());
     t->ApplyUpdates(put);
@@ -325,7 +325,7 @@ void Worker::HandleGetRequests() {
   int source;
   HashGet get_req;
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
-    HashPut get_resp;
+    TableData get_resp;
 //    LOG(INFO) << "Get request: " << get_req;
 
     get_resp.Clear();
@@ -341,7 +341,7 @@ void Worker::HandleGetRequests() {
     }
 
     network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
-    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard());
+    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard()) << " - found? " << !get_resp.missing_key();
   }
 
   IteratorRequest iterator_req;
