@@ -15,10 +15,6 @@ typedef google::protobuf::Message Message;
 
 struct RPCRequest;
 
-// XXX
-//stats_.set_bytes_out(stats_.bytes_out() + p->payload.size());
-//stats_.set_put_out(stats_.put_out() + 1);
-
 // Hackery to get around mpi's unhappiness with threads.  This thread
 // simply polls MPI continuously for any kind of update and adds it to
 // a local queue.
