@@ -39,7 +39,8 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     my_shard = current_shard();
 
     Block b, z;
-    memset(b.d, 2, kBlockSize * kBlockSize * sizeof(double));
+    for (int i = 0; i < kBlockSize * kBlockSize; ++i)
+      b.d[i] = 2;
     memset(z.d, 0, kBlockSize * kBlockSize * sizeof(double));
 
     int bcount = 0;
