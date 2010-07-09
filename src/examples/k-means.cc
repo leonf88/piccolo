@@ -26,12 +26,15 @@ static TypedGlobalTable<int32_t, Distribution> *dists;
 static TypedGlobalTable<int32_t, Distribution> *actual;
 
 class KMeansKernel : public DSMKernel {
+private:
+  vector<Distribution> rdists;
+
 public:
-  void initialize_world() {
+  void initialize_points() {
     points->resize(FLAGS_num_points);
 
     srand(0);
-    vector<Distribution> rdists;
+    rdists.clear();
     for (int i = 0; i < FLAGS_num_dists; ++i) {
       double dx = 0.5 - rand_double();
       double dy = 0.5 - rand_double();
@@ -49,15 +52,15 @@ public:
       Point p = { dx + 0.1 * (rand_double() - 0.5), dy + 0.1 * (rand_double() - 0.5), -1, 0 };
       points->update(i, p);
     }
+  }
 
-    if (current_shard() == 0) {
-      for (int i = 0; i < FLAGS_num_dists; ++i) {
-        // Initialize a guess for center point of the distributions
-        Point p = points->get(random() % FLAGS_num_points);
-        Distribution d = { p.x, p.y };
-        dists->update(i, d);
-        actual->update(i, rdists[i]);
-      }
+  void initialize_dists() {
+    for (int i = 0; i < FLAGS_num_dists; ++i) {
+      // Initialize a guess for center point of the distributions
+      Point p = points->get(random() % FLAGS_num_points);
+      Distribution d = { p.x, p.y };
+      dists->update(i, d);
+      actual->update(i, rdists[i]);
     }
   }
 
@@ -154,7 +157,8 @@ public:
 };
 
 REGISTER_KERNEL(KMeansKernel);
-REGISTER_METHOD(KMeansKernel, initialize_world);
+REGISTER_METHOD(KMeansKernel, initialize_points);
+REGISTER_METHOD(KMeansKernel, initialize_dists);
 REGISTER_METHOD(KMeansKernel, initialize_expectation);
 REGISTER_METHOD(KMeansKernel, initialize_maximization);
 REGISTER_METHOD(KMeansKernel, compute_expectation);
@@ -178,7 +182,8 @@ static int KMeans(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("KMeansKernel", "initialize_world",  points);
+    m.run_all("KMeansKernel", "initialize_points",  points);
+    m.run_one("KMeansKernel", "initialize_dists",  points);
     for (int i = 0; i < FLAGS_iterations; i++) {
       m.run_all("KMeansKernel", "initialize_expectation",  points);
       m.run_all("KMeansKernel", "compute_expectation",  points);
