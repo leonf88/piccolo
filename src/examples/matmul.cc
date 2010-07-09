@@ -61,6 +61,11 @@ struct MatrixMultiplicationKernel : public DSMKernel {
   void Multiply() {
     Block a, b, c;
 
+    // If work stealing occurs, this could be a kernel instance that
+    // didn't run Initialize, so fetch parameters again.
+    num_shards = matrix_a->num_shards();
+    my_shard = current_shard();
+
     for (int k = 0; k < bRows; k++) {
       for (int i = 0; i < bRows; i++) {
         for (int j = 0; j < bCols; j++) {
