@@ -7,11 +7,15 @@
 #include "util/file.h"
 #include "util/rpc.h"
 
+#include "kernel/sparse-table.h"
+
 namespace dsm {
+
+class Worker;
 
 class GlobalTable  : public TableBase {
 public:
-  void Init(const TableDescriptor& tinfo);
+  void Init(const TableDescriptor* tinfo);
   virtual ~GlobalTable();
 
   struct PartitionInfo {
@@ -86,10 +90,10 @@ protected:
 template <class K, class V>
 class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, private boost::noncopyable {
 public:
-  void Init(const TableDescriptor &tinfo) {
+  void Init(const TableDescriptor *tinfo) {
     GlobalTable::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
-      partitions_[i] = (TypedLocalTable<K, V>*)create_local(i);
+      partitions_[i] = create_local(i);
     }
 
     pending_writes_ = 0;
@@ -111,6 +115,8 @@ public:
   void remove(const K &k);
   TableIterator* get_iterator(int shard);
   TypedTableIterator<K, V>* get_typed_iterator(int shard);
+  TypedTable<K, V>* partition(int idx) { return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]); }
+
 protected:
   LocalTable* create_local(int shard);
 };
@@ -198,7 +204,7 @@ V TypedGlobalTable<K, V>::get_local(const K& k) {
 
   CHECK(is_local_shard(shard)) << " non-local for shard: " << shard;
 
-  return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->get(k);
+  return partition(shard)->get(k);
 }
 
 // Store the given key-value pair in this hash. If 'k' has affinity for a
@@ -210,7 +216,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
   //  boost::recursive_mutex::scoped_lock sl(mutex());
-  static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->put(k, v);
+  partition(shard)->put(k, v);
 
   if (!is_local_shard(shard)) {
     ++pending_writes_;
@@ -228,7 +234,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
   //  boost::recursive_mutex::scoped_lock sl(mutex());
-  static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->update(k, v);
+  partition(shard)->update(k, v);
 
 //  LOG(INFO) << "local: " << k << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
@@ -258,7 +264,7 @@ V TypedGlobalTable<K, V>::get(const K &k) {
 
   if (is_local_shard(shard)) {
     //    boost::recursive_mutex::scoped_lock sl(mutex());
-    return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->get(k);
+    return partition(shard)->get(k);
   }
 
   string v_str;
@@ -281,8 +287,7 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
 
   if (is_local_shard(shard)) {
     //    boost::recursive_mutex::scoped_lock sl(mutex());
-    return static_cast<TypedLocalTable<K, V>*> (partitions_[shard])->contains(
-                                                                               k);
+    return ((TypedTable<K, V>*) (partitions_[shard]))->contains(k);
   }
 
   string v_str;
@@ -303,10 +308,12 @@ TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
 
 template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
-  TableDescriptor linfo = ((GlobalTable*) this)->info();
-  linfo.shard = shard;
-  TypedLocalTable<K, V>* t = new TypedLocalTable<K, V>();
+  TableDescriptor *linfo = new TableDescriptor;
+  *linfo = ((GlobalTable*) this)->info();
+  linfo->shard = shard;
+  LocalTable* t = (LocalTable*)((TableFactory*)info_->partition_creator)->New();
   t->Init(linfo);
+
   return t;
 }
 

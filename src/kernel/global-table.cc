@@ -32,11 +32,11 @@ bool GlobalTable::is_local_key(const StringPiece &k) {
   return is_local_shard(get_shard_str(k));
 }
 
-void GlobalTable::Init(const dsm::TableDescriptor &info) {
+void GlobalTable::Init(const dsm::TableDescriptor *info) {
   TableBase::Init(info);
   worker_id_ = -1;
-  partitions_.resize(info.num_shards);
-  partinfo_.resize(info.num_shards);
+  partitions_.resize(info->num_shards);
+  partinfo_.resize(info->num_shards);
 }
 
 int64_t GlobalTable::shard_size(int shard) {
@@ -172,8 +172,6 @@ void GlobalTable::SendUpdates() {
     LocalTable *t = partitions_[i];
 
     if (!is_local_shard(i) && (get_partition_info(i)->dirty || !t->empty())) {
-      VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i);
-
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.
       do {
@@ -184,6 +182,9 @@ void GlobalTable::SendUpdates() {
         put.set_epoch(w_->epoch());
 
         t->SerializePartial(&put);
+
+        VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i) << " size " << put.kv_data_size();
+
         NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
       } while(!t->empty());
 
@@ -192,7 +193,6 @@ void GlobalTable::SendUpdates() {
     }
   }
 
-  VLOG(1) << "Sent " << pending_writes_ << " updates.";
   pending_writes_ = 0;
 }
 

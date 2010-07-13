@@ -3,6 +3,5 @@ add_library(kernel
             table-registry.cc 
             disk-table.cc
             map-test.cc
-            global-table.cc
-            local-table.cc)
+            global-table.cc)
 add_dependencies(kernel worker_proto)
