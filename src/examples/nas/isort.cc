@@ -7,7 +7,7 @@ typedef uint32_t KeyType;
 typedef Bucket ValueType;
 
 struct BucketMerge : public Accumulator<Bucket> {
-  void operator()(Bucket *l, const Bucket &r) {
+  void Accumulate(Bucket *l, const Bucket &r) {
     l->MergeFrom(r);
   }
 };

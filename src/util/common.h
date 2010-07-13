@@ -115,7 +115,7 @@ struct Marshal {
 
 template <class V>
 struct Accumulator {
-  virtual void operator()(V* a, const V& b) = 0;
+  virtual void Accumulate(V* a, const V& b) = 0;
 };
 
 template <class K>

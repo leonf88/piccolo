@@ -67,18 +67,18 @@ public:
     string_hash->clear(current_shard());
   }
 
-	void TestIterator() {
-		int n = min_hash->num_shards();
-		for (int k = 0; k < n; k++) {
-			TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(k);
-			int i = 0;
-			while (i < 100 && !it->done()) {
-				assert(it->key()==it->value());
-				i++;
-				it->Next();
-			}
-		}
-	}
+  void TestIterator() {
+    int n = min_hash->num_shards();
+    for (int k = 0; k < n; k++) {
+      TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(k);
+      int i = 0;
+      while (i < 100 && !it->done()) {
+        assert(it->key()==it->value());
+        i++;
+        it->Next();
+      }
+    }
+  }
 };
 
 REGISTER_KERNEL(TableKernel);
