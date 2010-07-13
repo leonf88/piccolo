@@ -108,7 +108,7 @@ void NetworkThread::CollectActive() {
 
   boost::recursive_mutex::scoped_lock sl(send_lock);
   unordered_set<RPCRequest*>::iterator i = active_sends_.begin();
-  VLOG(1) << "Pending sends: " << active_sends_.size();
+  VLOG(3) << "Pending sends: " << active_sends_.size();
   while (i != active_sends_.end()) {
     RPCRequest *r = (*i);
     VLOG(3) << "Pending: " << MP(id(), MP(r->target, r->rpc_type));
@@ -117,7 +117,7 @@ void NetworkThread::CollectActive() {
         LOG(INFO) << "Send " << MP(id(), r->target) << " of size " << r->payload.size()
                   << " succeeded after " << r->failures << " failures.";
       }
-      VLOG(2) << "Finished send to " << r->target << " of size " << r->payload.size();
+      VLOG(3) << "Finished send to " << r->target << " of size " << r->payload.size();
       delete r;
       i = active_sends_.erase(i);
       continue;
