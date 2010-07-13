@@ -13,19 +13,19 @@ namespace dsm {
 template <class V>
 struct Accumulators {
   struct Min : public Accumulator<V> {
-    void operator()(V* a, const V& b) { *a = std::min(*a, b); }
+    void Accumulate(V* a, const V& b) { *a = std::min(*a, b); }
   };
 
   struct Max : public Accumulator<V> {
-    void operator()(V* a, const V& b) { *a = std::max(*a, b); }
+    void Accumulate(V* a, const V& b) { *a = std::max(*a, b); }
   };
 
   struct Sum : public Accumulator<V> {
-    void operator()(V* a, const V& b) { *a = *a + b; }
+    void Accumulate(V* a, const V& b) { *a = *a + b; }
   };
 
   struct Replace : public Accumulator<V> {
-    void operator()(V* a, const V& b) { *a = b; }
+    void Accumulate(V* a, const V& b) { *a = b; }
   };
 };
 
@@ -44,8 +44,6 @@ struct Sharding {
 };
 #endif
 
-class Worker;
-
 struct TableDescriptor {
 public:
   int table_id;
@@ -55,12 +53,23 @@ public:
   int shard;
   int default_shard_size;
 
-  // We use void* to pass around the various accumulation and sharding
-  // objects; they are cast to the appropriate type at the time of use.
   void *accum;
   void *sharder;
   void *key_marshal;
   void *value_marshal;
+  void *partition_creator;
+};
+
+
+template <class K, class V>
+struct TypedTableDescriptor : public TableDescriptor {
+public:
+  TypedTableDescriptor() {
+    key_marshal = new Marshal<K>;
+    value_marshal = new Marshal<V>;
+    accum = new typename Accumulators<V>::Replace();
+    sharder = NULL;
+  }
 };
 
 struct TableIterator {
@@ -70,10 +79,19 @@ struct TableIterator {
   virtual void Next() = 0;
 };
 
-template <class K, class V>
-struct TypedTableIterator : public TableIterator {
-  virtual const K& key() = 0;
-  virtual V& value() = 0;
+// Methods common to both global table views and local shards
+class TableBase {
+public:
+  typedef TableIterator Iterator;
+  void Init(const TableDescriptor* info) { info_ = info; }
+
+  const TableDescriptor& info() const { return *info_; }
+
+  int id() const { return info().table_id; }
+  int shard() const { return info().shard; }
+  int num_shards() const { return info().num_shards; }
+protected:
+  const TableDescriptor *info_;
 };
 
 // Interface that typed tables should support.
@@ -87,27 +105,21 @@ public:
   virtual void remove(const K &k) = 0;
 };
 
-// Methods common to both global table views and local shards
-class TableBase {
-public:
-  typedef TableIterator Iterator;
-  void Init(const TableDescriptor& info) { info_ = info; }
+struct TableFactory {
+  virtual TableBase* New() = 0;
+};
 
-  const TableDescriptor& info() const { return info_; }
-  void set_info(const TableDescriptor& t) { info_ = t; }
-
-  int id() const { return info().table_id; }
-  int shard() const { return info().shard; }
-  int num_shards() const { return info().num_shards; }
-protected:
-  TableDescriptor info_;
+template <class K, class V>
+struct TypedTableIterator : public TableIterator {
+  virtual const K& key() = 0;
+  virtual V& value() = 0;
 };
 
 class TableData;
 
+// Checkpoint and restoration.
 class Checkpointable {
 public:
-  // Checkpoint and restoration.
   virtual void start_checkpoint(const string& f) = 0;
   virtual void write_delta(const TableData& put) = 0;
   virtual void finish_checkpoint() = 0;

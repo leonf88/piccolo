@@ -25,7 +25,7 @@ public:
   class Partition;
   DiskTable(StringPiece filepattern, uint64_t split_files_at);
 
-  void Init(const TableDescriptor& tinfo);
+  void Init(const TableDescriptor *tinfo);
 
   int64_t shard_size(int shard);
 

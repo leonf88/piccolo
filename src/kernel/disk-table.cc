@@ -30,10 +30,9 @@ int64_t DiskTable::shard_size(int shard) {
   return partitions_[shard]->end_pos - partitions_[shard]->start_pos;
 }
 
-void DiskTable::Init(const TableDescriptor& tinfo) {
-  TableDescriptor copy = tinfo;
-  copy.num_shards = partitions_.size();
-  GlobalTable::Init(copy);
+void DiskTable::Init(const TableDescriptor *tinfo) {
+  ((TableDescriptor*)tinfo)->num_shards = partitions_.size();
+  GlobalTable::Init(tinfo);
 }
 
 struct RecordIterator : public TypedTableIterator<uint64_t, Message*> {
