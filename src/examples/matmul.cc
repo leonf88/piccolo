@@ -16,7 +16,7 @@ static TypedGlobalTable<int, Block>* matrix_b = NULL;
 static TypedGlobalTable<int, Block>* matrix_c = NULL;
 
 struct BlockSum : public Accumulator<Block> {
-  void operator()(Block *a, const Block& b) {
+  void Accumulate(Block *a, const Block& b) {
     for (int i = 0; i < kBlockSize * kBlockSize; ++i) {
       a->d[i] += b.d[i];
     }

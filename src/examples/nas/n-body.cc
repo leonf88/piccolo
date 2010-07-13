@@ -90,7 +90,7 @@ static ostream & operator<< (ostream &out, const pos& p) {
 namespace tr1 {
 template <>
 struct hash<pos> {
-  size_t operator()(const pos& k) { return k.hash(); }
+  size_t operator()(const pos& k) const { return k.hash(); }
 };
 }
 
@@ -112,7 +112,7 @@ struct PosSharding : public Sharder<pos> {
 };
 
 struct AppendAccum : public Accumulator<string> {
-  void operator()(string* a, const string& b) {
+  void Accumulate(string* a, const string& b) {
     a->append(b);
   }
 };
@@ -124,7 +124,7 @@ public:
   TypedGlobalTable<pos, string> *curr;
   TypedGlobalTable<pos, string> *next;
 
-  SparseMap<pos, string> cache;
+  unordered_map<pos, string> cache;
 
   void CreatePoints() {
     curr = this->get_table<pos, string>(0);
@@ -182,12 +182,12 @@ public:
 //          LOG_EVERY_N(INFO, 1000)
 //            << "Fetched: " << MP(dx, dy, dz) << " : " << bk;
 
-          if (cache.contains(bk)) {
-            neighbors += cache.get(bk);
+          if (cache.find(bk) != cache.end()) {
+            neighbors += cache[bk];
           } else {
             string v = curr->get(bk);
             neighbors += v;
-            cache.put(bk, v);
+            cache[bk] = v;
           }
         }
       }
@@ -262,32 +262,3 @@ int NBody(ConfigData& conf) {
 }
 
 REGISTER_RUNNER(NBody);
-
-static void TestPos() {
-  for (int i = 0; i < 100; ++i) {
-    pos p(i, i, i);
-    int shard = pos::shard_for_pos(p);
-    pos ps = pos::pos_for_shard(shard);
-    int shard2 = pos::shard_for_pos(ps);
-    CHECK_EQ(shard,
-             (i / kPartitionSize) * kNumPartitions * kNumPartitions +
-             (i / kPartitionSize) * kNumPartitions +
-             (i / kPartitionSize));
-    CHECK_EQ(shard, shard2) << p << " : " << ps;
-
-    pos pb(i + 0.1, i + 0.1, i + 0.1);
-    CHECK_EQ(pos::shard_for_pos(pb), pos::shard_for_pos(p));
-    CHECK_EQ(pb.get_box(), p);
-    CHECK_EQ(pb.get_box(), p.get_box());
-  }
-
-  SparseMap<pos, int> t(1000);
-  for (int i = 0; i < 100; ++i) {
-    t.put(pos(0, 0, i + 0.5), i);
-  }
-
-  for (int i = 0; i < 100; ++i) {
-   CHECK_EQ(t.get(pos(0, 0, i + 0.5)), i);
-  }
-}
-REGISTER_TEST(TestPos, TestPos());
