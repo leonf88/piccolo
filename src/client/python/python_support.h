@@ -32,7 +32,7 @@ private:
 
 struct PythonAccumulate : public Accumulator<PyObjectPtr> {
   PythonAccumulate(PyObjectPtr callback) : c_(callback) {}
-  void operator()(PyObjectPtr* a, const PyObjectPtr& b);
+  void Accumulate(PyObjectPtr* a, const PyObjectPtr& b);
 private:
   PyObjectPtr c_;
 };

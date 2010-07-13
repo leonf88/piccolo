@@ -31,7 +31,7 @@ int PythonSharder::operator()(const string& k, int shards) {
   return r;
 }
 
-void PythonAccumulate::operator()(PyObjectPtr* a, const PyObjectPtr& b) {
+void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
   PyObjectPtr result = PyEval_CallFunction(c_, "OO", *a, b);
   if (PyErr_Occurred()) {
     PyErr_Print();
