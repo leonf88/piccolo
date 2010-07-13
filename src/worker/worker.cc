@@ -303,7 +303,7 @@ void Worker::HandlePutRequests() {
     }
 
     VLOG(2) << "Read put request of size: "
-            << put.table_data().size() << " for " << MP(put.table(), put.shard());
+            << put.kv_data_size() << " for " << MP(put.table(), put.shard());
 
     GlobalTable *t = TableRegistry::Get()->table(put.table());
     t->ApplyUpdates(put);
