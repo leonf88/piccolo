@@ -64,16 +64,6 @@ void DumpProfile() {
 #ifdef CPUPROF
   ProfilerFlush();
 #endif
-
-#ifdef HEAPPROF
-  char buf[100];
-  gethostname(buf, 100);
-  
-  string heap_prof;
-  MallocExtension::instance()->GetHeapSample(&heap_prof);
-
-  File::Dump(StringPrintf("profile/heap.%s.%d", buf, getpid()), heap_prof);
-#endif
 }
 
 string Histogram::summary() {
@@ -200,6 +190,12 @@ void Init(int argc, char** argv) {
     gethostname(buf, 100);
     ProfilerStart(StringPrintf("profile/cpu.%s.%d", buf, getpid()).c_str());
   }
+#endif
+
+#ifdef HEAPPROF
+  char buf[100];
+  gethostname(buf, 100);
+  HeapProfilerStart(StringPrintf("profile/heap.%s.%d", buf, getpid()).c_str());
 #endif
 
 
