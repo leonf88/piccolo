@@ -30,50 +30,65 @@ struct MapTestRGB {
   uint16_t b;
 };
 
+static void TestTable(TypedTable<int, int> *t) {
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 10; ++j) {
+      t->put(10 * i + j, 1);
+    }
+  }
+
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 10; ++j) {
+      CHECK(t->contains(10 * i + j));
+      CHECK_EQ(t->get(10 * i + j), 1);
+    }
+  }
+
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 10; ++j) {
+      CHECK(t->contains(10 * i + j));
+      t->update(10 * i + j, 2);
+    }
+  }
+
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 10; ++j) {
+      CHECK(t->contains(10 * i + j));
+      CHECK_EQ(t->get(10 * i + j), 2);
+    }
+  }
+}
+
+static void TestDenseTable() {
+  TableDescriptor td;
+  td.accum = new Accumulators<int>::Replace();
+
+  DenseTable<int, int> *t = new DenseTable<int, int>();
+  t->Init(&td);
+  TestTable(t);
+}
+
 static void TestSparseTable() {
   TableDescriptor td;
   td.accum = new Accumulators<int>::Replace();
 
-  SparseTable<tuple2<int, int>, int> h(1);
-  h.Init(&td);
-
-  for (int i = 0; i < 10; ++i) {
-    for (int j = 0; j < 10; ++j) {
-      h.put(MP(i, j), 1);
-    }
-  }
-
-  for (int i = 0; i < 10; ++i) {
-    for (int j = 0; j < 10; ++j) {
-      CHECK(h.contains(MP(i, j)));
-      CHECK_EQ(h.get(MP(i, j)), 1);
-    }
-  }
-
-  for (int i = 0; i < 10; ++i) {
-    for (int j = 0; j < 10; ++j) {
-      CHECK(h.contains(MP(i, j)));
-      h.update(MP(i, j), 2);
-    }
-  }
-
-  for (int i = 0; i < 10; ++i) {
-    for (int j = 0; j < 10; ++j) {
-      CHECK(h.contains(MP(i, j)));
-      CHECK_EQ(h.get(MP(i, j)), 2);
-    }
-  }
+  SparseTable<int, int> *t = new SparseTable<int, int>();
+  t->Init(&td);
+  TestTable(t);
 }
+
+REGISTER_TEST(DenseTable, TestDenseTable());
 REGISTER_TEST(SparseTable, TestSparseTable());
 
 static void TestMapPerf() {
   TableDescriptor td;
   td.accum = new Accumulators<int>::Replace();
 
-  TypedTable<int, double> *h = new SparseTable<int, double>(FLAGS_test_table_size * 2);
-  ((SparseTable<int, double>*)h)->Init(&td);
+  SparseTable<int, double> *h = new SparseTable<int, double>(FLAGS_test_table_size * 2);
+  h->Init(&td);
 
-//  DenseMap<int, double> d(FLAGS_test_table_size * 2);
+  DenseTable<int, double> d(FLAGS_test_table_size * 2);
+  d.Init(&td);
 
   vector<double> array_test(FLAGS_test_table_size * 2);
 
@@ -86,8 +101,8 @@ static void TestMapPerf() {
   TEST_PERF(SparseTablePut, h->put(source[i], i));
   TEST_PERF(SparseTableGet, h->get(source[i]));
 
-//  TEST_PERF(DenseMapPut, d.put(source[i], i));
-//  TEST_PERF(DenseMapGet, d.get(source[i]));
+  TEST_PERF(DenseTablePut, d.put(source[i], i));
+  TEST_PERF(DenseTableGet, d.get(source[i]));
 
   std::tr1::hash<int> hasher;
   TEST_PERF(ArrayPut, array_test[hasher(i) % FLAGS_test_table_size] = i);

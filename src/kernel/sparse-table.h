@@ -85,11 +85,7 @@ public:
   }
 
   TableIterator *get_iterator() {
-      return get_typed_iterator();
-  }
-
-  Iterator *get_typed_iterator() {
-    return new Iterator(*this);
+      return new Iterator(*this);
   }
 
   void SerializePartial(TableData *out);
@@ -158,7 +154,7 @@ SparseTable<K, V>::SparseTable(int size)
 
 template <class K, class V>
 void SparseTable<K, V>::SerializePartial(TableData *out) {
-  Iterator *i = get_typed_iterator();
+  Iterator *i = (Iterator*)get_iterator();
   while (!i->done()) {
     Arg *kv = out->add_kv_data();
     ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), kv->mutable_key());

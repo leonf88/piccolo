@@ -83,7 +83,7 @@ struct TableIterator {
 class TableBase {
 public:
   typedef TableIterator Iterator;
-  void Init(const TableDescriptor* info) { info_ = info; }
+  virtual void Init(const TableDescriptor* info) { info_ = info; }
 
   const TableDescriptor& info() const { return *info_; }
 

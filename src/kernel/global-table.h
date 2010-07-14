@@ -15,7 +15,7 @@ class Worker;
 
 class GlobalTable  : public TableBase {
 public:
-  void Init(const TableDescriptor* tinfo);
+  virtual void Init(const TableDescriptor* tinfo);
   virtual ~GlobalTable();
 
   struct PartitionInfo {
@@ -90,7 +90,7 @@ protected:
 template <class K, class V>
 class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, private boost::noncopyable {
 public:
-  void Init(const TableDescriptor *tinfo) {
+  virtual void Init(const TableDescriptor *tinfo) {
     GlobalTable::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
       partitions_[i] = create_local(i);
