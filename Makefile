@@ -4,6 +4,11 @@ CMAKE = cmake
 #OPROFILE = 1
 MAKE := $(MAKE) --no-print-directory
 
+ifeq ($(shell which distcc > /dev/null; echo $$?), 0)
+CXX := distcc $(CXX)
+CC := distcc $(CC)
+endif
+
 export CXX CC CFLAGS CPPFLAGS OPROFILE
 
 all: release debug
