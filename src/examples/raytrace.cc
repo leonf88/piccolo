@@ -117,12 +117,18 @@ public:
   }
 
   void DrawFrame() {
-    for (int i = 0; i < FLAGS_width; ++i) {
-      for (int j = 0; j < FLAGS_height; ++j) {
-        RGB r = pixels->get_local(Pixel::New(i, j));
+    DenseTable<Pixel, RGB>* p = (DenseTable<Pixel, RGB>*)pixels->get_partition(0);
+    for (int r = 0; r < FLAGS_height; r += FLAGS_block_size) {
+      for (int c = 0; c < FLAGS_width; c += FLAGS_block_size) {
+        RGB* b = p->get_block(Pixel::New(r, c));
 
-        Uint32 *bufp = (Uint32 *)screen->pixels + i*screen->pitch/4 + j;
-        *bufp = SDL_MapRGB(screen->format, r.r, r.g, r.b);
+        for (int i = 0; i < FLAGS_block_size; ++i) {
+          for (int j = 0; j < FLAGS_block_size; ++j) {
+            Uint32 *bufp = (Uint32 *)screen->pixels + (r + i)*screen->pitch/4 + (c + j);
+            *bufp = SDL_MapRGB(screen->format, b->r, b->g, b->b);
+            ++b;
+          }
+        }
       }
     }
 
