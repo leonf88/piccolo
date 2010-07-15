@@ -7,8 +7,6 @@
 #include "util/file.h"
 #include "util/rpc.h"
 
-#include "kernel/sparse-table.h"
-
 namespace dsm {
 
 class Worker;
@@ -308,10 +306,9 @@ TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
 
 template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
-  TableDescriptor *linfo = new TableDescriptor;
-  *linfo = ((GlobalTable*) this)->info();
+  TableDescriptor *linfo = new TableDescriptor(info());
   linfo->shard = shard;
-  LocalTable* t = (LocalTable*)((TableFactory*)info_->partition_creator)->New();
+  LocalTable* t = (LocalTable*)info_->partition_factory->New();
   t->Init(linfo);
 
   return t;

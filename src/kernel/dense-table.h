@@ -7,6 +7,23 @@
 
 namespace dsm {
 
+template <class K>
+struct BlockInfo {
+  virtual K block_id(const K& k, int block_size) = 0;
+  virtual int block_pos(const K& k, int block_size) = 0;
+};
+
+struct IntBlockInfo : public BlockInfo<int> {
+  int block_id(const int& k, int block_size) {
+    return k - (k % block_size);
+  }
+
+  int block_pos(const int& k, int block_size) {
+    return k % block_size;
+  }
+};
+
+
 // Provides fast lookups for dense key-spaces.  Keys are divided into 'blocks' of
 // contiguous elements; users can operate on single entries or blocks at a time for
 // more efficient access.  Modifying a single entry in a block marks the entire
@@ -17,8 +34,6 @@ class DenseTable:
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
-  static const int kBlockSize = 512;
-
   struct Bucket {
     Bucket() : entries(0) {}
     Bucket(int count) : entries(count) {}
@@ -34,7 +49,7 @@ public:
 
     void Next() {
       ++idx_;
-      if (idx_ >= parent_.block_size_) {
+      if (idx_ >= parent_.info_->block_size) {
         ++it_;
         idx_ = 0;
       }
@@ -63,14 +78,21 @@ public:
     TableBase* New() { return new DenseTable<K, V>(); }
   };
 
+  BlockInfo<K>& block_info() {
+    return *(BlockInfo<K>*)info_->block_info;
+  }
+
   // return the first key in a bucket
   K start_key(const K& k) {
-    return k - (k % block_size_);
+    return block_info().block_id(k, info_->block_size);
+  }
+
+  int block_pos(const K& k) {
+    return block_info().block_pos(k, info_->block_size);
   }
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
   DenseTable(int size = 1) : m_(size) {
-    block_size_ = kBlockSize;
   }
 
   ~DenseTable() {}
@@ -84,13 +106,13 @@ public:
   }
 
   V get(const K& k) {
-    return get_block(k)[k % block_size_];
+    return get_block(k)[block_pos(k)];
   }
 
   V* get_block(const K& k) {
     Bucket &vb = m_[start_key(k)];
-    if (vb.entries.size() != block_size_) {
-      vb.entries.resize(block_size_);
+    if (vb.entries.size() != info_->block_size) {
+      vb.entries.resize(info_->block_size);
     }
 
     return &vb.entries[0];
@@ -98,12 +120,12 @@ public:
 
   void update(const K& k, const V& v) {
     V* vb = get_block(k);
-    ((Accumulator<V>*)info_->accum)->Accumulate(&vb[k % block_size_], v);
+    ((Accumulator<V>*)info_->accum)->Accumulate(&vb[block_pos(k)], v);
   }
 
   void put(const K& k, const V& v) {
     V* vb = get_block(k);
-    vb[k % block_size_] = v;
+    vb[block_pos(k)] = v;
   }
 
   void remove(const K& k) { LOG(FATAL) << "Not implemented."; }
@@ -131,12 +153,18 @@ public:
 
   TableIterator* get_iterator() { return new Iterator(*this); }
 
-  bool empty() { return size() == 0; }
-  int64_t size() { return m_.size() * block_size_; }
+  bool empty() {
+    return size() == 0;
+  }
+
+  int64_t size() {
+    return m_.size() * info_->block_size;
+  }
+
   void clear() { m_.clear(); }
   void resize(int64_t s) {}
 
-  void SerializePartial(TableData *out) {
+  void Serialize(TableData *out) {
     for (typename BucketMap::iterator i = m_.begin(); i != m_.end(); ++i) {
       Bucket &b = i->second;
 
@@ -151,6 +179,8 @@ public:
         kv->mutable_value()->append(tmp);
       }
     }
+
+    out->set_done(true);
   }
 
   void ApplyUpdates(const TableData& req) {
@@ -160,18 +190,20 @@ public:
       ((Marshal<K>*)info_->key_marshal)->unmarshal(kv.key(), &k);
 
       V* block = get_block(k);
-      const int value_size = kv.value().size() / kBlockSize;
-      for (int j = 0; j < kBlockSize; ++j) {
+      const int value_size = kv.value().size() / info_->block_size;
+
+      V tmp;
+      for (int j = 0; j < info_->block_size; ++j) {
         ((Marshal<V>*)info_->value_marshal)->unmarshal(
-            StringPiece(kv.value().data() + (value_size * j), value_size),
-            &block[j]);
+                    StringPiece(kv.value().data() + (value_size * j), value_size),
+                    &tmp);
+        ((Accumulator<V>*)info_->accum)->Accumulate(&block[j], tmp);
       }
     }
   }
 
 private:
   BucketMap m_;
-  int block_size_;
 };
 }
 #endif

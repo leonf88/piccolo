@@ -88,7 +88,7 @@ public:
       return new Iterator(*this);
   }
 
-  void SerializePartial(TableData *out);
+  void Serialize(TableData *out);
   void ApplyUpdates(const TableData& req);
 
   bool contains_str(const StringPiece& s) {
@@ -153,7 +153,7 @@ SparseTable<K, V>::SparseTable(int size)
 }
 
 template <class K, class V>
-void SparseTable<K, V>::SerializePartial(TableData *out) {
+void SparseTable<K, V>::Serialize(TableData *out) {
   Iterator *i = (Iterator*)get_iterator();
   while (!i->done()) {
     Arg *kv = out->add_kv_data();
@@ -164,7 +164,6 @@ void SparseTable<K, V>::SerializePartial(TableData *out) {
 
   out->set_done(true);
   delete i;
-  clear();
 }
 
 template <class K, class V>
