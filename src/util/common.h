@@ -148,19 +148,19 @@ T unmarshal(Marshal<T>* m, const StringPiece& s) { T out; m->unmarshal(s, &out);
 template <class A, class B>
 struct tuple2 {
   A a_; B b_;
-  bool operator==(const tuple2& o) { return o.a_ == a_ && o.b_ == b_; }
+  bool operator==(const tuple2& o) const { return o.a_ == a_ && o.b_ == b_; }
 };
 
 template <class A, class B, class C>
 struct tuple3 {
   A a_; B b_; C c_;
-  bool operator==(const tuple3& o) { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_; }
+  bool operator==(const tuple3& o) const { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_; }
 };
 
 template <class A, class B, class C, class D>
 struct tuple4 {
   A a_; B b_; C c_; D d_;
-  bool operator==(const tuple4& o) { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_ && o.d_ == d_; }
+  bool operator==(const tuple4& o) const { return o.a_ == a_ && o.b_ == b_ && o.c_ == c_ && o.d_ == d_; }
 };
 
 template<class A, class B>
