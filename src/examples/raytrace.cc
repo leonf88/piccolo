@@ -1,7 +1,6 @@
 #include "client/client.h"
 #include <SDL/SDL.h>
 
-
 using namespace dsm;
 
 DEFINE_int32(width, 800, "");
@@ -16,12 +15,48 @@ struct RGB {
   uint16_t g;
   uint16_t b;
 };
-typedef tuple2<int, int> Pixel;
 
+struct Pixel {
+  int a_, b_;
+  static Pixel New(int a, int b) {
+    Pixel p = { a, b };
+    return p;
+  }
+
+  Pixel operator+(const int& offset) const {
+    return Pixel::New(a_ + offset / FLAGS_block_size, b_ + offset % FLAGS_block_size);
+  }
+
+  bool operator==(const Pixel& o) const {
+    return o.a_ == a_ && o.b_ == b_;
+  }
+};
 
 // Always write pixels to the first partition.
 struct PixelSharder : public Sharder<Pixel> {
   int operator()(const Pixel& k, int shards) { return 0; }
+};
+
+namespace std { namespace tr1 {
+template <>
+struct hash<Pixel> {
+  hash<uint32_t> h;
+  size_t operator()(Pixel p) const {
+    return h(p.a_) ^ h(p.b_);
+  }
+};
+} }
+
+// Align map blocks with blocks from the picture
+struct PixelBlock : public BlockInfo<Pixel> {
+  Pixel block_id(const Pixel& k, int block_size)  {
+    return Pixel::New(k.a_ - (k.a_ % FLAGS_block_size),
+                       k.b_ - (k.b_ % FLAGS_block_size));
+  }
+
+  int block_pos(const Pixel& k, int block_size) {
+    return (k.a_ % FLAGS_block_size) * FLAGS_block_size + k.b_ % FLAGS_block_size;
+  }
 };
 
 static TypedGlobalTable<Pixel, RGB>* pixels = NULL;
@@ -73,7 +108,7 @@ public:
         CHECK_EQ(fread(&up.b, 2, 1, f), 1);
 
         if (j >= c && j < c + FLAGS_block_size) {
-          pixels->update(MP(r + i, j), up);
+          pixels->update(Pixel::New(r + i, j), up);
         }
       }
     }
@@ -82,11 +117,9 @@ public:
   }
 
   void DrawFrame() {
-    Pixel k;
-    for (int i = 0; i < FLAGS_height; ++i) {
-      for (int j = 0; j < FLAGS_width; ++j) {
-        k.a_  = i; k.b_ = j;
-        RGB r = pixels->get_local(k);
+    for (int i = 0; i < FLAGS_width; ++i) {
+      for (int j = 0; j < FLAGS_height; ++j) {
+        RGB r = pixels->get_local(Pixel::New(i, j));
 
         Uint32 *bufp = (Uint32 *)screen->pixels + i*screen->pitch/4 + j;
         *bufp = SDL_MapRGB(screen->format, r.r, r.g, r.b);
@@ -102,7 +135,14 @@ REGISTER_METHOD(RayTraceKernel, DrawFrame);
 
 static int RayTrace(ConfigData &conf) {
   int shards = (FLAGS_height * FLAGS_width) / (FLAGS_block_size * FLAGS_block_size);
-  pixels = CreateTable(0, 1, new PixelSharder, new Accumulators<RGB>::Replace);
+  TableDescriptor* pixel_desc = new TypedTableDescriptor<Pixel, RGB>(0, 1);
+  pixel_desc->partition_factory = new DenseTable<Pixel, RGB>::Factory;
+  pixel_desc->block_size = FLAGS_block_size * FLAGS_block_size;
+  pixel_desc->block_info = new PixelBlock;
+//  pixel_desc->partition_factory = new SparseTable<Pixel, RGB>::Factory;
+  pixel_desc->sharder = new PixelSharder;
+  pixels = CreateTable<Pixel, RGB>(pixel_desc);
+
   geom = CreateTable(1, shards, new Sharding::Mod, new Accumulators<int>::Replace);
 
   ArgMap args;

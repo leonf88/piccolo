@@ -181,7 +181,8 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(w_->epoch());
 
-        t->SerializePartial(&put);
+        t->Serialize(&put);
+        t->clear();
 
         VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i) << " size " << put.kv_data_size();
 

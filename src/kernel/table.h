@@ -44,8 +44,24 @@ struct Sharding {
 };
 #endif
 
+struct TableBase;
+
+struct TableFactory {
+  virtual TableBase* New() = 0;
+};
+
 struct TableDescriptor {
 public:
+  TableDescriptor(int id, int shards) {
+    table_id = id;
+    num_shards = shards;
+    block_size = 500;
+  }
+
+  TableDescriptor(const TableDescriptor& t) {
+    memcpy(this, &t, sizeof(t));
+  }
+
   int table_id;
   int num_shards;
 
@@ -57,14 +73,18 @@ public:
   void *sharder;
   void *key_marshal;
   void *value_marshal;
-  void *partition_creator;
+  TableFactory *partition_factory;
+
+  // for dense tables
+  int block_size;
+  void *block_info;
 };
 
 
 template <class K, class V>
 struct TypedTableDescriptor : public TableDescriptor {
 public:
-  TypedTableDescriptor() {
+  TypedTableDescriptor(int id, int shards)  : TableDescriptor(id, shards) {
     key_marshal = new Marshal<K>;
     value_marshal = new Marshal<V>;
     accum = new typename Accumulators<V>::Replace();
@@ -83,15 +103,24 @@ struct TableIterator {
 class TableBase {
 public:
   typedef TableIterator Iterator;
-  virtual void Init(const TableDescriptor* info) { info_ = info; }
+  virtual void Init(const TableDescriptor* info) {
+    info_ = new TableDescriptor(*info);
+
+    CHECK(info_->accum != NULL);
+    CHECK(info_->key_marshal != NULL);
+    CHECK(info_->value_marshal != NULL);
+//    CHECK_NE(info_->block_info, NULL);
+//    CHECK_NE(info_->partition_factory, NULL);
+  }
 
   const TableDescriptor& info() const { return *info_; }
 
   int id() const { return info().table_id; }
   int shard() const { return info().shard; }
   int num_shards() const { return info().num_shards; }
+
 protected:
-  const TableDescriptor *info_;
+  TableDescriptor *info_;
 };
 
 // Interface that typed tables should support.
@@ -103,10 +132,6 @@ public:
   virtual void put(const K &k, const V &v) = 0;
   virtual void update(const K &k, const V &v) = 0;
   virtual void remove(const K &k) = 0;
-};
-
-struct TableFactory {
-  virtual TableBase* New() = 0;
 };
 
 template <class K, class V>

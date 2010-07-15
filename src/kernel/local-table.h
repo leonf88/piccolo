@@ -25,7 +25,7 @@ public:
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
 
-  virtual void SerializePartial(TableData *req) = 0;
+  virtual void Serialize(TableData *req) = 0;
   virtual void ApplyUpdates(const TableData& req) = 0;
 
   void start_checkpoint(const string& f) {
@@ -34,7 +34,7 @@ public:
     TableData data;
 
     while (!empty()) {
-      SerializePartial(&data);
+      Serialize(&data);
       rf.write(data);
       data.Clear();
     }
