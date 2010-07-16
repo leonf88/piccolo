@@ -105,17 +105,29 @@ public:
     return m_.find(start_key(k)) != m_.end();
   }
 
-  V get(const K& k) {
-    return get_block(k)[block_pos(k)];
-  }
-
+  // We anticipate a strong locality relationship between successive operations.
+  // The last accessed block is cached, and can be returned immediately if the
+  // subsequent operation(s) also access the same block.
   V* get_block(const K& k) {
-    Bucket &vb = m_[start_key(k)];
+    K start = start_key(k);
+
+    if (start == last_block_start_ && last_block_) {
+      return last_block_;
+    }
+
+    Bucket &vb = m_[start];
     if (vb.entries.size() != info_->block_size) {
       vb.entries.resize(info_->block_size);
     }
 
-    return &vb.entries[0];
+    last_block_ = &vb.entries[0];
+    last_block_start_ = start;
+
+    return last_block_;
+  }
+
+  V get(const K& k) {
+    return get_block(k)[block_pos(k)];
   }
 
   void update(const K& k, const V& v) {
@@ -161,7 +173,11 @@ public:
     return m_.size() * info_->block_size;
   }
 
-  void clear() { m_.clear(); }
+  void clear() {
+    m_.clear();
+    last_block_ = NULL;
+  }
+
   void resize(int64_t s) {}
 
   void Serialize(TableData *out) {
@@ -204,6 +220,8 @@ public:
 
 private:
   BucketMap m_;
+  V* last_block_;
+  K last_block_start_;
 };
 }
 #endif
