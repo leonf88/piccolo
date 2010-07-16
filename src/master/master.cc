@@ -722,10 +722,11 @@ void Master::barrier() {
   }
 
   EmptyMessage empty;
-	//1st round-trip to make sure all workers have flushed everything
+  //1st round-trip to make sure all workers have flushed everything
   network_->SyncBroadcast(MTYPE_WORKER_FLUSH, MTYPE_WORKER_FLUSH_DONE, empty);
-	//2nd round-trip to make sure all workers have applied all updates
-	//XXX: incorrect if MPI does not guarantee remote delivery
+
+  //2nd round-trip to make sure all workers have applied all updates
+  //XXX: incorrect if MPI does not guarantee remote delivery
   network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
 
   LOG(INFO) << "Kernel '" << current_run_.method 
