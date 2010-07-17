@@ -77,6 +77,10 @@ NetworkThread::NetworkThread() {
   running = 1;
   t_ = new boost::thread(&NetworkThread::Run, this);
   id_ = world_->Get_rank();
+
+  for (int i = 0; i < kMaxMethods; ++i) {
+    callbacks_[i] = NULL;
+  }
 }
 
 bool NetworkThread::active() const {
@@ -149,10 +153,18 @@ void NetworkThread::Run() {
 
       stats["bytes_received"] += bytes;
       stats[StringPrintf("received.%s", MessageTypes_Name((MessageTypes)tag).c_str())] += 1;
-
-      boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
       CHECK_LT(source, kMaxHosts);
-      incoming[tag][source].push_back(data);
+
+      VLOG(3) << "Received packet - source: " << source << " tag: " << tag;
+
+      {
+        boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
+        incoming[tag][source].push_back(data);
+      }
+
+      if (callbacks_[tag] != NULL) {
+        callbacks_[tag]();
+      }
     } else {
       Sleep(FLAGS_sleep_time);
     }
@@ -263,6 +275,10 @@ void NetworkThread::WaitForSync(int reply, int count) {
     Read(MPI::ANY_SOURCE, reply, &empty, NULL);
     --count;
   }
+}
+
+void NetworkThread::RegisterCallback(int message_type, boost::function<void ()> cb) {
+  callbacks_[message_type] = cb;
 }
 
 static NetworkThread* net = NULL;

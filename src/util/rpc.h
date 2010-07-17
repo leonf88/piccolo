@@ -6,6 +6,7 @@
 #include "util/common.pb.h"
 
 #include <boost/thread.hpp>
+#include <boost/function.hpp>
 #include <google/protobuf/message.h>
 #include <mpi.h>
 
@@ -43,6 +44,11 @@ public:
 
   static NetworkThread *Get();
 
+  // Register the given function with the RPC thread.  The function willi be invoked
+  // from within the network thread whenever a message of the given type is received.
+  typedef boost::function<void ()> Callback;
+  void RegisterCallback(int message_type, Callback cb);
+
   Stats stats;
 private:
   static const int kMaxHosts = 512;
@@ -52,6 +58,7 @@ private:
 
   bool running;
 
+  Callback callbacks_[kMaxMethods];
   vector<RPCRequest*> pending_sends_;
   unordered_set<RPCRequest*> active_sends_;
 
