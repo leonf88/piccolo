@@ -87,7 +87,7 @@ public:
   TypedTableDescriptor(int id, int shards)  : TableDescriptor(id, shards) {
     key_marshal = new Marshal<K>;
     value_marshal = new Marshal<V>;
-    accum = new typename Accumulators<V>::Replace();
+    accum = NULL;
     sharder = NULL;
   }
 };

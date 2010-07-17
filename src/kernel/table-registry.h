@@ -58,6 +58,7 @@ static TypedGlobalTable<K, V>* CreateTable(int id,
   TableDescriptor *info = new TypedTableDescriptor<K, V>(id, shards);
   info->sharder = sharding;
   info->partition_factory = new typename SparseTable<K, V>::Factory;
+  info->accum = accum;
 
   return CreateTable<K, V>(info);
 }
