@@ -139,6 +139,7 @@ static int RayTrace(ConfigData &conf) {
   pixel_desc->partition_factory = new DenseTable<Pixel, RGB>::Factory;
   pixel_desc->block_size = FLAGS_block_size * FLAGS_block_size;
   pixel_desc->block_info = new PixelBlock;
+  pixel_desc->accum = new Accumulators<RGB>::Replace;
 //  pixel_desc->partition_factory = new SparseTable<Pixel, RGB>::Factory;
   pixel_desc->sharder = new PixelSharder;
   pixels = CreateTable<Pixel, RGB>(pixel_desc);
