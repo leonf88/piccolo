@@ -44,6 +44,12 @@ Worker::Worker(const ConfigData &c) {
     i->second->set_worker(this);
   }
 
+  NetworkThread::Get()->RegisterCallback(MTYPE_GET_REQUEST,
+                                         boost::bind(&Worker::HandleGetRequests, this));
+  NetworkThread::Get()->RegisterCallback(MTYPE_SHARD_ASSIGNMENT,
+                                         boost::bind(&Worker::HandleShardAssignment, this));
+  NetworkThread::Get()->RegisterCallback(MTYPE_ITERATOR_REQ,
+                                         boost::bind(&Worker::HandleIteratorRequests, this));
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -51,10 +57,7 @@ int Worker::peer_for_shard(int table, int shard) const {
 }
 
 void Worker::Run() {
-  kernel_thread_ = new boost::thread(&Worker::KernelLoop, this);
-  table_thread_ = new boost::thread(&Worker::TableLoop, this);
-  table_thread_->join();
-  kernel_thread_->join();
+  KernelLoop();
 }
 
 Worker::~Worker() {
@@ -62,13 +65,6 @@ Worker::~Worker() {
 
   for (int i = 0; i < peers_.size(); ++i) {
     delete peers_[i];
-  }
-}
-
-void Worker::TableLoop() {
-  while (running_) {
-    HandleGetRequests();
-    Sleep(FLAGS_sleep_time);
   }
 }
 
@@ -157,6 +153,7 @@ void Worker::Flush() {
 }
 
 void Worker::CheckNetwork() {
+  Timer net;
   CheckForMasterUpdates();
   HandlePutRequests();
 
@@ -166,6 +163,7 @@ void Worker::CheckNetwork() {
   }
 
   dirty_tables_.clear();
+  stats_["network_time"] += net.elapsed();
 }
 
 int64_t Worker::pending_kernel_bytes() const {
@@ -343,7 +341,10 @@ void Worker::HandleGetRequests() {
     network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
     VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard()) << " - found? " << !get_resp.missing_key();
   }
+}
 
+void Worker::HandleIteratorRequests() {
+  int source;
   IteratorRequest iterator_req;
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_ITERATOR_REQ, &iterator_req, &source)) {
     IteratorResponse iterator_resp;
@@ -372,8 +373,9 @@ void Worker::HandleGetRequests() {
 
     network_->Send(source, MTYPE_ITERATOR_RESP, iterator_resp);
   }
+}
 
-
+void Worker::HandleShardAssignment() {
   ShardAssignmentRequest shard_req;
   while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
     for (int i = 0; i < shard_req.assign_size(); ++i) {

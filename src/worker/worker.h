@@ -31,7 +31,6 @@ public:
 
   void KernelLoop();
   void TableLoop();
-
   Stats get_stats() {
     return stats_;
   }
@@ -41,6 +40,8 @@ public:
 
   // Returns true if any non-trivial operations were performed.
   void HandleGetRequests();
+  void HandleShardAssignment();
+  void HandleIteratorRequests();
   void HandlePutRequests();
 
   // Barrier: wait until all table data is transmitted.
@@ -64,7 +65,6 @@ private:
   RecordFile *checkpoint_delta_;
 
   mutable boost::recursive_mutex state_lock_;
-  boost::thread *table_thread_, *kernel_thread_;
 
   // The current epoch this worker is running within.
   int epoch_;
