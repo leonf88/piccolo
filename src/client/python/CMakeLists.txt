@@ -1,7 +1,3 @@
-set(MPILIBS mpi_cxx mpi open-rte open-pal)
-set(STATICLIBS protobuf boost_thread-mt util)
-set(DYNAMICLIBS lzo2 pthread rt dl numa)
-
 GET_DIRECTORY_PROPERTY(cmake_include_directories INCLUDE_DIRECTORIES)
 SET(include_flag)
 FOREACH(it ${cmake_include_directories})
@@ -51,11 +47,8 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a
   ${CMAKE_BINARY_DIR}/external/google-perftools/libprofiler.a
   ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
-  -Wl,-Bstatic 
-  -lmpi_cxx -lmpi -lopen-rte -lopen-pal
-  -Wl,-Bdynamic
-  -lpthread -lutil -lnuma
-  -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
+  ${MPI_LINK_FLAGS}
+  -lpthread -lutil -lnuma -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
   DEPENDS ${swig_out}
  )
   
