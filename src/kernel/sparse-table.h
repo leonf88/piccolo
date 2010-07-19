@@ -255,7 +255,7 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
   // Inserting a new entry:
   if (!found) {
     if (entries_ > size_ * kLoadFactor) {
-      resize((int)(1 + size_ / kLoadFactor));
+      resize((int)(1 + size_ * 2));
       put(k, v);
     } else {
       buckets_[b].in_use = 1;

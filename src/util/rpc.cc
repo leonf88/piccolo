@@ -208,9 +208,11 @@ bool NetworkThread::check_queue(int src, int type, Message* data) {
 
   // Blocking read for the given source and message type.
 void NetworkThread::Read(int desired_src, int type, Message* data, int *source) {
+  Timer t;
   while (!TryRead(desired_src, type, data, source)) {
     Sleep(FLAGS_sleep_time);
   }
+  stats["network_time"] += t.elapsed();
 }
 
 bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
