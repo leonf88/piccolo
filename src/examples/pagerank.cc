@@ -29,7 +29,7 @@ DEFINE_int32(nodes, 10000, "");
 struct PageId {
   uint32_t site;
   uint32_t page;
-};
+} __attribute__((packed));
 
 PageId P(int s, int p) {
   PageId pid = { s, p };
@@ -49,9 +49,8 @@ static ostream & operator<< (ostream &out, const PageId& p) {
 namespace tr1 {
 template <>
 struct hash<PageId> {
-  hash<uint32_t> h;
   size_t operator()(PageId p) {
-    return h(p.site) ^ h(p.page);
+    return SuperFastHash((const char*)&p, sizeof p);
   }
 };
 }
