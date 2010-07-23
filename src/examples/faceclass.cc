@@ -21,7 +21,7 @@ DEFINE_string(infopn, "trainpn_random.info", "File containing list of training i
 DEFINE_string(netname, "/home/kerm/piccolo/src/examples/facedet/netsave.net", "Filename of neural network save file");
 DEFINE_string(pathpn, "/home/kerm/piccolo/src/examples/facedet/trainset/", "Path to training data");
 DEFINE_int32(epochs, 100, "Number of training epochs");
-DEFINE_int32(hidden_neurons, 256, "Number of hidden heurons");
+DEFINE_int32(hidden_neurons, 16, "Number of hidden heurons");
 DEFINE_int32(savedelta, 100, "Save net every (savedelta) epochs");
 DEFINE_int32(sharding, 100, "Images per kernel execution");
 DEFINE_bool(list_errors, false, "If true, will ennumerate misclassed images");
@@ -29,10 +29,13 @@ DEFINE_int32(total_ims, 43115, "Total number of images in DB");
 DEFINE_int32(im_x, 32, "Image width in pixels");
 DEFINE_int32(im_y, 32, "Image height in pixels");
 DEFINE_bool(verify, true, "If true, will check initial data put into tables for veracity");
+DEFINE_double(eta, 0.3, "Learning rate of BPNN");
+DEFINE_double(momentum, 0.3, "Momentum of BPNN");
 
-static TypedGlobalTable<int, double>* nn_weights = NULL;
-static TypedGlobalTable<int, double>* nn_biases  = NULL;
-static TypedGlobalTable<int, IMAGE>*  train_ims  = NULL;
+static TypedGlobalTable<int, double>* nn_weights  = NULL;
+static TypedGlobalTable<int, double>* nn_biases   = NULL;
+static TypedGlobalTable<int, IMAGE>*  train_ims   = NULL;
+static TypedGlobalTable<int, double>* performance = NULL;
 
 //-----------------------------------------------
 // Marshalling for IMAGE* type
@@ -84,9 +87,15 @@ class FCKernel : public DSMKernel {
 	public:
 		int iter;
 		BPNN *net;
+		BackProp bpnn;
+		ImageNet imnet;
 		int hiddenn,imgsize;
+		double out_err, hid_err, sumerr;
 
 		void InitKernel() {
+			imgsize = FLAGS_im_x*FLAGS_im_y;
+			hiddenn = FLAGS_hidden_neurons;
+			net = bpnn.bpnn_create(imgsize, hiddenn, 1);
 		}
 
 		void Initialize() {
@@ -95,14 +104,11 @@ class FCKernel : public DSMKernel {
 			IMAGE *iimg;
 			int ind, seed, savedelta, list_errors;
 			int train_n, i, j;
-			double out_err, hid_err, sumerr;
-			BackProp bpnn;
 
 			//defaults
 			seed = 20100630;
 			savedelta = FLAGS_savedelta;
 			list_errors = FLAGS_list_errors;
-			hiddenn = FLAGS_hidden_neurons;
 			netname = FLAGS_netname;
 			pathpn = FLAGS_pathpn;
 			infopn = FLAGS_infopn;
@@ -244,17 +250,86 @@ class FCKernel : public DSMKernel {
 		}
 
 		void TrainIteration() {
+			int i, j, k;
+
 			if (0 > TableToBPNN(net)) {
 				fprintf(stderr,"Fatal error: could not load bpnn from table\n");
 				exit(-1);
 			}
-			//training iterations
-			//grab image
-			//train on it
-			//update deltas
+
+			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard());
+			for (; !it->done(); it->Next()) {
+				IMAGE thisimg = it->value();						//grab this image
+
+				imnet.load_input_with_image(&thisimg, net);				//load the input layer
+				imnet.load_target(&thisimg, net);					//load target output layer
+
+				/*** Feed forward input activations. ***/
+				bpnn.bpnn_layerforward(net->input_units, net->hidden_units,
+						net->input_weights, imgsize, hiddenn);
+				bpnn.bpnn_layerforward(net->hidden_units, net->output_units,
+						net->hidden_weights, hiddenn, 1);
+
+				/*** Compute error on output and hidden units. ***/
+				bpnn.bpnn_output_error(net->output_delta, net->target, net->output_units,
+						1, &out_err);
+				bpnn.bpnn_hidden_error(net->hidden_delta, hiddenn, net->output_delta, 1,
+						net->hidden_weights, net->hidden_units, &hid_err);
+
+				/*** Adjust input and hidden weights in database. ***/
+				UpdateBPNNWithDeltas(net->output_delta, 1, net->hidden_units, hiddenn,
+						net->hidden_weights, net->hidden_prev_weights, FLAGS_eta, FLAGS_momentum,((imgsize+1)*(hiddenn+1)));
+				UpdateBPNNWithDeltas(net->hidden_delta, hiddenn, net->input_units, imgsize,
+						net->input_weights, net->input_prev_weights, FLAGS_eta, FLAGS_momentum,0);
+
+				/*** Adjust input and hidden weights. ***/
+				bpnn.bpnn_adjust_weights(net->output_delta, 1, net->hidden_units, hiddenn,
+						net->hidden_weights, net->hidden_prev_weights, FLAGS_eta, FLAGS_momentum);
+				bpnn.bpnn_adjust_weights(net->hidden_delta, hiddenn, net->input_units, imgsize,
+						net->input_weights, net->input_prev_weights, FLAGS_eta, FLAGS_momentum);
+
+			}
+
 		}
 
-		void WriteStatus() {
+		void PerformanceCheck() {
+			double delta,err;
+			bool classed;										//true if this image was correct classed
+
+			if (0 > TableToBPNN(net)) {
+				fprintf(stderr,"Fatal error: could not load bpnn from table\n");
+				exit(-1);
+			}
+
+			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard());
+			for (; !it->done(); it->Next()) {
+				IMAGE thisimg = it->value();						//grab this image
+
+				imnet.load_input_with_image(&thisimg, net);			//load the input layer
+				bpnn.bpnn_feedforward(net);
+				imnet.load_target(&thisimg, net);					//load target output layer
+				delta = net->target[1] - net->output_units[1];
+				err   = 0.5*delta*delta;							//.5delta^2
+				performance->update(1,err);							//accumulate more error
+
+				classed = (net->output_units[1] > 0.5);
+				classed = (net->target[1] > 0.5)?classed:!classed;
+				performance->update(0,classed?1:0);					//accumulate correct classifications
+			}
+		}
+
+		void DisplayPerformance() {
+
+			double ims_correct = performance->get(0);
+			double total_err   = performance->get(1);
+			printf("Performance: %d of %d (%.0f%%) images correctly classified, average err %f\n",
+					(int)ims_correct,
+					FLAGS_total_ims,
+					round(100*(ims_correct/((double)FLAGS_total_ims))),
+					(total_err/((double)FLAGS_total_ims))
+				  );
+			performance->update(0,-ims_correct);
+			performance->update(1,-total_err);
 		}
 
 	private:
@@ -283,25 +358,45 @@ class FCKernel : public DSMKernel {
 			return 0;			//success
 		}
 
+		int UpdateBPNNWithDeltas(double *delta, int ndelta, double *ly, int nly, double **w,
+				double **oldw, double eta, double momentum,int idx_offset) {
+			double newval_dw;
+			int k, j;
+			ly[0] = 1.0;
+			for (j = 1; j <= ndelta; j++) {
+				for (k = 0; k <= nly; k++) {
+					newval_dw = ((eta * delta[j] * ly[k]) + (momentum * oldw[k][j]));
+					nn_weights->update(idx_offset+(k*(ndelta+1))+j,newval_dw);
+				}
+			}
+		}
+
+
 };
 REGISTER_KERNEL(FCKernel);
+REGISTER_METHOD(FCKernel, InitKernel);
 REGISTER_METHOD(FCKernel, Initialize);
 REGISTER_METHOD(FCKernel, TrainIteration);
+REGISTER_METHOD(FCKernel, PerformanceCheck);
+REGISTER_METHOD(FCKernel, DisplayPerformance);
 
 int Faceclass(ConfigData& conf) {
 
 	int i,j;
 
-	nn_weights = CreateTable(0,1,new Sharding::Mod,new Accumulators<double>::Sum);
-	nn_biases  = CreateTable(1,1,new Sharding::Mod,new Accumulators<double>::Sum);
-	train_ims  = CreateTable(2,ceil(FLAGS_total_ims/FLAGS_sharding),new Sharding::Mod, new Accumulators<IMAGE>::Replace);
+	nn_weights  = CreateTable(0,1,new Sharding::Mod,new Accumulators<double>::Sum);
+	nn_biases   = CreateTable(1,1,new Sharding::Mod,new Accumulators<double>::Sum);
+	train_ims   = CreateTable(2,ceil(FLAGS_total_ims/FLAGS_sharding),new Sharding::Mod, new Accumulators<IMAGE>::Replace);
+	performance = CreateTable(3,1,new Sharding::Mod, new Accumulators<double>::Sum);
 
 	StartWorker(conf);
 	Master m(conf);
 
 
-	//NUM_WORKERS = conf.num_workers();
+	NUM_WORKERS = conf.num_workers();
+	printf("---- Initializing FaceClass on %d workers ----\n",NUM_WORKERS);
 
+	//m.run_all("FCKernel","InitKernel");
 	m.run_one("FCKernel","Initialize",nn_weights);
 
 	if (FLAGS_epochs > 0) {
@@ -313,6 +408,8 @@ int Faceclass(ConfigData& conf) {
 	for(i=0;i<FLAGS_epochs;i++) {
 		printf("--- Running epoch %03d of %03d ---\n",i,FLAGS_epochs);
 		m.run_all("FCKernel","TrainIteration",train_ims);
+		m.run_all("FCKernel","PerformanceCheck",train_ims);
+		m.run_one("FCKernel","DisplayPerformance",performance);
 	}
 
 	return 0;

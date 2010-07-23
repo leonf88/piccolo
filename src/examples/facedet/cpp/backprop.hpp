@@ -70,6 +70,9 @@ class BackProp {
 		void bpnn_train(BPNN *net, double eta, double momentum, double *eo, double *eh);
 		void bpnn_save(BPNN *net, const char *filename);
 		BPNN *bpnn_read(const char* filename);
+		void bpnn_layerforward(double *l1, double *l2, double **conn, int n1, int n2);
+		void bpnn_output_error(double *delta,double *target,double *output,int nj,double *err);
+		void bpnn_hidden_error(double *delta_h,int nh,double *delta_o,int no,double **who,double *hidden,double *err);
 
 	private:
 		double drnd();
@@ -80,9 +83,6 @@ class BackProp {
 		void bpnn_randomize_weights(double **w, int m, int n);
 		void bpnn_zero_weights(double **w, int m, int n);
 		BPNN *bpnn_internal_create(int n_in, int n_hidden, int n_out);
-		void bpnn_layerforward(double *l1, double *l2, double **conn, int n1, int n2);
-		void bpnn_output_error(double *delta,double *target,double *output,int nj,double *err);
-		void bpnn_hidden_error(double *delta_h,int nh,double *delta_o,int no,double **who,double *hidden,double *err);
 		
 };
 
