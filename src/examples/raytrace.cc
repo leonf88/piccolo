@@ -149,7 +149,7 @@ static int RayTrace(ConfigData &conf) {
   if (!StartWorker(conf)) {
     Master m(conf);
     for (int i = 1; i <= FLAGS_frames; ++i) {
-      args.set<int>("frame", i);
+      args.put<int>("frame", i);
       RunDescriptor r("RayTraceKernel", "TraceFrame",  geom);
       r.params = args;
       m.run_all(r);

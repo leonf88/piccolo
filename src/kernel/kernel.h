@@ -107,7 +107,7 @@ public:
   }
 
   template <class T>
-  T& get_cp_var(const string& key, T defval=T()) const {
+  T& get_cp_var(const string& key, T defval=T()) {
     if (!cp_.contains(key)) {
       cp_.put(key, defval);
     }

@@ -75,6 +75,15 @@ public:
 
   void run(RunDescriptor r);
 
+  template <class T>
+  T& get_cp_var(const string& key, T defval=T()) {
+    if (!cp_vars_.contains(key)) {
+      cp_vars_.put(key, defval);
+    }
+    return cp_vars_.get<T>(key);
+  }
+
+
   void barrier();
   void cp_barrier();
 
