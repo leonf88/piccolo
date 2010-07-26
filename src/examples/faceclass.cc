@@ -102,7 +102,7 @@ class FCKernel : public DSMKernel {
 			string netname, pathpn, infopn;
 			IMAGELIST *trainlist;
 			IMAGE *iimg;
-			int ind, seed, savedelta, list_errors;
+			int seed, savedelta, list_errors;
 			int train_n, i, j;
 
 			//defaults
@@ -250,8 +250,6 @@ class FCKernel : public DSMKernel {
 		}
 
 		void TrainIteration() {
-			int i, j, k;
-
 			if (0 > TableToBPNN(net)) {
 				fprintf(stderr,"Fatal error: could not load bpnn from table\n");
 				exit(-1);
@@ -358,7 +356,7 @@ class FCKernel : public DSMKernel {
 			return 0;			//success
 		}
 
-		int UpdateBPNNWithDeltas(double *delta, int ndelta, double *ly, int nly, double **w,
+		void UpdateBPNNWithDeltas(double *delta, int ndelta, double *ly, int nly, double **w,
 				double **oldw, double eta, double momentum,int idx_offset) {
 			double newval_dw;
 			int k, j;
@@ -381,8 +379,7 @@ REGISTER_METHOD(FCKernel, PerformanceCheck);
 REGISTER_METHOD(FCKernel, DisplayPerformance);
 
 int Faceclass(ConfigData& conf) {
-
-	int i,j;
+	int i;
 
 	nn_weights  = CreateTable(0,conf.num_workers(),new Sharding::Mod,new Accumulators<double>::Sum);
 	nn_biases   = CreateTable(1,conf.num_workers(), new Sharding::Mod,new Accumulators<double>::Sum);
