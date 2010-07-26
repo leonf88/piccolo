@@ -32,15 +32,12 @@ struct RunDescriptor {
 
    int epoch;
 
-   // Parameters to be passed to the individual kernel functions.  These are
-   // also saved when checkpointing.
-   ArgMap params;
+   // Arguments to be passed to the individual kernel functions.
+   MarshalledMap params;
 
    RunDescriptor() {}
-   RunDescriptor(const string& kernel,
-                 const string& method,
-                 GlobalTable *table,
-								 bool barrier = true,
+   RunDescriptor(const string& kernel, const string& method, GlobalTable *table,
+                 bool barrier = true,
                  CheckpointType c_type=CP_NONE, int c_interval=-1) {
      this->kernel = kernel;
      this->method = method;
@@ -78,37 +75,22 @@ public:
 
   void run(RunDescriptor r);
 
-	void barrier();
-	void cp_barrier();
+  void barrier();
+  void cp_barrier();
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
   // all active tables in the system will have been committed to disk.
   void checkpoint();
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
-  // the process is left in the original state, and this function returns NULL.
-  bool restore(ArgMap *args);
+  // the process is left in the original state, and this function returns false.
+  bool restore();
 
 private:
   void start_checkpoint();
   void start_worker_checkpoint(int worker_id, const RunDescriptor& r);
   void finish_worker_checkpoint(int worker_id, const RunDescriptor& r);
-  void flush_checkpoint(const ArgMap& params);
-
-  ConfigData config_;
-  int checkpoint_epoch_;
-  int kernel_epoch_;
-
-  RunDescriptor current_run_;
-	double current_run_start_;
-	int dispatched_; //# of dispatched tasks
-	int finished_; //# of finished tasks
-
-  Timer cp_timer_;
-  bool checkpointing_;
-
-  // Used for interval checkpointing.
-  double last_checkpoint_;
+  void flush_checkpoint();
 
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -123,8 +105,25 @@ private:
   void assign_tasks(const RunDescriptor& r, vector<int> shards);
   int dispatch_work(const RunDescriptor& r);
 
-	void dump_stats();
-	int reap_one_task();
+  void dump_stats();
+  int reap_one_task();
+
+  ConfigData config_;
+  int checkpoint_epoch_;
+  int kernel_epoch_;
+
+  MarshalledMap cp_vars_;
+
+  RunDescriptor current_run_;
+  double current_run_start_;
+  int dispatched_; //# of dispatched tasks
+  int finished_; //# of finished tasks
+
+  Timer cp_timer_;
+  bool checkpointing_;
+
+  // Used for interval checkpointing.
+  double last_checkpoint_;
 
   vector<WorkerState*> workers_;
 

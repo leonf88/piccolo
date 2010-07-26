@@ -12,7 +12,7 @@ void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {
   shard_ = shard;
 }
 
-void DSMKernel::set_args(const ArgMap& args) {
+void DSMKernel::set_args(const MarshalledMap& args) {
   args_ = args;
 }
 

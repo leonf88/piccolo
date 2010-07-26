@@ -108,7 +108,8 @@ void Worker::KernelLoop() {
       d->InitKernel();
     }
 
-    ArgMap args(kreq.args());
+    MarshalledMap args;
+    args.FromMessage(kreq.args());
     d->set_args(args);
 
     if (this->id() == 1 && FLAGS_sleep_hack > 0) {

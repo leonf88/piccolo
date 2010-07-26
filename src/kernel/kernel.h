@@ -17,71 +17,102 @@ class TypedGlobalTable;
 class TableBase;
 class Worker;
 
-
-class ArgMap {
-public:
-  ArgMap() {}
-  ArgMap(const Args& p) {
-    FromMessage(p);
-  }
 #ifndef SWIG
-  string& operator[](const string& key) {
-    return p_[key];
-  }
-#endif
+class MarshalledMap {
+public:
+  struct MarshalledValue {
+    virtual string ToString() const = 0;
+    virtual void FromString(const string& s) = 0;
+    virtual void set(const void* nv) = 0;
+    virtual void* get() const = 0;
+  };
 
   template <class T>
-  void set(const string& k, const T& v) {
-    p_[k] = boost::lexical_cast<string>(v);
+  struct MarshalledValueT  : public MarshalledValue {
+    MarshalledValueT() : v(new T) {}
+    ~MarshalledValueT() { delete v; }
+
+    string ToString() const {
+      string tmp;
+      m_.marshal(*v, &tmp);
+      return tmp;
+    }
+
+    void FromString(const string& s) {
+      m_.unmarshal(s, v);
+    }
+
+    void* get() const { return v; }
+    void set(const void *nv) {
+      *v = *(T*)nv;
+    }
+
+    mutable Marshal<T> m_;
+    T *v;
+  };
+
+  template <class T>
+  void put(const string& k, const T& v) {
+    if (p_.find(k) == p_.end()) {
+      p_[k] = new MarshalledValueT<T>;
+    }
+
+    p_[k]->set(&v);
   }
 
   template <class T>
-  T get(const string& k, T defval=T()) const {
-    unordered_map<string, string>::const_iterator i = p_.find(k);
-    if (i == p_.end()) { return defval; }
-    return boost::lexical_cast<T>(i->second);
+  T& get(const string& k) const {
+    return *(T*)p_.find(k)->second;
   }
+
+  bool contains(const string& key) const {
+    return p_.find(key) != p_.end();
+  }
+
 
   Args* ToMessage() const {
     Args* out = new Args;
-    for (unordered_map<string, string>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
+    for (unordered_map<string, MarshalledValue*>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
       Arg *p = out->add_param();
       p->set_key(i->first);
-      p->set_value(i->second);
+      p->set_value(i->second->ToString());
     }
     return out;
   }
 
   void FromMessage(const Args& p) {
     for (int i = 0; i < p.param_size(); ++i) {
-      p_[p.param(i).key()] = p.param(i).value();
+      p_[p.param(i).key()]->FromString(p.param(i).value());
     }
   }
 
 private:
-  unordered_map<string, string> p_;
+  unordered_map<string, MarshalledValue*> p_;
 };
+#endif
 
 
 class DSMKernel {
 public:
-  // Called upon creation of this kernel.
+  // Called upon creation of this kernel by a worker.
   virtual void InitKernel() {}
-
-  // Called before worker begins writing checkpoint data for the table
-  // this kernel is working on.  Values stored in 'args' will be made
-  // available in the corresponding Restore() call.
-  virtual void Checkpoint(ArgMap* args) {}
-
-  // Called after worker has restored table state from a previous checkpoint
-  // with this kernel active.
-  virtual void Restore(const ArgMap& args) {}
 
   // The table and shard being processed.
   int current_shard() const { return shard_; }
   int current_table() const { return table_id_; }
 
-  const ArgMap& args() const { return args_; }
+  template <class T>
+  T& get_arg(const string& key) const {
+    return args_.get<T>(key);
+  }
+
+  template <class T>
+  T& get_cp_var(const string& key, T defval=T()) const {
+    if (!cp_.contains(key)) {
+      cp_.put(key, defval);
+    }
+    return cp_.get<T>(key);
+  }
 
   GlobalTable* get_table(int id);
 
@@ -96,12 +127,14 @@ private:
   void initialize_internal(Worker* w,
                            int table_id, int shard);
 
-  void set_args(const ArgMap& args);
+  void set_args(const MarshalledMap& args);
+  void set_checkpoint(const MarshalledMap& args);
 
   Worker *w_;
   int shard_;
   int table_id_;
-  ArgMap args_;
+  MarshalledMap args_;
+  MarshalledMap cp_;
 };
 
 struct KernelInfo {
