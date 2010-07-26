@@ -24,7 +24,7 @@ ADD_CUSTOM_COMMAND(
  ${MPI_COMPILE_FLAGS}
  -o ${swig_out}
  ${CMAKE_CURRENT_SOURCE_DIR}/python_support.swig
- DEPENDS python_support.swig worker master common kernel example ${EXAMPLE_PB_SRC})
+ DEPENDS python_support.swig ${swig_shim} worker master common kernel example ${EXAMPLE_PB_SRC})
  
 ADD_CUSTOM_COMMAND(
   OUTPUT _piccolo.so

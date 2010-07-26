@@ -63,7 +63,7 @@ public:
 
   void run_python_code() {
     the_kernel = this;
-    string python_code = args().get<string>("python_code");
+    string python_code = get_arg<string>("python_code");
     LOG(INFO) << "Executing python code: " << python_code;
     try {
       exec(StringPrintf("%s\n", python_code.c_str()).c_str(), crawl_ns_, crawl_ns_);

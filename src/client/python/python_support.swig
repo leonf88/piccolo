@@ -200,7 +200,7 @@ public:
 %extend Master {
   void py_run_all(const string& code, void *locality) {
     RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
-    r.params["python_code"] = code;
+    r.params.put<string>("python_code", code);
     r.shards = range(((GlobalTable*)locality)->num_shards());
     $self->run(r);
   }
@@ -208,7 +208,7 @@ public:
   // Run the given kernel function on one (arbitrary) worker node.
   void py_run_one(const string& code, void*locality) {
     RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
-    r.params["python_code"] = code;
+    r.params.put<string>("python_code", code);
     r.shards = range(1);
     $self->run(r);
   }

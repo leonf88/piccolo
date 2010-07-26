@@ -81,8 +81,7 @@ public:
     int r = FLAGS_block_size * (s / chunks_per_row);
     int c = FLAGS_block_size * (s % chunks_per_row);
 
-    int frame = args().get<int>("frame");
-
+    int frame = get_arg<int>("frame");
     Timer t;
 
     string cmd = StringPrintf("povray +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFI1 +KFF%d +W%d +H%d %s 2>/dev/null",
@@ -146,7 +145,7 @@ static int RayTrace(ConfigData &conf) {
 
   geom = CreateTable(1, shards, new Sharding::Mod, new Accumulators<int>::Replace);
 
-  ArgMap args;
+  MarshalledMap args;
   if (!StartWorker(conf)) {
     Master m(conf);
     for (int i = 1; i <= FLAGS_frames; ++i) {

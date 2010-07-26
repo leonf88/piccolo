@@ -8,8 +8,8 @@ add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
 add_library(example 
             k-means.cc 
 #            matmul.cc				#buggy
-            pagerank.cc 
-            raytrace.cc
+#            pagerank.cc 
+#            raytrace.cc
             shortest-path.cc
             test-tables.cc
             wordcount.cc

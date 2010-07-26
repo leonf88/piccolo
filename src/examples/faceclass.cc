@@ -187,7 +187,7 @@ class FCKernel : public DSMKernel {
 				imgsize = ROWS(iimg) * COLS(iimg);
 				/* bthom ===========================
 				   make a net with:
-				   imgsize inputs, N hidden units, and 1 output unit
+				   imgsize inputs, N hidden units, and 1 o      utput unit
 				 */
 				net = bpnn.bpnn_create(imgsize, hiddenn, 1);
 			}
@@ -384,8 +384,8 @@ int Faceclass(ConfigData& conf) {
 
 	int i,j;
 
-	nn_weights  = CreateTable(0,1,new Sharding::Mod,new Accumulators<double>::Sum);
-	nn_biases   = CreateTable(1,1,new Sharding::Mod,new Accumulators<double>::Sum);
+	nn_weights  = CreateTable(0,conf.num_workers(),new Sharding::Mod,new Accumulators<double>::Sum);
+	nn_biases   = CreateTable(1,conf.num_workers(), new Sharding::Mod,new Accumulators<double>::Sum);
 	train_ims   = CreateTable(2,ceil(FLAGS_total_ims/FLAGS_sharding),new Sharding::Mod, new Accumulators<IMAGE>::Replace);
 	performance = CreateTable(3,1,new Sharding::Mod, new Accumulators<double>::Sum);
 
