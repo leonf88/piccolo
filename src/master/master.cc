@@ -256,6 +256,8 @@ Master::~Master() {
 void Master::checkpoint() {
   start_checkpoint();
 
+  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+
   for (int i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
   }
@@ -279,8 +281,6 @@ void Master::start_checkpoint() {
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
-
-  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
 }
 
 void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
@@ -290,7 +290,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
 
   start_checkpoint();
 
-  LOG(INFO) << "Starting checkpoint on: " << worker_id;
+  VLOG(1) << "Starting checkpoint on: " << worker_id;
 
   workers_[worker_id]->checkpointing = true;
 
@@ -316,7 +316,7 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   EmptyMessage resp;
   network_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
 
-  LOG(INFO) << worker_id << " finished checkpointing.";
+  VLOG(1) << worker_id << " finished checkpointing.";
 
 
   workers_[worker_id]->checkpointing = false;

@@ -48,7 +48,7 @@ public:
 
   static string Slurp(const string& file);
   static void Dump(const string& file, StringPiece data);
-  static void Mkdirs(const string& path);
+  static void Mkdirs(string path);
   static vector<string> MatchingFilenames(StringPiece glob);
   static vector<Info> MatchingFileinfo(StringPiece glob);
 

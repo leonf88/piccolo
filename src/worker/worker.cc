@@ -218,6 +218,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
 
 void Worker::StartCheckpoint(int epoch, CheckpointType type) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
+
   if (epoch_ >= epoch) {
     LOG(INFO) << "Skipping checkpoint; " << MP(epoch_, epoch);
     return;
@@ -225,10 +226,13 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
 
   epoch_ = epoch;
 
+  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                            FLAGS_checkpoint_write_dir.c_str(), epoch_));
+
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
     if (checkpoint_tables_.find(i->first) != checkpoint_tables_.end()) {
-      LOG(INFO) << "Starting checkpoint... " << MP(id(), epoch_, epoch) << " : " << i->first;
+      VLOG(1) << "Starting checkpoint... " << MP(id(), epoch_, epoch) << " : " << i->first;
       i->second->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
                                                FLAGS_checkpoint_write_dir.c_str(),
                                                epoch_, i->first));
@@ -251,11 +255,11 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
     }
   }
 
-  LOG(INFO) << "Starting delta logging... " << MP(id(), epoch_, epoch);
+  VLOG(1) << "Starting delta logging... " << MP(id(), epoch_, epoch);
 }
 
 void Worker::FinishCheckpoint() {
-  LOG(INFO) << "Worker " << id() << " flushing checkpoint.";
+  VLOG(1) << "Worker " << id() << " flushing checkpoint.";
   boost::recursive_mutex::scoped_lock sl(state_lock_);
 
   active_checkpoint_ = CP_NONE;
