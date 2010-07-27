@@ -35,11 +35,6 @@ struct RunDescriptor {
    MarshalledMap params;
 
    RunDescriptor() {
-     table = NULL;
-     barrier = true;
-     checkpoint_type = CP_NONE;
-     checkpoint_interval = -1;
-     epoch = -1;
      Init("bogus", "bogus", NULL);
    }
 
@@ -48,6 +43,10 @@ struct RunDescriptor {
    }
 
    void Init(const string& kernel, const string& method, GlobalTable *table) {
+     barrier = true;
+     checkpoint_type = CP_NONE;
+     checkpoint_interval = -1;
+
      this->kernel = kernel;
      this->method = method;
      this->table = table;
@@ -133,6 +132,8 @@ private:
   double current_run_start_;
   int dispatched_; //# of dispatched tasks
   int finished_; //# of finished tasks
+
+  bool shards_assigned_;
 
   Timer cp_timer_;
   bool checkpointing_;

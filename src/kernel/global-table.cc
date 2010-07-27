@@ -114,8 +114,7 @@ void GlobalTable::start_checkpoint(const string& f) {
 
 void GlobalTable::write_delta(const TableData& d) {
   if (!is_local_shard(d.shard())) {
-    LOG_EVERY_N(INFO, 1000)
-        << "Ignoring delta write for forwarded data";
+    LOG_EVERY_N(INFO, 1000) << "Ignoring delta write for forwarded data";
     return;
   }
 
