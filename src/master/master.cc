@@ -205,10 +205,11 @@ Master::Master(const ConfigData &conf) :
   config_.CopyFrom(conf);
   checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
-	finished_ = dispatched_ = 0;
+  finished_ = dispatched_ = 0;
   last_checkpoint_ = Now();
   checkpointing_ = false;
   network_ = NetworkThread::Get();
+  shards_assigned_ = false;
 
   CHECK_GT(network_->size(), 1) << "At least one master and one worker required!";
 
@@ -253,10 +254,6 @@ Master::~Master() {
 }
 
 void Master::checkpoint() {
-  // Pause any other kind of activity until the workers all confirm the checkpoint is done; this is
-  // to avoid changing the state of the system (via new shard or task assignments) until the checkpoint
-  // is complete.
-
   start_checkpoint();
 
   for (int i = 0; i < workers_.size(); ++i) {
@@ -265,6 +262,7 @@ void Master::checkpoint() {
 
   for (int i = 0; i < workers_.size(); ++i) {
     finish_worker_checkpoint(i, current_run_);
+    CHECK_EQ(workers_[i]->checkpointing, false);
   }
 
   flush_checkpoint();
@@ -279,15 +277,20 @@ void Master::start_checkpoint() {
   checkpoint_epoch_ += 1;
   checkpointing_ = true;
 
+  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
+
   LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
 }
 
 void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
+  if (workers_[worker_id]->checkpointing) {
+    return;
+  }
+
   start_checkpoint();
 
   LOG(INFO) << "Starting checkpoint on: " << worker_id;
-
-  CHECK_EQ(workers_[worker_id]->checkpointing, false);
 
   workers_[worker_id]->checkpointing = true;
 
@@ -310,10 +313,11 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
     network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
 
-  LOG(INFO) << "Waiting for " << worker_id << " to finish checkpointing.";
-
   EmptyMessage resp;
   network_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
+
+  LOG(INFO) << worker_id << " finished checkpointing.";
+
 
   workers_[worker_id]->checkpointing = false;
 }
@@ -342,6 +346,11 @@ void Master::flush_checkpoint() {
 }
 
 bool Master::restore() {
+  if (!shards_assigned_) {
+    assign_tables();
+    send_table_assignments();
+  }
+
   Timer t;
 
   vector<string> matches = File::MatchingFilenames(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
@@ -512,6 +521,8 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker,
 }
 
 void Master::assign_tables() {
+  shards_assigned_ = true;
+
   // Assign workers for all table shards, to ensure every shard has an owner.
   TableRegistry::Map &tables = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tables.begin(); i != tables.end(); ++i) {
@@ -557,9 +568,8 @@ void Master::dump_stats() {
         workers_[k]->num_assigned());
   }
   LOG(INFO) << StringPrintf("Running %s (%d); %s; assigned: %d done: %d",
-      current_run_.method.c_str(), current_run_.shards.size(),
-      status.c_str(),
-      finished_, dispatched_);
+                            current_run_.method.c_str(), current_run_.shards.size(),
+                            status.c_str(), finished_, dispatched_);
 
 }
 
@@ -630,11 +640,12 @@ void Master::run(RunDescriptor r) {
     }
   }
 
-  if (!kernel_epoch_) {
+  if (!shards_assigned_) {
     //only perform table assignment before the first kernel run
     assign_tables();
     send_table_assignments();
   }
+
   kernel_epoch_++;
 
   assign_tasks(r, shards);
@@ -703,29 +714,11 @@ void Master::barrier() {
 
           });
 
-      if (dispatched_ < current_run_.shards.size())
-      dispatched_ += dispatch_work(current_run_);
-
-    }
-
-  }
-
-  mstats.set_total_time(Now()-current_run_start_);
-
-  if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
-    for (int i = 0; i < workers_.size(); ++i) {
-      WorkerState& w = *workers_[i];
-      if (!w.checkpointing) {
-        start_worker_checkpoint(w.id, current_run_);
+      if (dispatched_ < current_run_.shards.size()) {
+        dispatched_ += dispatch_work(current_run_);
       }
     }
 
-    for (int i = 0; i < workers_.size(); ++i) {
-      WorkerState& w = *workers_[i];
-      finish_worker_checkpoint(w.id, current_run_);
-    }
-
-    flush_checkpoint();
   }
 
   EmptyMessage empty;
@@ -736,8 +729,13 @@ void Master::barrier() {
   //XXX: incorrect if MPI does not guarantee remote delivery
   network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
 
-  LOG(INFO) << "Kernel '" << current_run_.method 
-      << "' finished in " << (Now()-current_run_start_);
+  if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
+    checkpoint();
+  }
+
+  mstats.set_total_time(Now()-current_run_start_);
+
+  LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << (Now()-current_run_start_);
 }
 
 static void TestTaskSort() {

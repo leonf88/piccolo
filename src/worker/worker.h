@@ -57,12 +57,10 @@ public:
   bool has_incoming_data() const;
 
 private:
-  void StartCheckpoint(int epoch, CheckpointType type, vector<int> tables);
+  void StartCheckpoint(int epoch, CheckpointType type);
   void FinishCheckpoint();
   void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
-
-  RecordFile *checkpoint_delta_;
 
   mutable boost::recursive_mutex state_lock_;
 
@@ -72,6 +70,10 @@ private:
   int num_peers_;
   bool running_;
   CheckpointType active_checkpoint_;
+
+  typedef unordered_map<int, bool> CheckpointMap;
+  CheckpointMap checkpoint_tables_;
+
 
   ConfigData config_;
 

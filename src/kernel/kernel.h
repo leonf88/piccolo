@@ -53,6 +53,10 @@ public:
 
   template <class T>
   void put(const string& k, const T& v) {
+    if (serialized_.find(k) != serialized_.end()) {
+      serialized_.erase(serialized_.find(k));
+    }
+
     if (p_.find(k) == p_.end()) {
       p_[k] = new MarshalledValueT<T>;
     }
@@ -62,13 +66,19 @@ public:
 
   template <class T>
   T& get(const string& k) const {
+    if (serialized_.find(k) != serialized_.end()) {
+      p_[k] = new MarshalledValueT<T>;
+      p_[k]->FromString(serialized_[k]);
+      serialized_.erase(serialized_.find(k));
+    }
+
     return *(T*)p_.find(k)->second->get();
   }
 
   bool contains(const string& key) const {
-    return p_.find(key) != p_.end();
+    return p_.find(key) != p_.end() ||
+           serialized_.find(key) != serialized_.end();
   }
-
 
   Args* ToMessage() const {
     Args* out = new Args;
@@ -80,14 +90,18 @@ public:
     return out;
   }
 
+  // We can't immediately deserialize the parameters passed in, since sadly we don't
+  // know the type yet.  Instead, save the string values on the side, and de-serialize
+  // on request.
   void FromMessage(const Args& p) {
     for (int i = 0; i < p.param_size(); ++i) {
-      p_[p.param(i).key()]->FromString(p.param(i).value());
+      serialized_[p.param(i).key()] = p.param(i).value();
     }
   }
 
 private:
-  unordered_map<string, MarshalledValue*> p_;
+  mutable unordered_map<string, MarshalledValue*> p_;
+  mutable unordered_map<string, string> serialized_;
 };
 #endif
 

@@ -204,7 +204,7 @@ public:
   }
 
   void WriteStatus() {
-    fprintf(stderr, "Iteration %d, PR:: ", iter);
+    fprintf(stderr, "Iteration %d, PR:: ", get_arg<int>("iteration"));
     fprintf(stderr, "%.2f\n", curr_pr_hash->get(P(0, 0)));
   }
 
@@ -271,11 +271,11 @@ int Pagerank(ConfigData& conf) {
     return 0;
   }
 
-  m.restore();
+  if (FLAGS_checkpoint) {
+    m.restore();
+  }
+
   int &i = m.get_cp_var<int>("iteration", 0);
-
-  LOG(INFO) << "Iteration: " << i;
-
   if (i == 0) {
     m.run_all("PRKernel", "Initialize",  TableRegistry::Get()->table(0));
   }
@@ -284,19 +284,26 @@ int Pagerank(ConfigData& conf) {
     int curr_pr = (i % 2 == 0) ? 0 : 1;
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
-    RunDescriptor r("PRKernel", "PageRankIter", TableRegistry::Get()->table(curr_pr));
-    if (FLAGS_checkpoint) {
-      r.checkpoint_type = CP_MASTER_CONTROLLED;
-      // We only need to save the next_pr table, which alternates each iteration.
-      r.checkpoint_tables = MakeVector(next_pr);
-    } else {
-      r.checkpoint_type = CP_NONE;
-    }
-    r.shards = range(FLAGS_shards);
+    {
+      RunDescriptor r("PRKernel", "PageRankIter", TableRegistry::Get()->table(curr_pr));
+      if (FLAGS_checkpoint) {
+        r.checkpoint_type = CP_MASTER_CONTROLLED;
+        // We only need to save the next_pr table, which alternates each iteration.
+        r.checkpoint_tables = MakeVector(next_pr);
+      } else {
+        r.checkpoint_type = CP_NONE;
+      }
 
-    m.run(r);
+      r.shards = range(FLAGS_shards);
+      m.run_all(r);
+    }
+
     m.run_all("PRKernel", "ResetTable",  TableRegistry::Get()->table(curr_pr));
-    m.run_one("PRKernel", "WriteStatus",  TableRegistry::Get()->table(curr_pr));
+    {
+      RunDescriptor status("PRKernel", "WriteStatus",  TableRegistry::Get()->table(curr_pr));
+      status.params.put<int>("iteration", i);
+      m.run_one(status);
+    }
   }
 
   return 0;

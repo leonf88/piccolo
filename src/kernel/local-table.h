@@ -29,28 +29,39 @@ public:
   virtual void ApplyUpdates(const TableData& req) = 0;
 
   void start_checkpoint(const string& f) {
+    VLOG(1) << "Start.";
     Timer t;
     RecordFile rf(f, "w", RecordFile::LZO);
+
     TableData data;
 
-    while (!empty()) {
-      Serialize(&data);
-      rf.write(data);
-      data.Clear();
-    }
+    data.set_source(0);
+    data.set_table(id());
+    data.set_shard(shard());
+
+    Serialize(&data);
+    rf.write(data);
 
     delta_file_ = new RecordFile(f + ".delta", "w", RecordFile::LZO);
+    VLOG(1) << "End.";
     //  LOG(INFO) << "Flushed " << file << " to disk in: " << t.elapsed();
   }
 
   void finish_checkpoint() {
+    VLOG(1) << "FStart.";
     if (delta_file_) {
       delete delta_file_;
       delta_file_ = NULL;
     }
+    VLOG(1) << "FEnd.";
   }
 
   void restore(const string& f) {
+    if (!File::Exists(f)) {
+      LOG(INFO) << "Skipping restore of non-existent shard " << id() << " : " << shard();
+      return;
+    }
+
     TableData p;
 
     RecordFile rf(f, "r", RecordFile::LZO);

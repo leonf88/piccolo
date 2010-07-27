@@ -32,7 +32,8 @@ vector<File::Info> File::MatchingFileinfo(StringPiece glob) {
 }
 
 void File::Mkdirs(const string& path) {
-  CHECK_EQ(system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str()), 0);
+  CHECK_EQ(system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str()), 0)
+      << "Failed to create directory " << path;
 }
 
 string File::Slurp(const string& f) {
