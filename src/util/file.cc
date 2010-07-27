@@ -264,8 +264,9 @@ RecordFile::~RecordFile() {
 }
 
 void RecordFile::Init(const string& mode) {
-  if (strstr(mode.c_str(), "r")) {
-    params_.ParseFromString(readChunk());
+  if (mode == "r") {
+    CHECK(readChunk());
+    params_.ParseFromString(buf_);
 
     for (int i = 0; i < params_.attr_size(); ++i) {
       attributes[params_.attr(i).key()] = params_.attr(i).value();
@@ -300,24 +301,26 @@ void RecordFile::writeChunk(const string& data) {
   fp->write(data.data(), data.size());
 }
 
-const string& RecordFile::readChunk() {
+bool RecordFile::readChunk() {
   buf_.clear();
 
   int len;
   int bytes_read = fp->read((char*)&len, sizeof(len));
 
-  if (bytes_read < sizeof(int)) { return buf_; }
+  if (bytes_read < sizeof(int)) {
+    return false;
+  }
 
   buf_.resize(len);
   fp->read(&buf_[0], len);
-  return buf_;
+  return true;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
-  buf_ = readChunk();
-  if (buf_.empty()) { 
+  if (!readChunk()) {
     return false; 
   }
+
   CHECK(m->ParseFromString(buf_));
   return true;
 }
