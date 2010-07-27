@@ -134,7 +134,10 @@ REGISTER_METHOD(RayTraceKernel, DrawFrame);
 
 static int RayTrace(ConfigData &conf) {
   int shards = (FLAGS_height * FLAGS_width) / (FLAGS_block_size * FLAGS_block_size);
-  TableDescriptor* pixel_desc = new TypedTableDescriptor<Pixel, RGB>(0, 1);
+  TableDescriptor* pixel_desc = new TableDescriptor(0, 1);
+  pixel_desc->key_marshal = new Marshal<Pixel>;
+  pixel_desc->value_marshal = new Marshal<RGB>;
+
   pixel_desc->partition_factory = new DenseTable<Pixel, RGB>::Factory;
   pixel_desc->block_size = FLAGS_block_size * FLAGS_block_size;
   pixel_desc->block_info = new PixelBlock;

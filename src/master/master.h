@@ -20,8 +20,7 @@ struct RunDescriptor {
    string method;
 
    GlobalTable *table;
-
-	 bool barrier;
+   bool barrier;
 
    CheckpointType checkpoint_type;
    int checkpoint_interval;
@@ -32,19 +31,26 @@ struct RunDescriptor {
 
    int epoch;
 
-   // Arguments to be passed to the individual kernel functions.
+   // Key-value map of arguments to pass to kernel functions
    MarshalledMap params;
 
-   RunDescriptor() {}
-   RunDescriptor(const string& kernel, const string& method, GlobalTable *table,
-                 bool barrier = true,
-                 CheckpointType c_type=CP_NONE, int c_interval=-1) {
+   RunDescriptor() {
+     table = NULL;
+     barrier = true;
+     checkpoint_type = CP_NONE;
+     checkpoint_interval = -1;
+     epoch = -1;
+     Init("bogus", "bogus", NULL);
+   }
+
+   RunDescriptor(const string& kernel, const string& method, GlobalTable *table) {
+     Init(kernel, method, table);
+   }
+
+   void Init(const string& kernel, const string& method, GlobalTable *table) {
      this->kernel = kernel;
      this->method = method;
      this->table = table;
-		 this->barrier = barrier;
-     this->checkpoint_type = c_type;
-     this->checkpoint_interval = c_interval;
    }
  };
 
