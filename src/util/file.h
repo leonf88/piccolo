@@ -264,7 +264,7 @@ public:
 private:
   void Init(const string& mode);
   void writeChunk(const string &s);
-  const string& readChunk();
+  bool readChunk();
 
   void writeHeader();
   bool firstWrite;
