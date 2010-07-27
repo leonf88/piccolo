@@ -231,7 +231,7 @@ bool LZOFile::read_block() {
   return true;
 }
 
-RecordFile::RecordFile(const string& path, const string& mode, int compression) : firstWrite(true) {
+RecordFile::RecordFile(const string& path, const string& mode, int compression) {
   path_ = path;
   mode_ = mode;
 
@@ -248,8 +248,6 @@ RecordFile::RecordFile(const string& path, const string& mode, int compression) 
   if (compression == LZO) {
     fp = new LZOFile((LocalFile*)fp, mode);
   }
-
-  Init(mode);
 }
 
 RecordFile::~RecordFile() {
@@ -257,39 +255,13 @@ RecordFile::~RecordFile() {
 
   if (mode_ != "r") {
     fp->sync();
-    LOG(INFO) << "Renaming: " << path_;
+    VLOG(1) << "Renaming: " << path_;
     File::Move(StringPrintf("%s.tmp", path_.c_str()), path_);
   }
   delete fp;
 }
 
-void RecordFile::Init(const string& mode) {
-  if (mode == "r") {
-    CHECK(readChunk());
-    params_.ParseFromString(buf_);
-
-    for (int i = 0; i < params_.attr_size(); ++i) {
-      attributes[params_.attr(i).key()] = params_.attr(i).value();
-    }
-  }
-}
-
-void RecordFile::writeHeader() {
-  for (AttrMap::iterator i = attributes.begin(); i != attributes.end(); ++i) {
-    Arg *p = params_.add_attr();
-    p->set_key(i->first);
-    p->set_value(i->second);
-  }
-
-  writeChunk(params_.SerializeAsString());
-}
-
 void RecordFile::write(const google::protobuf::Message & m) {
-  if (firstWrite) {
-    writeHeader();
-    firstWrite = false;
-  }
-
   //LOG_EVERY_N(DEBUG, 1000) << "Writing... " << m.ByteSize() << " bytes at pos " << ftell(fp->filePointer());
   writeChunk(m.SerializeAsString());
   //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp->filePointer());

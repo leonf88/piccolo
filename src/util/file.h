@@ -236,19 +236,14 @@ public:
     LZO = 1
   };
 
-  RecordFile() {
-    fp = NULL;
-  }
+  RecordFile() : fp(NULL) {}
+
   RecordFile(const string& path, const string& mode, int compression=NONE);
   virtual ~RecordFile();
 
-  // Arbitrary key-value pairs to be attached to this file; these are written
-  // prior to any message data.
-  typedef unordered_map<string, string> AttrMap;
-  AttrMap attributes;
-
   virtual void write(const google::protobuf::Message &m);
   virtual bool read(google::protobuf::Message *m);
+
   const char* name() { return fp->name(); }
 
   bool eof() { return fp->eof(); }
@@ -262,13 +257,9 @@ public:
 
   File *fp;
 private:
-  void Init(const string& mode);
   void writeChunk(const string &s);
   bool readChunk();
 
-  void writeHeader();
-  bool firstWrite;
-  FileParams params_;
   string buf_;
   string decomp_buf_;
   string decomp_scratch_;
