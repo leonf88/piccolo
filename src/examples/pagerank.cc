@@ -220,8 +220,10 @@ public:
       next_pr_hash->update(p, random_restart_seed());
 
       float v = 0;
-      if (curr_pr_hash->contains(p))
+      if (curr_pr_hash->contains(p)) {
         v = curr_pr_hash->get_local(P(n.site(), n.id()));
+      }
+
       float contribution = kPropagationFactor * v / n.target_site_size();
       for (int i = 0; i < n.target_site_size(); ++i) {
         next_pr_hash->update(P(n.target_site(i), n.target_id(i)), contribution);
@@ -253,8 +255,8 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  GlobalTable* curr = CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
-  GlobalTable* next = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
 
   StartWorker(conf);
 
@@ -272,15 +274,17 @@ int Pagerank(ConfigData& conf) {
   m.restore();
   int &i = m.get_cp_var<int>("iteration", 0);
 
-  if (i > 0) {
+  LOG(INFO) << "Iteration: " << i;
+
+  if (i == 0) {
     m.run_all("PRKernel", "Initialize",  TableRegistry::Get()->table(0));
   }
 
-  for (; i < FLAGS_iterations; i++) {
+  for (; i < FLAGS_iterations; ++i) {
     int curr_pr = (i % 2 == 0) ? 0 : 1;
     int next_pr = (i % 2 == 0) ? 1 : 0;
 
-    RunDescriptor r("PRKernel", "PageRankIter", curr);
+    RunDescriptor r("PRKernel", "PageRankIter", TableRegistry::Get()->table(curr_pr));
     if (FLAGS_checkpoint) {
       r.checkpoint_type = CP_MASTER_CONTROLLED;
       // We only need to save the next_pr table, which alternates each iteration.
@@ -288,8 +292,7 @@ int Pagerank(ConfigData& conf) {
     } else {
       r.checkpoint_type = CP_NONE;
     }
-
-    r.shards = range(curr->num_shards());
+    r.shards = range(FLAGS_shards);
 
     m.run(r);
     m.run_all("PRKernel", "ResetTable",  TableRegistry::Get()->table(curr_pr));

@@ -62,7 +62,7 @@ public:
 
   template <class T>
   T& get(const string& k) const {
-    return *(T*)p_.find(k)->second;
+    return *(T*)p_.find(k)->second->get();
   }
 
   bool contains(const string& key) const {

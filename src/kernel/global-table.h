@@ -113,7 +113,9 @@ public:
   void remove(const K &k);
   TableIterator* get_iterator(int shard);
   TypedTableIterator<K, V>* get_typed_iterator(int shard);
-  TypedTable<K, V>* partition(int idx) { return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]); }
+  TypedTable<K, V>* partition(int idx) {
+    return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]);
+  }
 
 protected:
   LocalTable* create_local(int shard);
@@ -285,13 +287,11 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
 
   if (is_local_shard(shard)) {
     //    boost::recursive_mutex::scoped_lock sl(mutex());
-    return ((TypedTable<K, V>*) (partitions_[shard]))->contains(k);
+    return partition(shard)->contains(k);
   }
 
   string v_str;
-  return get_remote(shard,
-                     marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
-                     &v_str);
+  return get_remote(shard, marshal(static_cast<Marshal<K>* >(info_->key_marshal), k), &v_str);
 }
 
 template<class K, class V>

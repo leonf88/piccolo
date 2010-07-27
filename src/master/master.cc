@@ -179,8 +179,7 @@ struct WorkerState : private boost::noncopyable {
   }
 
   // Order pending tasks by our guess of how large they are
-  bool get_next(const RunDescriptor& r,
-                KernelRequest* msg) {
+  bool get_next(const RunDescriptor& r, KernelRequest* msg) {
     vector<TaskState*> p = pending();
 
     if (p.empty()) {
@@ -343,6 +342,8 @@ void Master::flush_checkpoint() {
 }
 
 bool Master::restore() {
+  Timer t;
+
   vector<string> matches = File::MatchingFilenames(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
     return false;
@@ -364,9 +365,11 @@ bool Master::restore() {
   CHECK(rf.read(&params));
   CHECK(rf.read(&checkpoint_vars));
 
+  // XXX - RJP need to figure out how to properly handle rolling checkpoints.
+  current_run_.params.FromMessage(params);
+
   cp_vars_.FromMessage(checkpoint_vars);
-  // XXX - rjp check this
-  // current_run_.params.FromMessage(params);
+
 
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
 
@@ -377,6 +380,7 @@ bool Master::restore() {
   req.set_epoch(epoch);
   network_->SyncBroadcast(MTYPE_RESTORE, MTYPE_RESTORE_DONE, req);
 
+  LOG(INFO) << "Checkpoint restored in " << t.elapsed() << " seconds.";
   return true;
 }
 
@@ -518,8 +522,7 @@ void Master::assign_tables() {
 }
 
 void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
-
-	for (int i = 0; i < workers_.size(); ++i) {
+  for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     w.clear_tasks(); //XXX: did not delete task state, memory leak
   }
@@ -642,7 +645,6 @@ void Master::run(RunDescriptor r) {
   if (r.barrier) {
     barrier();
   }
-
 }
 
 void Master::cp_barrier() {

@@ -80,18 +80,6 @@ public:
   void *block_info;
 };
 
-
-template <class K, class V>
-struct TypedTableDescriptor : public TableDescriptor {
-public:
-  TypedTableDescriptor(int id, int shards)  : TableDescriptor(id, shards) {
-    key_marshal = new Marshal<K>;
-    value_marshal = new Marshal<V>;
-    accum = NULL;
-    sharder = NULL;
-  }
-};
-
 struct TableIterator {
   virtual void key_str(string *out) = 0;
   virtual void value_str(string *out) = 0;
