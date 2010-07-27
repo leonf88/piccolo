@@ -31,9 +31,23 @@ vector<File::Info> File::MatchingFileinfo(StringPiece glob) {
   return out;
 }
 
-void File::Mkdirs(const string& path) {
-  CHECK_EQ(system(StringPrintf("mkdir -p '%s'", path.c_str()).c_str()), 0)
-      << "Failed to create directory " << path;
+void File::Mkdirs(string path) {
+  if (path[0] != '/') {
+    char cur[PATH_MAX];
+    getcwd(cur, PATH_MAX);
+    path = string(cur) + "/" + path;
+  }
+
+  vector<StringPiece> pbits = StringPiece::split(path, "/");
+  string prefix;
+  for (int i = 0; i < pbits.size(); ++i) {
+    pbits[i].strip();
+    if (pbits[i].size() == 0) { continue; }
+
+    prefix += "/" + pbits[i].AsString();
+    int result = mkdir(prefix.c_str(), 0777);
+    PCHECK(result == 0 || errno == EEXIST) << "Failed to create directory " << path;
+  }
 }
 
 string File::Slurp(const string& f) {
