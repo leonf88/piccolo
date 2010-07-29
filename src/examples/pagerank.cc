@@ -249,8 +249,6 @@ REGISTER_METHOD(PRKernel, WriteStatus);
 REGISTER_METHOD(PRKernel, PageRankIter);
 REGISTER_METHOD(PRKernel, ResetTable);
 
-DEFINE_bool(checkpoint, false, "Checkpoint between iterations.");
-
 int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
@@ -271,9 +269,7 @@ int Pagerank(ConfigData& conf) {
     return 0;
   }
 
-  if (FLAGS_checkpoint) {
-    m.restore();
-  }
+  m.restore();
 
   int &i = m.get_cp_var<int>("iteration", 0);
   if (i == 0) {
@@ -286,19 +282,15 @@ int Pagerank(ConfigData& conf) {
 
     {
       RunDescriptor r("PRKernel", "PageRankIter", TableRegistry::Get()->table(curr_pr));
-      if (FLAGS_checkpoint) {
-        r.checkpoint_type = CP_MASTER_CONTROLLED;
-        // We only need to save the next_pr table, which alternates each iteration.
-        r.checkpoint_tables = MakeVector(next_pr);
-      } else {
-        r.checkpoint_type = CP_NONE;
-      }
-
+      r.checkpoint_type = CP_MASTER_CONTROLLED;
+      // We only need to save the next_pr table, which alternates each iteration.
+      r.checkpoint_tables = MakeVector(next_pr);
       r.shards = range(FLAGS_shards);
       m.run_all(r);
     }
 
     m.run_all("PRKernel", "ResetTable",  TableRegistry::Get()->table(curr_pr));
+
     {
       RunDescriptor status("PRKernel", "WriteStatus",  TableRegistry::Get()->table(curr_pr));
       status.params.put<int>("iteration", i);
