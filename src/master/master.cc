@@ -4,9 +4,10 @@
 
 #include <set>
 
-DEFINE_bool(work_stealing, true, "");
-DEFINE_string(dead_workers, "",
-              "Comma delimited list of workers to pretend have died.");
+DEFINE_string(dead_workers, "", "For failure testing; comma delimited list of workers to pretend have died.");
+DEFINE_bool(work_stealing, true, "Enable work stealing to load-balance tasks between machines.");
+DEFINE_bool(checkpoint, false, "If true, enable checkpointing.");
+DEFINE_bool(restore, false, "If true, enable restore.");
 
 DECLARE_string(checkpoint_write_dir);
 DECLARE_string(checkpoint_read_dir);
@@ -275,7 +276,6 @@ void Master::start_checkpoint() {
     return;
   }
 
-  cp_timer_.Reset();
   checkpoint_epoch_ += 1;
   checkpointing_ = true;
 
@@ -338,7 +338,6 @@ void Master::flush_checkpoint() {
   rf.write(*cp_vars);
   rf.sync();
 
-  LOG(INFO) << "Checkpoint: " << cp_timer_.elapsed() << " seconds elapsed; ";
   checkpointing_ = false;
   last_checkpoint_ = Now();
   delete params;
@@ -346,6 +345,11 @@ void Master::flush_checkpoint() {
 }
 
 bool Master::restore() {
+  if (!FLAGS_restore) {
+    LOG(INFO) << "Restore disabled by flag.";
+    return false;
+  }
+
   if (!shards_assigned_) {
     assign_tables();
     send_table_assignments();
@@ -615,6 +619,11 @@ int Master::reap_one_task() {
 }
 
 void Master::run(RunDescriptor r) {
+  if (!FLAGS_checkpoint && r.checkpoint_type != CP_NONE) {
+    LOG(INFO) << "Checkpoint is disabled by flag.";
+    r.checkpoint_type = CP_NONE;
+  }
+
   CHECK_EQ(current_run_.shards.size(), finished_) << " Cannot start kernel before previous one is finished ";
   current_run_ = r;
   current_run_start_ = Now();
@@ -730,12 +739,14 @@ void Master::barrier() {
   network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
+    Timer cp_timer;
     checkpoint();
+    LOG(INFO) << "Checkpoint finished in " << cp_timer.elapsed();
   }
 
   mstats.set_total_time(Now()-current_run_start_);
 
-  LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << (Now()-current_run_start_);
+  LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << mstats.total_time();
 }
 
 static void TestTaskSort() {

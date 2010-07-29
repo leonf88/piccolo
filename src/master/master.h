@@ -135,7 +135,6 @@ private:
 
   bool shards_assigned_;
 
-  Timer cp_timer_;
   bool checkpointing_;
 
   // Used for interval checkpointing.
