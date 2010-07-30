@@ -94,6 +94,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
 
   if (File::Exists(target + ".lzo")) {
+  if (File::Exists(target)) {
     return;
   }
 
