@@ -250,10 +250,6 @@ RecordFile::RecordFile(const string& path, const string& mode, int compression) 
   path_ = path;
   mode_ = mode;
 
-  if (compression == LZO) {
-    path_ += ".lzo";
-  }
-
   if (mode == "r") {
     fp = new LocalFile(path_, mode);
   } else {

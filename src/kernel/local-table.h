@@ -58,7 +58,7 @@ public:
 
   void restore(const string& f) {
     if (!File::Exists(f)) {
-      LOG(INFO) << "Skipping restore of non-existent shard " << id() << " : " << shard();
+      LOG(INFO) << "Skipping restore of non-existent shard " << f;
       return;
     }
 

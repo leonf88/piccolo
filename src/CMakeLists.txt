@@ -12,7 +12,7 @@ find_package(PythonLibs REQUIRED)
 
 include(${SWIG_USE_FILE})
 
-set(CMAKE_CXX_FLAGS "-fPIC -march=core2 -g -Wall -Wno-sign-compare -Wno-unused-function")
+set(CMAKE_CXX_FLAGS "-fPIC -march=core2 -ggdb2 -Wall -Wno-sign-compare -Wno-unused-function")
 if ($ENV{TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHEAPPROF -fno-omit-frame-pointer")
 endif()
