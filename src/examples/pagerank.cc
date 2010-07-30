@@ -23,6 +23,13 @@ DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
 
+static float powerlaw_random(float dmin, float dmax, float n) {
+  float r = (float)random() / RAND_MAX;
+  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
+}
+
+static vector<int> site_sizes;
+
 
 // I'd like to use a pair here, but for some reason they fail to count
 // as POD types according to C++.  Sigh.
@@ -40,6 +47,16 @@ bool operator==(const PageId& a, const PageId& b) {
   return a.site == b.site && a.page == b.page;
 }
 
+PageId operator+(const PageId& a, int offset) {
+  PageId r = P(a.site, a.page + offset);
+  while (r.page > site_sizes[r.site]) {
+    r.page -= site_sizes[r.site];
+    ++r.site;
+  }
+
+  return r;
+}
+
 namespace std {
 static ostream & operator<< (ostream &out, const PageId& p) {
   out << MP(p.site, p.page);
@@ -49,7 +66,7 @@ static ostream & operator<< (ostream &out, const PageId& p) {
 namespace tr1 {
 template <>
 struct hash<PageId> {
-  size_t operator()(PageId p) {
+  size_t operator()(const PageId& p) const {
     return SuperFastHash((const char*)&p, sizeof p);
   }
 };
@@ -62,14 +79,15 @@ struct SiteSharding : public Sharder<PageId> {
   }
 };
 
-static float powerlaw_random(float dmin, float dmax, float n) {
-  float r = (float)random() / RAND_MAX;
-  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
-}
+struct PageIdBlockInfo : public BlockInfo<PageId> {
+  PageId block_id(const PageId& k, int block_size)  {
+    return P(k.site, k.page - (k.page % block_size));
+  }
 
-static boost::recursive_mutex file_lock;
-
-static vector<int> site_sizes;
+  int block_pos(const PageId& k, int block_size) {
+    return k.page % block_size;
+  }
+};
 
 static void InitSites() {
   if (site_sizes.empty()) {
@@ -85,15 +103,12 @@ static void InitSites() {
 }
 
 static void BuildGraph(int shard, int nshards, int nodes, int density) {
-  boost::recursive_mutex::scoped_lock sl(file_lock);
-
   InitSites();
   char* d = strdup(FLAGS_graph_prefix.c_str());
   File::Mkdirs(dirname(d));
 
   string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), shard, nshards, nodes);
 
-  if (File::Exists(target + ".lzo")) {
   if (File::Exists(target)) {
     return;
   }
@@ -254,8 +269,19 @@ int Pagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
-  CreateTable(0, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
-  CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<float>::Sum);
+  TableDescriptor* pr_desc = new TableDescriptor(0, FLAGS_shards);
+  pr_desc->key_marshal = new Marshal<PageId>;
+  pr_desc->value_marshal = new Marshal<float>;
+
+  pr_desc->partition_factory = new SparseTable<PageId, float>::Factory;
+  pr_desc->block_size = 1000;
+  pr_desc->block_info = new PageIdBlockInfo;
+  pr_desc->sharder = new SiteSharding;
+  pr_desc->accum = new Accumulators<float>::Sum;
+
+  CreateTable<PageId, float>(pr_desc);
+  pr_desc->table_id = 1;
+  CreateTable<PageId, float>(pr_desc);
 
   StartWorker(conf);
 
