@@ -356,7 +356,6 @@ bool Master::restore() {
   }
 
   Timer t;
-
   vector<string> matches = File::MatchingFilenames(FLAGS_checkpoint_read_dir + "/*/checkpoint.finished");
   if (matches.empty()) {
     return false;
@@ -573,7 +572,7 @@ void Master::dump_stats() {
   }
   LOG(INFO) << StringPrintf("Running %s (%d); %s; assigned: %d done: %d",
                             current_run_.method.c_str(), current_run_.shards.size(),
-                            status.c_str(), finished_, dispatched_);
+                            status.c_str(), dispatched_, finished_);
 
 }
 
