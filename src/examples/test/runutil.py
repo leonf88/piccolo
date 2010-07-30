@@ -40,7 +40,7 @@ def run_example(runner,
                 n=64, 
                 build_type='release',
                 results_dir='results',
-                hostfile='fast_hostfile',
+                hostfile='conf/mpi-beakers',
                 logfile_name=None,
                 args=None):
   if not logfile_name: logfile_name = runner
@@ -79,8 +79,8 @@ def run_command(cmd, n,
   init_log(results_dir, n, logfile_name)
 
   system('rm -f profile/*')
-  log("Wiping cache...")
-  #system("pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'")
+  log("Flushing buffer cache...")
+  system("pdsh -f 100 -g muppets -l root 'echo 3 > /proc/sys/vm/drop_caches'")
   log("Killing existing workers...")
   #system("pdsh -f 100 -g muppets 'pkill -9 example-dsm || true'")
 

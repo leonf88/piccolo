@@ -5,8 +5,8 @@ import os
 import sys; sys.path += ['src/examples/test']
 import runutil, math
 
-checkpoint_write_dir="/scratch/checkpoints/"
-checkpoint_read_dir="/scratch/cp-union/checkpoints/"
+checkpoint_write_dir="/scratch/power/checkpoints/"
+checkpoint_read_dir="/scratch/power/checkpoints/"
 scaled_base_size=5
 fixed_base_size=100
 shards=256
@@ -47,7 +47,7 @@ def run_pr(fname, size, n, args=None, **kw):
                               '--sleep_time=0.001',
                               '--nodes=%s' % (size * 1000 * 1000),
                               '--memory_graph=%d' % memory_graph,
-                              '--shards=%s' % shards,
+                              '--shards=%s' % n,
                               '--work_stealing=true',
                               '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
                               '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
@@ -87,5 +87,8 @@ def test_checkpointing():
   run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])  
   run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
 
-test_fixed_perf()
+#test_fixed_perf()
 #test_scaled_perf()
+
+run_pr('Pagerank.checkpoint.10M', 10, 63, ['--checkpoint=true', '--restore=true'])
+run_pr('Pagerank.checkpoint.100M', 100, 63, ['--checkpoint=true', '--restore=true'])

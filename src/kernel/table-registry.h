@@ -70,7 +70,7 @@ static TypedGlobalTable<K, V>* CreateTable(int id,
 }
 
 template<class K, class V>
-static TypedGlobalTable<K, V>* CreateTable(TableDescriptor *info) {
+static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info) {
   TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>();
   t->Init(info);
   TableRegistry::Get()->tables().insert(make_pair(info->table_id, t));
