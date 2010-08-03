@@ -278,14 +278,14 @@ void RecordFile::write(const google::protobuf::Message & m) {
   //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp->filePointer());
 }
 
-void RecordFile::writeChunk(const string& data) {
+void RecordFile::writeChunk(StringPiece data) {
   int len = data.size();
   fp->write((char*)&len, sizeof(int));
-  fp->write(data.data(), data.size());
+  fp->write(data.data, data.size());
 }
 
-bool RecordFile::readChunk() {
-  buf_.clear();
+bool RecordFile::readChunk(string *s) {
+  s->clear();
 
   int len;
   int bytes_read = fp->read((char*)&len, sizeof(len));
@@ -294,13 +294,13 @@ bool RecordFile::readChunk() {
     return false;
   }
 
-  buf_.resize(len);
-  fp->read(&buf_[0], len);
+  s->resize(len);
+  fp->read(&(*s)[0], len);
   return true;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
-  if (!readChunk()) {
+  if (!readChunk(&buf_)) {
     return false; 
   }
 

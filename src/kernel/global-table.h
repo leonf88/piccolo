@@ -11,7 +11,9 @@ namespace dsm {
 
 class Worker;
 
-class GlobalTable  : public TableBase {
+class GlobalTable :
+  public TableBase,
+  public Checkpointable {
 public:
   virtual void Init(const TableDescriptor* tinfo);
   virtual ~GlobalTable();
@@ -48,8 +50,8 @@ public:
 
   int pending_write_bytes();
 
-  // Clear any local data for which this table has ownership.  Pending updates
-  // are *not* cleared.
+  // Clear any local data for which this table has ownership.
+  // Updates waiting to be sent to other workers are *not* cleared.
   void clear(int shard);
   bool empty();
   void resize(int64_t new_size);
@@ -86,7 +88,10 @@ protected:
 };
 
 template <class K, class V>
-class TypedGlobalTable : public GlobalTable, public TypedTable<K, V>, private boost::noncopyable {
+class TypedGlobalTable :
+  public GlobalTable,
+  public TypedTable<K, V>,
+  private boost::noncopyable {
 public:
   virtual void Init(const TableDescriptor *tinfo) {
     GlobalTable::Init(tinfo);
