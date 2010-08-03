@@ -23,7 +23,6 @@ struct IntBlockInfo : public BlockInfo<int> {
   }
 };
 
-
 // Provides fast lookups for dense key-spaces.  Keys are divided into 'blocks' of
 // contiguous elements; users can operate on single entries or blocks at a time for
 // more efficient access.  Modifying a single entry in a block marks the entire
@@ -93,6 +92,7 @@ public:
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
   DenseTable(int size = 1) : m_(size) {
+    last_block_ = NULL;
   }
 
   ~DenseTable() {}
@@ -111,7 +111,7 @@ public:
   V* get_block(const K& k) {
     K start = start_key(k);
 
-    if (start == last_block_start_ && last_block_) {
+    if (last_block_ && start == last_block_start_) {
       return last_block_;
     }
 
