@@ -255,10 +255,23 @@ Master::~Master() {
 }
 
 void Master::checkpoint() {
+  vector<int> cp_tables;
+  for (TableRegistry::Map::iterator i = tables_.begin(); i != tables_.end(); ++i) {
+    cp_tables.push_back(i->first);
+  }
+}
+
+void Master::checkpoint(vector<int> cp_tables) {
+  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+
+  Timer cp_timer;
   start_checkpoint();
 
-  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
-  current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+  current_run_.checkpoint_tables = cp_tables;
+
+  if (current_run_.checkpoint_type == CP_NONE) {
+    current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+  }
 
   for (int i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
@@ -270,6 +283,7 @@ void Master::checkpoint() {
   }
 
   flush_checkpoint();
+  LOG(INFO) << "Checkpoint finished in " << cp_timer.elapsed();
 }
 
 void Master::start_checkpoint() {
@@ -625,15 +639,12 @@ void Master::run(RunDescriptor r) {
   }
 
   CHECK_EQ(current_run_.shards.size(), finished_) << " Cannot start kernel before previous one is finished ";
-  current_run_ = r;
-  current_run_start_ = Now();
   finished_ = dispatched_ = 0;
 
   KernelInfo *k = KernelRegistry::Get()->kernel(r.kernel);
   CHECK_NE(r.table, (void*)NULL) << "Table locality must be specified!";
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
-
 
   VLOG(1) << "Running: " << r.kernel << " : " << r.method << " : " << *r.params.ToMessage();
 
@@ -649,6 +660,9 @@ void Master::run(RunDescriptor r) {
     }
   }
 
+  current_run_ = r;
+  current_run_start_ = Now();
+
   if (!shards_assigned_) {
     //only perform table assignment before the first kernel run
     assign_tables();
@@ -657,9 +671,9 @@ void Master::run(RunDescriptor r) {
 
   kernel_epoch_++;
 
-  assign_tasks(r, shards);
+  assign_tasks(current_run_, shards);
 
-  dispatched_ = dispatch_work(r);
+  dispatched_ = dispatch_work(current_run_);
 
   //XXX:in its current state, does not make sense not to call barrier at the end
   if (r.barrier) {
@@ -739,9 +753,7 @@ void Master::barrier() {
   network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
-    Timer cp_timer;
     checkpoint();
-    LOG(INFO) << "Checkpoint finished in " << cp_timer.elapsed();
   }
 
   mstats.set_total_time(Now()-current_run_start_);

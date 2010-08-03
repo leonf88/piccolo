@@ -93,8 +93,9 @@ public:
   void cp_barrier();
 
   // Blocking.  Instruct workers to save all table state.  When this call returns,
-  // all active tables in the system will have been committed to disk.
+  // all requested tables in the system will have been committed to disk.
   void checkpoint();
+  void checkpoint(vector<int> cp_tables);
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
   // the process is left in the original state, and this function returns false.
