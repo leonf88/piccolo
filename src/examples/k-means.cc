@@ -182,13 +182,18 @@ static int KMeans(ConfigData& conf) {
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("KMeansKernel", "initialize_points",  points);
-    m.run_one("KMeansKernel", "initialize_dists",  points);
+    if (!m.restore()) {
+      m.run_all("KMeansKernel", "initialize_points",  points);
+      m.run_one("KMeansKernel", "initialize_dists",  points);
+    }
+
     for (int i = 0; i < FLAGS_iterations; i++) {
       m.run_all("KMeansKernel", "initialize_expectation",  points);
       m.run_all("KMeansKernel", "compute_expectation",  points);
       m.run_all("KMeansKernel", "initialize_maximization",  dists);
       m.run_all("KMeansKernel", "compute_maximization",  dists);
+
+      m.checkpoint();
     }
   //    m.run_one("KMeansKernel", " print_results",  0);
   }

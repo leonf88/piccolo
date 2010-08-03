@@ -258,6 +258,7 @@ void Master::checkpoint() {
   start_checkpoint();
 
   LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+  current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
 
   for (int i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
