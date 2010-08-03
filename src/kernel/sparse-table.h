@@ -88,8 +88,8 @@ public:
       return new Iterator(*this);
   }
 
-  void Serialize(TableData *out);
-  void ApplyUpdates(const TableData& req);
+  void Serialize(TableCoder *out);
+  void ApplyUpdates(TableCoder *in);
 
   bool contains_str(const StringPiece& s) {
     K k;
@@ -153,37 +153,28 @@ SparseTable<K, V>::SparseTable(int size)
 }
 
 template <class K, class V>
-void SparseTable<K, V>::Serialize(TableData *out) {
+void SparseTable<K, V>::Serialize(TableCoder *out) {
   Iterator *i = (Iterator*)get_iterator();
+  string k, v;
   while (!i->done()) {
-    Arg *kv = out->add_kv_data();
-    ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), kv->mutable_key());
-    ((Marshal<V>*)info_->value_marshal)->marshal(i->value(), kv->mutable_value());
+    ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), &k);
+    ((Marshal<V>*)info_->value_marshal)->marshal(i->value(), &v);
+    out->WriteEntry(k, v);
     i->Next();
   }
-
-  out->set_done(true);
   delete i;
 }
 
 template <class K, class V>
-void SparseTable<K, V>::ApplyUpdates(const TableData& req) {
+void SparseTable<K, V>::ApplyUpdates(TableCoder *in) {
   K k;
   V v;
-  for (int i = 0; i < req.kv_data_size(); ++i) {
-    const Arg& kv = req.kv_data(i);
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(kv.key(), &k);
-    ((Marshal<V>*)info_->value_marshal)->unmarshal(kv.value(), &v);
-
+  string kt, vt;
+  while (in->ReadEntry(&kt, &vt)) {
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
+    ((Marshal<V>*)info_->value_marshal)->unmarshal(vt, &v);
     update(k, v);
   }
-}
-
-
-static int log2(int s) {
-  int l = 0;
-  while (s >>= 1) { ++l; }
-  return l;
 }
 
 template <class K, class V>

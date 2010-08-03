@@ -97,8 +97,6 @@ public:
     CHECK(info_->accum != NULL);
     CHECK(info_->key_marshal != NULL);
     CHECK(info_->value_marshal != NULL);
-//    CHECK_NE(info_->block_info, NULL);
-//    CHECK_NE(info_->partition_factory, NULL);
   }
 
   const TableDescriptor& info() const { return *info_; }
@@ -111,7 +109,29 @@ protected:
   TableDescriptor *info_;
 };
 
-// Interface that typed tables should support.
+// Interface for serializing tables, either to disk or for transmitting via RPC.
+struct TableCoder {
+  virtual void WriteEntry(StringPiece k, StringPiece v) = 0;
+  virtual bool ReadEntry(string* k, string *v) = 0;
+
+  virtual ~TableCoder() {}
+};
+
+class Serializable {
+public:
+  virtual void ApplyUpdates(TableCoder *in) = 0;
+  virtual void Serialize(TableCoder* out) = 0;
+};
+
+class UntypedTable {
+public:
+  virtual bool contains_str(const StringPiece& k) = 0;
+  virtual string get_str(const StringPiece &k) = 0;
+  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+  virtual TableBase::Iterator *get_iterator() = 0;
+};
+
+// Key/value typed interface.
 template <class K, class V>
 class TypedTable {
 public:
@@ -139,6 +159,24 @@ public:
   virtual void restore(const string& f) = 0;
 };
 
+struct RPCTableCoder : public TableCoder {
+  RPCTableCoder(const TableData* in);
+  virtual void WriteEntry(StringPiece k, StringPiece v);
+  virtual bool ReadEntry(string* k, string *v);
+
+  int read_pos_;
+  TableData *t_;
+};
+
+struct LocalTableCoder : public TableCoder {
+  LocalTableCoder(const string &f, const string& mode);
+  virtual ~LocalTableCoder();
+
+  virtual void WriteEntry(StringPiece k, StringPiece v);
+  virtual bool ReadEntry(string* k, string *v);
+
+  RecordFile *f_;
+};
 }
 
 #endif
