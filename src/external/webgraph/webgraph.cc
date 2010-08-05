@@ -10,9 +10,6 @@
 #include <errno.h>
 #include <zlib.h>
 
-// XXX Perhaps this should go in external, since it's not in Piccolo
-// style and doesn't depend on anything in it.
-
 namespace WebGraph {
 
 /******************************************************************
