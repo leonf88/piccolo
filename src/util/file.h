@@ -215,7 +215,7 @@ private:
   void write_block();
   bool read_block();
 
-  static const int kBlockSize = 65536;
+  static const int kBlockSize = 512000;
   static const int kCompressedBlockSize = kBlockSize + (kBlockSize / 16) + 64 + 3;
 
   struct Block {
@@ -255,10 +255,11 @@ public:
     }
   }
 
+  void writeChunk(StringPiece data);
+  bool readChunk(string *s);
+
   File *fp;
 private:
-  void writeChunk(const string &s);
-  bool readChunk();
 
   string buf_;
   string decomp_buf_;

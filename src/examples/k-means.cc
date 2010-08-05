@@ -25,23 +25,24 @@ static TypedGlobalTable<int32_t, Point> *points;
 static TypedGlobalTable<int32_t, Distribution> *dists;
 static TypedGlobalTable<int32_t, Distribution> *actual;
 
+static vector<Distribution> rdists;
+
+static void initialize_actual() {
+  srand(0);
+  rdists.clear();
+  for (int i = 0; i < FLAGS_num_dists; ++i) {
+    Distribution d = { 0.5 - rand_double(),
+                       0.5 - rand_double() };
+    rdists.push_back(d);
+  }
+}
+
 class KMeansKernel : public DSMKernel {
 private:
-  vector<Distribution> rdists;
 
 public:
   void initialize_points() {
     points->resize(FLAGS_num_points);
-
-    srand(0);
-    rdists.clear();
-    for (int i = 0; i < FLAGS_num_dists; ++i) {
-      double dx = 0.5 - rand_double();
-      double dy = 0.5 - rand_double();
-
-      Distribution d = { dx, dy };
-      rdists.push_back(d);
-    }
 
     const int num_shards = points->num_shards();
     for (int64_t i = current_shard(); i < FLAGS_num_points; i += num_shards) {
@@ -56,9 +57,9 @@ public:
 
   void initialize_dists() {
     for (int i = 0; i < FLAGS_num_dists; ++i) {
-      // Initialize a guess for center point of the distributions
-      Point p = points->get(random() % FLAGS_num_points);
-      Distribution d = { p.x, p.y };
+      // Initialize a guess for center point of the distributions, from a uniform random distribution
+      Distribution d = { 0.5 - rand_double(),
+                         0.5 - rand_double() };
       dists->update(i, d);
       actual->update(i, rdists[i]);
     }
@@ -180,15 +181,24 @@ static int KMeans(ConfigData& conf) {
   points = CreateTable(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);
   actual = CreateTable(2, num_shards, new Sharding::Mod, new DistAccum);
 
+  initialize_actual();
+
   if (!StartWorker(conf)) {
     Master m(conf);
+    if (!m.restore()) {
+      m.run_one("KMeansKernel", "initialize_dists",  points);
+    }
+
+    // Points are not stored with the checkpoint data.
     m.run_all("KMeansKernel", "initialize_points",  points);
-    m.run_one("KMeansKernel", "initialize_dists",  points);
+
     for (int i = 0; i < FLAGS_iterations; i++) {
       m.run_all("KMeansKernel", "initialize_expectation",  points);
       m.run_all("KMeansKernel", "compute_expectation",  points);
       m.run_all("KMeansKernel", "initialize_maximization",  dists);
       m.run_all("KMeansKernel", "compute_maximization",  dists);
+
+      m.checkpoint(MakeVector(0));
     }
   //    m.run_one("KMeansKernel", " print_results",  0);
   }

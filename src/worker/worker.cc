@@ -8,8 +8,8 @@
 
 DEFINE_double(sleep_hack, 0.0, "");
 DEFINE_double(sleep_time, 0.001, "");
-DEFINE_string(checkpoint_write_dir, "checkpoints", "");
-DEFINE_string(checkpoint_read_dir, "checkpoints", "");
+DEFINE_string(checkpoint_write_dir, "/scratch/power/checkpoints", "");
+DEFINE_string(checkpoint_read_dir, "/scratch/power/checkpoints", "");
 
 namespace dsm {
 
