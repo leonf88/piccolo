@@ -1,5 +1,6 @@
 #include "client/client.h"
 #include "examples/examples.pb.h"
+#include "webgraph.h"
 
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -23,6 +24,8 @@ DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
 
+DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
+
 static float powerlaw_random(float dmin, float dmax, float n) {
   float r = (float)random() / RAND_MAX;
   return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
@@ -33,10 +36,11 @@ static vector<int> site_sizes;
 
 // I'd like to use a pair here, but for some reason they fail to count
 // as POD types according to C++.  Sigh.
-struct PageId {
-  uint32_t site;
-  uint32_t page;
-} __attribute__((packed));
+struct PageId
+{
+        uint32_t site;
+        uint32_t page;
+} __attribute__((__packed__));
 
 PageId P(int s, int p) {
   PageId pid = { s, p };
@@ -134,6 +138,82 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
 
 static float random_restart_seed() {
   return (1-kPropagationFactor)*(TOTALRANK/FLAGS_nodes);
+}
+
+static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out)
+{
+  WebGraph::URLReader *r = wgr->newURLReader();
+  struct PageId pid = {-1, -1};
+  string prev, url;
+  int prevHostLen = 0;
+  int i = 0;
+
+  out->reserve(wgr->nodes);
+
+  while (r->readURL(&url)) {
+    if (i++ % 100000 == 0)
+      LOG(INFO) << "Reading URL " << i-1 << " of " << wgr->nodes;
+
+    // Get host part
+    int hostLen = url.find('/', 8);
+    CHECK(hostLen != url.npos) << "Failed to split host in URL " << url;
+    ++hostLen;
+
+    if (prev.compare(0, prevHostLen, url, 0, hostLen) == 0) {
+      // Same site
+      ++pid.page;
+    } else {
+      // Different site
+      ++pid.site;
+      pid.page = 0;
+
+      swap(prev, url);
+      prevHostLen = hostLen;
+    }
+
+    out->push_back(pid);
+  }
+
+  delete r;
+
+  LOG(INFO) << pid.site+1 << " total sites read";
+}
+
+static void ConvertGraph(string path, int nshards)
+{
+  WebGraph::Reader r(path);
+  vector<PageId> pageIds;
+  WebGraphPageIds(&r, &pageIds);
+
+  char* d = strdup(FLAGS_graph_prefix.c_str());
+  File::Mkdirs(dirname(d));
+
+  RecordFile *out[nshards];
+  for (int i = 0; i < nshards; ++i) {
+    string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), i, nshards, r.nodes);
+    out[i] = new RecordFile(target, "w", RecordFile::LZO);
+  }
+
+  // XXX Maybe we should take at most FLAGS_nodes nodes
+  const WebGraph::Node *node;
+  Page n;
+  while ((node = r.readNode())) {
+    if (node->node % 100000 == 0)
+      LOG(INFO) << "Reading node " << node->node << " of " << r.nodes;
+    PageId src = pageIds.at(node->node);
+    n.Clear();
+    n.set_site(src.site);
+    n.set_id(src.page);
+    for (unsigned int i = 0; i < node->links.size(); ++i) {
+      PageId dest = pageIds.at(node->links[i]);
+      n.add_target_site(dest.site);
+      n.add_target_id(dest.page);
+    }
+    out[src.site % nshards]->write(n);
+  }
+
+  for (int i = 0; i < nshards; ++i)
+    delete out[i];
 }
 
 // Generate a graph on-demand rather then reading from disk.
@@ -293,6 +373,11 @@ int Pagerank(ConfigData& conf) {
     }
 
     m.run_range("PRKernel", "BuildGraph", TableRegistry::Get()->table(0), shards);
+    return 0;
+  }
+
+  if (!FLAGS_convert_graph.empty()) {
+    ConvertGraph(FLAGS_convert_graph, FLAGS_shards);
     return 0;
   }
 

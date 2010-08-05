@@ -1,5 +1,5 @@
 set(MPILIBS mpi_cxx mpi open-rte open-pal)
-set(STATICLIBS protobuf boost_thread-mt util)
+set(STATICLIBS protobuf boost_thread-mt util z)
 set(DYNAMICLIBS lzo2 pthread rt dl numa SDL)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
@@ -28,7 +28,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/facedet/cpp)
 
 # we need to resolve static initializers, so glob all the symbols in
 target_link_libraries(example-dsm -Wl,-whole-archive common worker kernel master example -Wl,-no-whole-archive)
-target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind)
+target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind webgraph)
 
 # link statically if possible
 target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
