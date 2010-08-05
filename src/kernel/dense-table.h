@@ -23,7 +23,6 @@ struct IntBlockInfo : public BlockInfo<int> {
   }
 };
 
-
 // Provides fast lookups for dense key-spaces.  Keys are divided into 'blocks' of
 // contiguous elements; users can operate on single entries or blocks at a time for
 // more efficient access.  Modifying a single entry in a block marks the entire
@@ -93,6 +92,7 @@ public:
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
   DenseTable(int size = 1) : m_(size) {
+    last_block_ = NULL;
   }
 
   ~DenseTable() {}
@@ -111,7 +111,7 @@ public:
   V* get_block(const K& k) {
     K start = start_key(k);
 
-    if (start == last_block_start_ && last_block_) {
+    if (last_block_ && start == last_block_start_) {
       return last_block_;
     }
 
@@ -180,39 +180,41 @@ public:
 
   void resize(int64_t s) {}
 
-  void Serialize(TableData *out) {
+  void Serialize(TableCoder* out) {
+    string k, v;
     for (typename BucketMap::iterator i = m_.begin(); i != m_.end(); ++i) {
-      Bucket &b = i->second;
+      v.clear();
 
-      // For the purposes of serialization, all values in a bucket are assumed to take on the
-      // same size.
-      Arg *kv = out->add_kv_data();
-      ((Marshal<K>*)info_->key_marshal)->marshal(i->first, kv->mutable_key());
+      // For the purposes of serialization, all values in a bucket are assumed
+      // to be the same number of bytes.
+      ((Marshal<K>*)info_->key_marshal)->marshal(i->first, &k);
 
       string tmp;
+      Bucket &b = i->second;
       for (int j = 0; j < b.entries.size(); ++j) {
         ((Marshal<V>*)info_->value_marshal)->marshal(b.entries[j], &tmp);
-        kv->mutable_value()->append(tmp);
+        v += tmp;
       }
-    }
 
-    out->set_done(true);
+      out->WriteEntry(k, v);
+    }
   }
 
-  void ApplyUpdates(const TableData& req) {
+  void ApplyUpdates(TableCoder *in) {
     K k;
-    for (int i = 0; i < req.kv_data_size(); ++i) {
-      const Arg &kv = req.kv_data(i);
-      ((Marshal<K>*)info_->key_marshal)->unmarshal(kv.key(), &k);
+
+    string kt, vt;
+    while (in->ReadEntry(&kt, &vt)) {
+      ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
 
       V* block = get_block(k);
-      const int value_size = kv.value().size() / info_->block_size;
+      const int value_size = vt.size() / info_->block_size;
 
       V tmp;
       for (int j = 0; j < info_->block_size; ++j) {
         ((Marshal<V>*)info_->value_marshal)->unmarshal(
-                    StringPiece(kv.value().data() + (value_size * j), value_size),
-                    &tmp);
+            StringPiece(vt.data() + (value_size * j), value_size),
+            &tmp);
         ((Accumulator<V>*)info_->accum)->Accumulate(&block[j], tmp);
       }
     }

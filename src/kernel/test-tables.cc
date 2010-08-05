@@ -118,8 +118,10 @@ static void TestSerialize() {
 
   TableData tdata;
   T* t2 = GetTable<T>();
-  t->Serialize(&tdata);
-  t2->ApplyUpdates(tdata);
+
+  RPCTableCoder c(&tdata);
+  t->Serialize(&c);
+  t2->ApplyUpdates(&c);
 
   LOG(INFO) << "Serialized table to: " << tdata.ByteSize() << " bytes.";
 

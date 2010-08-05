@@ -180,8 +180,11 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(w_->epoch());
 
-        t->Serialize(&put);
+        RPCTableCoder c(&put);
+        t->Serialize(&c);
         t->clear();
+
+        put.set_done(true);
 
         VLOG(2) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i) << " size " << put.kv_data_size();
 
@@ -217,7 +220,8 @@ void GlobalTable::ApplyUpdates(const dsm::TableData& req) {
         << " to " << owner(req.shard());
   }
 
-  partitions_[req.shard()]->ApplyUpdates(req);
+  RPCTableCoder c(&req);
+  partitions_[req.shard()]->ApplyUpdates(&c);
 }
 
 void GlobalTable::get_local(const StringPiece &k, string* v) {
