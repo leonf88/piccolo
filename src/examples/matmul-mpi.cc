@@ -24,9 +24,11 @@
 #include <math.h>
 #include <string.h>
 #include <cblas.h>
+#include <stdint.h>
 #include <mpi.h>
 #include <stdlib.h>
 
+#include "util/timer.h"
 #include "glog/logging.h"
 #include "google/gflags.h"
 
@@ -48,6 +50,8 @@ typedef struct {
 /* Communication block set up for mesh toplogy */
 void SetUp_Mesh(MESH_INFO_TYPE *);
 
+#define MLOG LOG_IF(INFO, grid.MyRank == Root) << "T: " << t.elapsed() << " :: "
+
 int main(int argc, char** argv) {
   int istage, irow, icol, iproc, jproc, index, Proc_Id, Root = 0;
   int A_Bloc_MatrixSize, B_Bloc_MatrixSize;
@@ -67,6 +71,8 @@ int main(int argc, char** argv) {
   MPI_Init(&argc, &argv);
 
   FLAGS_logtostderr = true;
+  FLAGS_log_prefix = false;
+
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -82,9 +88,11 @@ int main(int argc, char** argv) {
   /* Set up the MPI_COMM_WORLD and CARTESIAN TOPOLOGY */
   SetUp_Mesh(&grid);
 
+  dsm::Timer t;
+
   /* Reading Input */
   if (grid.MyRank == Root) {
-    LOG(INFO) << "Initializing input.";
+    MLOG << "Initializing input.";
 
     Matrix_A = (double **) malloc(NoofRows_A * sizeof(double *));
     for (irow = 0; irow < NoofRows_A; irow++) {
@@ -142,10 +150,10 @@ int main(int argc, char** argv) {
   /*Rearrange the input matrices in one dim arrays by approriate order*/
   if (grid.MyRank == Root) {
 
-    LOG(INFO) << "A: " << NoofRows_A << ", " << NoofCols_A << ", " << A_Bloc_MatrixSize << " :: "
+    MLOG << "A: " << NoofRows_A << ", " << NoofCols_A << ", " << A_Bloc_MatrixSize << " :: "
               << "B: " << NoofRows_B << ", " << NoofCols_B << ", " << B_Bloc_MatrixSize;
 
-    LOG(INFO) << "Arranging matrices.";
+    MLOG << "Arranging matrices.";
 
     /* Rearranging Matrix A*/
     for (iproc = 0; iproc < grid.p_proc; iproc++) {
@@ -185,7 +193,7 @@ int main(int argc, char** argv) {
   MPI_Barrier(grid.Comm);
 
   if (grid.MyRank == 0) {
-    LOG(INFO) << "Scattering.";
+    MLOG << "Scattering.";
   }
 
   /* Scatter the Data  to all processes by MPI_SCATTER */
@@ -235,7 +243,7 @@ int main(int argc, char** argv) {
   recv_tag = 0;
   for (istage = 0; istage < grid.p_proc; istage++) {
     if (grid.MyRank == 0) {
-      LOG(INFO) << "Iterating... " << istage << " of " << grid.p_proc;
+      MLOG << "Iterating... " << istage << " of " << grid.p_proc;
     }
 
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
@@ -264,7 +272,7 @@ int main(int argc, char** argv) {
   MPI_Barrier(grid.Comm);
 
   if (grid.MyRank == Root) {
-    LOG(INFO) << "Gather.";
+    MLOG << "Gather.";
   }
 
   /* Gather output block matrices at processor 0 */

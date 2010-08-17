@@ -20,9 +20,18 @@ public:
     Reset();
   }
 
-  void Reset();
-  double elapsed() const;
-  uint64_t cycles_elapsed() const;
+  void Reset() {
+    start_time_ = Now();
+    start_cycle_ = rdtsc();
+  }
+
+  double elapsed() const {
+    return Now() - start_time_;
+  }
+
+  uint64_t cycles_elapsed() const {
+    return rdtsc() - start_cycle_;
+  }
 
   // Rate at which an event occurs.
   double rate(int count) {

@@ -79,19 +79,6 @@ string Histogram::summary() {
   return out;
 }
 
-void Timer::Reset() {
-  start_time_ = Now();
-  start_cycle_ = rdtsc();
-}
-
-double Timer::elapsed() const {
-  return Now() - start_time_;
-}
-
-uint64_t Timer::cycles_elapsed() const {
-  return rdtsc() - start_cycle_;
-}
-
 uint64_t get_memory_total() {
   uint64_t m = -1;
   FILE* procinfo = fopen(StringPrintf("/proc/meminfo", getpid()).c_str(), "r");
