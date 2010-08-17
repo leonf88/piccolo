@@ -33,9 +33,9 @@ message ShardInfo {
 
 message MethodStats {
   required double total_time = 1;
-  required double total_shard_time = 2;
-  required int32 invocations = 3;
-  required int32 shard_invocations = 4;
+  required double shard_time = 2;
+  required int32 calls = 3;
+  required int32 shard_calls = 4;
 };
 
 message KernelRequest {

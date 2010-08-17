@@ -16,8 +16,7 @@ static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
   char buffer[1024];
   int size = 1024;
   MPI_Error_string(*errorCode, buffer, &size);
-  LOG(ERROR) << "MPI function failed: " << buffer;
-  raise(SIGINT);
+  LOG(FATAL) << "MPI function failed: " << buffer;
 }
 
 struct Header {
