@@ -7,7 +7,7 @@ add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
 
 add_library(example 
             k-means.cc 
-            matmul.cc				#buggy
+            matmul.cc
             pagerank.cc 
             raytrace.cc
             shortest-path.cc
@@ -16,7 +16,7 @@ add_library(example
             facedet/cpp/pgmimage.c
             facedet/cpp/imagenet.cpp
             facedet/cpp/backprop.cpp
-			faceclass.cc
+            faceclass.cc
             nas/isort.cc 
             nas/n-body.cc
             ${EXAMPLE_PB_HDR} 
@@ -33,3 +33,6 @@ target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind we
 # link statically if possible
 target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
 target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPI_LINK_FLAGS})    
+
+add_executable(matmul-mpi matmul-mpi.cc)
+target_link_libraries(matmul-mpi glog gflags blas ${MPI_LINK_FLAGS})
