@@ -2,8 +2,8 @@
 
 import sys; sys.path += ['src/examples/test']
 import runutil, math
-iterations=2
-base_size=25 * 1000 * 1000
+iterations=10
+base_size=250 * 1000 * 1000
 
 def test_scaled_perf():
   for n in runutil.parallelism[4:]:
@@ -30,5 +30,23 @@ def test_fixed_perf():
                                 '--num_points=%d' % (base_size)
                                 ])
 
-test_scaled_perf()
+def test_checkpoint():
+  runutil.run_example('KMeans',
+                      logfile_name='KMeans.checkpoint', 
+                      n=64,
+                      args=['--iterations=%s' % iterations,
+                            '--sleep_time=0.001',
+                            '--checkpoint_read_dir=/scratch/power/checkpoints/kmeans.%d' % base_size,
+                            '--checkpoint_write_dir=/scratch/power/checkpoints/kmeans.%d' % base_size,
+                            '--checkpoint=true',
+                            '--restore=true',
+                            '--work_stealing=false',
+                            '--num_dists=64',
+                            '--num_points=%d' % (base_size),
+                            '--cpu_profile',
+                            ])
+
+
+#test_scaled_perf()
 #test_fixed_perf()
+test_checkpoint()
