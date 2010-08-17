@@ -35,4 +35,4 @@ target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic 
 target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPI_LINK_FLAGS})    
 
 add_executable(matmul-mpi matmul-mpi.cc)
-target_link_libraries(matmul-mpi glog gflags blas ${MPI_LINK_FLAGS})
+target_link_libraries(matmul-mpi glog gflags blas rt ${MPI_LINK_FLAGS})
