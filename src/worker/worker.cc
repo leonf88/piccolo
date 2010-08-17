@@ -467,7 +467,7 @@ bool StartWorker(const ConfigData& conf) {
   w.Run();
   Stats s = w.get_stats();
   s.Merge(NetworkThread::Get()->stats);
-  LOG(INFO) << "Worker stats: \n" << s.ToString(StringPrintf("[W%d]", conf.worker_id()));
+  VLOG(1) << "Worker stats: \n" << s.ToString(StringPrintf("[W%d]", conf.worker_id()));
   exit(0);
 }
 

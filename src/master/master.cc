@@ -239,12 +239,16 @@ Master::~Master() {
   LOG(INFO) << "Worker execution time:";
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
-    LOG(INFO) << StringPrintf("--> %2d: %.3f", i, w.total_runtime);
+    if (i % 10 == 0) {
+      fprintf(stderr, "\n%2d: ", i);
+    }
+    fprintf(stderr, "%.3f ", w.total_runtime);
   }
+  fprintf(stderr, "\n");
 
   LOG(INFO) << "Kernel stats: ";
   for (MethodStatsMap::iterator i = method_stats_.begin(); i != method_stats_.end(); ++i) {
-     LOG(INFO) << i->first << "--> " << i->second.DebugString();
+     LOG(INFO) << i->first << "--> " << i->second.ShortDebugString();
   }
 
   LOG(INFO) << "Shutting down workers.";
@@ -621,8 +625,8 @@ int Master::reap_one_task() {
     w.set_finished(task_id);
 
     w.total_runtime += Now() - w.last_task_start;
-    mstats.set_total_shard_time(mstats.total_shard_time() + Now() - w.last_task_start);
-    mstats.set_shard_invocations(mstats.shard_invocations() + 1);
+    mstats.set_shard_time(mstats.shard_time() + Now() - w.last_task_start);
+    mstats.set_shard_calls(mstats.shard_calls() + 1);
     w.ping();
     return w_id;
   } else {
@@ -651,7 +655,7 @@ void Master::run(RunDescriptor r) {
   vector<int> shards = r.shards;
 
   MethodStats &mstats = method_stats_[r.kernel + ":" + r.method];
-  mstats.set_invocations(mstats.invocations() + 1);
+  mstats.set_calls(mstats.calls() + 1);
 
   // Fill in the list of tables to checkpoint, if it was left empty.
   if (r.checkpoint_tables.empty()) {
@@ -705,14 +709,14 @@ void Master::barrier() {
 
       PERIODIC(0.1, {
             double avg_completion_time =
-            mstats.total_shard_time() / mstats.shard_invocations();
+            mstats.shard_time() / mstats.shard_calls();
 
             bool need_update = false;
             for (int i = 0; i < workers_.size(); ++i) {
               WorkerState& w = *workers_[i];
 
               // Don't try to steal tasks if the payoff is too small.
-              if (mstats.shard_invocations() > 10 &&
+              if (mstats.shard_calls() > 10 &&
                   avg_completion_time > 0.2 &&
                   !checkpointing_ &&
                   w.idle_time() > 0.5) {
@@ -756,9 +760,8 @@ void Master::barrier() {
     checkpoint();
   }
 
-  mstats.set_total_time(Now()-current_run_start_);
-
-  LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << mstats.total_time();
+  mstats.set_total_time(mstats.total_time() + Now() - current_run_start_);
+  LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << Now() - current_run_start_;
 }
 
 static void TestTaskSort() {

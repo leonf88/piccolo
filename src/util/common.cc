@@ -178,6 +178,7 @@ void Init(int argc, char** argv) {
 
   CHECK_EQ(lzo_init(), 0);
 
+  google::SetUsageMessage(StringPrintf("%s: invoke from mpirun, using --runner to select control function.", argv[0]));
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
