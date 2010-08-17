@@ -1,11 +1,9 @@
-#include "client/client.h"
+#include "examples.h"
 #include <cblas.h>
 
 using namespace dsm;
 
-DEFINE_int32(edge_size, 1000, "");
-
-static const int kBlockSize = 250;
+static const int kBlockSize = 400;
 static int bRows = -1;
 static int bCols = -1;
 
@@ -41,6 +39,7 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     Block b, z;
     for (int i = 0; i < kBlockSize * kBlockSize; ++i)
       b.d[i] = 2;
+
     memset(z.d, 0, kBlockSize * kBlockSize * sizeof(double));
 
     int bcount = 0;
@@ -56,7 +55,7 @@ struct MatrixMultiplicationKernel : public DSMKernel {
       }
     }
 
-    LOG(INFO) << NetworkThread::Get()->id() << " assigned " << bcount;
+//    LOG(INFO) << NetworkThread::Get()->id() << " assigned " << bcount;
   }
 
   void Multiply() {
@@ -91,10 +90,9 @@ int MatrixMultiplication(ConfigData& conf) {
   bCols = FLAGS_edge_size / kBlockSize;
   bRows = FLAGS_edge_size / kBlockSize;
 
-  LOG(INFO) << "Create matrices with " << conf.num_workers() << " shards.";
-  matrix_a = CreateTable(0, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
-  matrix_b = CreateTable(1, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
-  matrix_c = CreateTable(2, 4 * conf.num_workers(), new Sharding::Mod, new BlockSum);
+  matrix_a = CreateTable(0, bCols * bRows, new Sharding::Mod, new BlockSum);
+  matrix_b = CreateTable(1, bCols * bRows, new Sharding::Mod, new BlockSum);
+  matrix_c = CreateTable(2, bCols * bRows, new Sharding::Mod, new BlockSum);
 
   StartWorker(conf);
   Master m(conf);

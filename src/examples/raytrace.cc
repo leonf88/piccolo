@@ -1,11 +1,10 @@
-#include "client/client.h"
+#include "examples.h"
 #include <SDL/SDL.h>
 
 using namespace dsm;
 
 DEFINE_int32(width, 800, "");
 DEFINE_int32(height, 600, "");
-DEFINE_int32(block_size, 10, "");
 DEFINE_int32(frames, 1, "");
 
 DEFINE_string(source, "", "");

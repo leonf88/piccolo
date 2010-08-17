@@ -6,6 +6,8 @@ DEFINE_string(runner, "", "");
 
 DEFINE_int32(shards, 10, "");
 DEFINE_int32(iterations, 10, "");
+DEFINE_int32(block_size, 10, "");
+DEFINE_int32(edge_size, 1000, "");
 
 DECLARE_bool(log_prefix);
 
