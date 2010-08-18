@@ -33,7 +33,7 @@ os.system('mkdir -p logs.%d' % num_crawlers)
 logging.basicConfig(level=logging.WARN)
                     #filename='logs.%d/crawl.log.%s.%d' % (num_crawlers, socket.gethostname(), os.getpid()),
                     
-                  
+               
 def now(): return time.time()
 
 def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args, **kwargs)
@@ -281,30 +281,43 @@ class CrawlThread(Thread):
         time.sleep(1)
       
       for i in range(10):
+        page = None
         try:
           page = crawl_queue.get(block=False)
-          self.url = page.url_s          
-          self.ping(ThreadStatus.FETCHING) 
-          fetch_page(page)
-          self.ping(ThreadStatus.EXTRACTING)
-          extract_links(page)
-          self.ping(ThreadStatus.ADDING)
-          add_links(page)          
-        except Empty: pass
-        except:
-          warn('Error when processing page %s', page.url_s, exc_info=1)
-          update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
-      
+        except Empty: continue
+        
+        if page:
+          try:
+            self.url = page.url_s          
+            self.ping(ThreadStatus.FETCHING) 
+            fetch_page(page)
+            self.ping(ThreadStatus.EXTRACTING)
+            extract_links(page)
+            self.ping(ThreadStatus.ADDING)
+            add_links(page)
+            fetch_table.update(page.key(), FetchStatus.DONE)
+          except:
+            warn('Error when processing page %s', page.url_s, exc_info=1)
+            update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
+          finally:
+            crawl_queue.task_done()
+            
+      site = None      
       try:
-        site = robots_queue.get(block=False)        
-        self.url = site
-        self.ping(ThreadStatus.ROBOT_FETCH)
-        robots_data = fetch_robots(site)
-        self.ping(ThreadStatus.ROBOT_PARSE)
-        parse_robots(site, robots_data)
-      except Empty: pass
-      except:
-        warn('Error while processing robots fetch!', exc_info=1)
+        site = robots_queue.get(block=False)
+      except Empty: continue
+      
+      if site:
+        try:        
+          self.url = site
+          self.ping(ThreadStatus.ROBOT_FETCH)
+          robots_data = fetch_robots(site)
+          self.ping(ThreadStatus.ROBOT_PARSE)
+          parse_robots(site, robots_data)
+        except:
+          warn('Error while processing robots fetch!', exc_info=1)
+        finally:
+          robots_queue.task_done()
       
 
 class StatusThread(Thread):
@@ -360,7 +373,7 @@ class StatusThread(Thread):
       time.sleep(5)
 
 
-def do_crawl():  
+def crawl():  
   global RUNTIME
   RUNTIME = crawler_runtime()
   
@@ -389,6 +402,46 @@ def do_crawl():
       it.Next()
     
     time.sleep(0.1)
+    
+def blocking_crawl():
+  global RUNTIME
+  RUNTIME = crawler_runtime()
+  
+  threads = [CrawlThread(i) for i in range(CRAWLER_THREADS)]
+  for t in threads: t.start()
+  
+  status = StatusThread(threads)
+  status.start()
+  
+  warn('Starting crawl!')
+  last_t = time.time()
+  
+  
+  it = fetch_table.get_iterator(kernel().current_shard())
+  local = set()
+  while not it.done():
+    local.add(it.key())
+    it.Next()
+    
+  done = False  
+  while not done:
+    done = True
+    
+    for url in local:   
+      status = fetch_table.get(url)
+      info('Looking AT: %s %s', url, status)
+      
+      url = url_from_key(url)
+      
+      if status == FetchStatus.SHOULD_FETCH:
+        check_url(url, status)
+      if status < FetchStatus.DONE:
+        done = False
+    
+    time.sleep(0.1)
+  
+  robots_queue.join()
+  crawl_queue.join() 
 
 
 def check_url(url, status):
@@ -444,29 +497,24 @@ def initialize():
   
   return 0
 
-def crawl():
-  console('Crawling...')
-  do_crawl()
-  return 0
-
 def main():
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
   num_workers = NetworkThread.Get().size() - 1
-  tr = TableRegistry.Get()
 
-  fetch_table = tr.CreateIntTable(0,  num_workers, DomainSharding(), IntAccum.Max())
-  crawltime_table = tr.CreateIntTable(1,  num_workers, DomainSharding(), IntAccum.Max())
-  robots_table = tr.CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
-  domain_counts = tr.CreateIntTable(3,  num_workers, DomainSharding(), IntAccum.Sum())
-  fetch_counts = tr.CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
+  fetch_table = CreateIntTable(0,  num_workers, DomainSharding(), IntAccum.Max())
+  crawltime_table = CreateIntTable(1,  num_workers, DomainSharding(), IntAccum.Max())
+  robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
+  domain_counts = CreateIntTable(3,  num_workers, DomainSharding(), IntAccum.Sum())
+  fetch_counts = CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
 
   conf = ConfigData()
   conf.set_num_workers(num_workers)
   if not StartWorker(conf):
     m = Master(conf)
-    print fetch_table
     m.py_run_all('initialize()', fetch_table)
-    m.py_run_all('crawl()', fetch_table)
+    #m.py_run_all('crawl()', fetch_table)
+    for i in range(100):
+      m.py_run_all('blocking_crawl()', fetch_table)
   
 if __name__ == '__main__':
   main()
