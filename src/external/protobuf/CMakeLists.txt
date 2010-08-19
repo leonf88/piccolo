@@ -1,3 +1,5 @@
+set(CMAKE_CXX_FLAGS "-fPIC -march=core2 -Wall -Wno-sign-compare -Wno-unused-function -fno-omit-frame-pointer -ggdb1")
+
 add_library(protobuf
             google/protobuf/extension_set.cc
             google/protobuf/wire_format.cc
