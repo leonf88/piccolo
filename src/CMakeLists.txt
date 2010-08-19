@@ -57,7 +57,6 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${MPI_INCDIRS} )
 
 link_directories( ${MPI_LIBDIRS} )
-
 include_directories(${MPI_INCDIRS})
 
 

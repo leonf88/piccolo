@@ -1,4 +1,4 @@
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_CONFIG_H -D_GNU_SOURCE -U_FORTIFY_SOURCE")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE_CONFIG_H -D_GNU_SOURCE -U_FORTIFY_SOURCE -fPIC -march=core2 -Wall -Wno-sign-compare -Wno-unused-function -fno-omit-frame-pointer -ggdb1")
 
 include_directories(src)
 include_directories(include )
