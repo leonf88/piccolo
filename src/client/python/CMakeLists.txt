@@ -24,7 +24,7 @@ ADD_CUSTOM_COMMAND(
  ${MPI_COMPILE_FLAGS}
  -o ${swig_out}
  ${CMAKE_CURRENT_SOURCE_DIR}/python_support.swig
- DEPENDS python_support.swig ${swig_shim} worker master common kernel example ${EXAMPLE_PB_SRC})
+ DEPENDS python_support.swig ${swig_shim})
  
 ADD_CUSTOM_COMMAND(
   OUTPUT _piccolo.so
@@ -49,7 +49,7 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
   ${MPI_LINK_FLAGS}
   -lpthread -lutil -lnuma -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
-  DEPENDS ${swig_out}
+  DEPENDS ${swig_out} worker master common kernel example ${EXAMPLE_PB_SRC}
  )
   
  ADD_CUSTOM_TARGET(_piccolo ALL DEPENDS _piccolo.so)
