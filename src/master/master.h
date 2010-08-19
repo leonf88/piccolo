@@ -1,13 +1,10 @@
 #ifndef MASTER_H_
 #define MASTER_H_
 
-#include "worker/worker.pb.h"
 #include "util/common.h"
 #include "util/rpc.h"
+#include "worker/worker.pb.h"
 #include "kernel/kernel.h"
-#include "kernel/table.h"
-#include "kernel/global-table.h"
-#include "kernel/local-table.h"
 #include "kernel/table-registry.h"
 
 namespace dsm {
@@ -38,14 +35,25 @@ struct RunDescriptor {
      Init("bogus", "bogus", NULL);
    }
 
-   RunDescriptor(const string& kernel, const string& method, GlobalTable *table) {
-     Init(kernel, method, table);
+   RunDescriptor(const string& kernel,
+                 const string& method,
+                 GlobalTable *table,
+                 vector<int> cp_tables=vector<int>()) {
+     Init(kernel, method, table, cp_tables);
    }
 
-   void Init(const string& kernel, const string& method, GlobalTable *table) {
+   void Init(const string& kernel,
+             const string& method,
+             GlobalTable *table,
+             vector<int> cp_tables=vector<int>()) {
      barrier = true;
      checkpoint_type = CP_NONE;
      checkpoint_interval = -1;
+     checkpoint_tables = cp_tables;
+
+     if (!checkpoint_tables.empty()) {
+       checkpoint_type = CP_MASTER_CONTROLLED;
+     }
 
      this->kernel = kernel;
      this->method = method;
@@ -92,10 +100,10 @@ public:
   void barrier();
   void cp_barrier();
 
-  // Blocking.  Instruct workers to save all table state.  When this call returns,
-  // all requested tables in the system will have been committed to disk.
+  // Blocking.  Instruct workers to save table and kernel state.
+  // When this call returns, all requested tables in the system will have been
+  // committed to disk.
   void checkpoint();
-  void checkpoint(vector<int> cp_tables);
 
   // Attempt restore from a previous checkpoint for this job.  If none exists,
   // the process is left in the original state, and this function returns false.
@@ -105,7 +113,7 @@ private:
   void start_checkpoint();
   void start_worker_checkpoint(int worker_id, const RunDescriptor& r);
   void finish_worker_checkpoint(int worker_id, const RunDescriptor& r);
-  void flush_checkpoint();
+  void finish_checkpoint();
 
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -147,7 +155,6 @@ private:
   MethodStatsMap method_stats_;
 
   TableRegistry::Map& tables_;
-
   NetworkThread* network_;
 };
 }

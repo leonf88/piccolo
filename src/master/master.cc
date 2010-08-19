@@ -1,6 +1,7 @@
 #include "master/master.h"
-#include "kernel/table-registry.h"
-#include "kernel/kernel.h"
+#include "kernel/table.h"
+#include "kernel/global-table.h"
+#include "kernel/local-table.h"
 
 #include <set>
 
@@ -258,20 +259,21 @@ Master::~Master() {
   }
 }
 
-void Master::checkpoint() {
-  vector<int> cp_tables;
-  for (TableRegistry::Map::iterator i = tables_.begin(); i != tables_.end(); ++i) {
-    cp_tables.push_back(i->first);
+void Master::start_checkpoint() {
+  LOG(INFO) << current_run_.checkpoint_tables[0];
+  if (checkpointing_) {
+    return;
   }
-}
 
-void Master::checkpoint(vector<int> cp_tables) {
   LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
 
   Timer cp_timer;
-  start_checkpoint();
 
-  current_run_.checkpoint_tables = cp_tables;
+  checkpoint_epoch_ += 1;
+  checkpointing_ = true;
+
+  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
 
   if (current_run_.checkpoint_type == CP_NONE) {
     current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
@@ -281,33 +283,15 @@ void Master::checkpoint(vector<int> cp_tables) {
     start_worker_checkpoint(i, current_run_);
   }
 
-  for (int i = 0; i < workers_.size(); ++i) {
-    finish_worker_checkpoint(i, current_run_);
-    CHECK_EQ(workers_[i]->checkpointing, false);
-  }
-
-  flush_checkpoint();
   LOG(INFO) << "Checkpoint finished in " << cp_timer.elapsed();
 }
 
-void Master::start_checkpoint() {
-  if (checkpointing_) {
-    return;
-  }
-
-  checkpoint_epoch_ += 1;
-  checkpointing_ = true;
-
-  File::Mkdirs(StringPrintf("%s/epoch_%05d/",
-                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
-}
-
 void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
+  start_checkpoint();
+
   if (workers_[worker_id]->checkpointing) {
     return;
   }
-
-  start_checkpoint();
 
   VLOG(1) << "Starting checkpoint on: " << worker_id;
 
@@ -341,7 +325,12 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   workers_[worker_id]->checkpointing = false;
 }
 
-void Master::flush_checkpoint() {
+void Master::finish_checkpoint() {
+  for (int i = 0; i < workers_.size(); ++i) {
+    finish_worker_checkpoint(i, current_run_);
+    CHECK_EQ(workers_[i]->checkpointing, false);
+  }
+
   Args *params = current_run_.params.ToMessage();
   Args *cp_vars = cp_vars_.ToMessage();
 
@@ -361,6 +350,11 @@ void Master::flush_checkpoint() {
   last_checkpoint_ = Now();
   delete params;
   delete cp_vars;
+}
+
+void Master::checkpoint() {
+  start_checkpoint();
+  finish_checkpoint();
 }
 
 bool Master::restore() {
@@ -680,9 +674,9 @@ void Master::run(RunDescriptor r) {
   dispatched_ = dispatch_work(current_run_);
 
   //XXX:in its current state, does not make sense not to call barrier at the end
-  if (r.barrier) {
-    barrier();
-  }
+//  if (r.barrier) {
+  barrier();
+//  }
 }
 
 void Master::cp_barrier() {
@@ -757,7 +751,10 @@ void Master::barrier() {
   network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
-    checkpoint();
+    if (!checkpointing_) {
+      start_checkpoint();
+    }
+    finish_checkpoint();
   }
 
   mstats.set_total_time(mstats.total_time() + Now() - current_run_start_);
