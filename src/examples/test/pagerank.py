@@ -14,6 +14,7 @@ memory_graph=1
 
 def cleanup(size):
   print "Removing old checkpoints..."
+  os.system('rm -rf /scratch/power/')
   os.system('pdsh -f20 -g muppets mkdir -p %s/%sM' % (checkpoint_write_dir, size))
   os.system('pdsh -f20 -g muppets rm -rf %s/%sM' % (checkpoint_write_dir, size))
 
@@ -43,7 +44,7 @@ def run_pr(fname, size, n, args=None, **kw):
                         n=n,
                         logfile_name=fname,
                         build_type='release',
-                        args=['--iterations=%s' % 3,
+                        args=['--iterations=%s' % 1,
                               '--sleep_time=0.001',
                               '--nodes=%s' % (size * 1000 * 1000),
                               '--memory_graph=%d' % memory_graph,
@@ -82,13 +83,10 @@ def test_work_stealing():
          args=['--checkpoint=false', '--work_stealing=true'])
 
 def test_checkpointing():    
-  cleanup()
-  os.popen('sleep 120; pkill mpirun')
-  run_pr('Pagerank.checkpoint_fault', ['--checkpoint=true'])  
-  run_pr('Pagerank.restore_fault', ['--checkpoint=true', '--dead_workers=5,6,10'])
+  cleanup(10)
+  run_pr('Pagerank.checkpoint.100M', 10, 1, ['--checkpoint=true', '--restore=true'])
+  run_pr('Pagerank.nocheckpoint.100M', 10, 1, ['--checkpoint=false', '--restore=false'])
 
+test_checkpointing()
 #test_fixed_perf()
 #test_scaled_perf()
-
-run_pr('Pagerank.checkpoint.10M', 10, 63, ['--checkpoint=true', '--restore=true'])
-run_pr('Pagerank.checkpoint.100M', 100, 63, ['--checkpoint=true', '--restore=true'])
