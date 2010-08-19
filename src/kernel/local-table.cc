@@ -4,7 +4,7 @@
 namespace dsm {
 
 void LocalTable::start_checkpoint(const string& f) {
-  VLOG(1) << "Start.";
+  VLOG(1) << "Start checkpoint " << f;
   Timer t;
 
   LocalTableCoder c(f, "w");
@@ -26,7 +26,7 @@ void LocalTable::finish_checkpoint() {
 
 void LocalTable::restore(const string& f) {
   if (!File::Exists(f)) {
-    LOG(INFO) << "Skipping restore of non-existent shard " << f;
+    VLOG(1) << "Skipping restore of non-existent shard " << f;
     return;
   }
 

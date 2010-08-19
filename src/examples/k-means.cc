@@ -156,7 +156,6 @@ public:
     }
   }
 };
-
 REGISTER_KERNEL(KMeansKernel);
 REGISTER_METHOD(KMeansKernel, initialize_points);
 REGISTER_METHOD(KMeansKernel, initialize_dists);
@@ -196,9 +195,10 @@ static int KMeans(ConfigData& conf) {
       m.run_all("KMeansKernel", "initialize_expectation",  points);
       m.run_all("KMeansKernel", "compute_expectation",  points);
       m.run_all("KMeansKernel", "initialize_maximization",  dists);
-      m.run_all("KMeansKernel", "compute_maximization",  dists);
 
-      m.checkpoint(MakeVector(0));
+      // Trigger a checkpoint at the end of compute_maximization.
+      m.run_all(RunDescriptor("KMeansKernel", "compute_maximization",
+                              dists, MakeVector(0)));
     }
   //    m.run_one("KMeansKernel", " print_results",  0);
   }
