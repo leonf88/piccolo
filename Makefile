@@ -12,6 +12,7 @@ endif
 export CXX CC CFLAGS CPPFLAGS OPROFILE
 
 all: release debug
+	cd docs/paper && $(MAKE)
 
 bin/release/Makefile:
 	@mkdir -p bin/release
