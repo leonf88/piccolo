@@ -4,14 +4,14 @@ DEFINE_int64(particles, 1000000, "");
 
 using namespace dsm;
 
-static const double kCutoffRadius = 1.0;
-static const double kTimestep = 1e-6;
+static const float kCutoffRadius = 1.0;
+static const float kTimestep = 1e-6;
 
 // Each box is 1*1*1
 static const int kBoxSize = (int)ceil(kCutoffRadius);
 
 // A partition is 4*4*4 boxes.
-static const int kPartitionSize = 4;
+static const int kPartitionSize = 20;
 
 // World is a cube of boxes.
 static const int kWorldSize = 20;
@@ -19,11 +19,13 @@ static const int kWorldSize = 20;
 static const int kNumPartitions = kWorldSize / (kPartitionSize * kBoxSize);
 
 struct pos {
-  double x, y, z;
+  int id;
+  float x, y, z;
 
   pos() : x(0), y(0), z(0) {}
-  pos(double nx, double ny, double nz) : x(nx), y(ny), z(nz) {}
-  pos(const pos& b) : x(b.x), y(b.y), z(b.z) {}
+  pos(float nx, float ny, float nz) : id(0), x(nx), y(ny), z(nz) {}
+  pos(int nid, float nx, float ny, float nz) : id(nid), x(nx), y(ny), z(nz) {}
+  pos(const pos& b) : id(b.id), x(b.x), y(b.y), z(b.z) {}
 
   // Find the partition corresponding to this point
   static int shard_for_pos(const pos& p) {
@@ -69,21 +71,21 @@ struct pos {
     return !(*this == b);
   }
 
-  pos operator*(double d) { return pos(x * d, y * d, z * d); }
-  pos operator/(double d) { return pos(x / d, y / d, z / d); }
+  pos operator*(float d) { return pos(id, x * d, y * d, z * d); }
+  pos operator/(float d) { return pos(id, x / d, y / d, z / d); }
   pos& operator+= (const pos& b) { x += b.x; y += b.y; z += b.z; return *this; }
   pos& operator-= (const pos& b) { x -= b.x; y -= b.y; z -= b.z; return *this; }
 
-  pos operator+ (const pos& b) const { return pos(x + b.x, y + b.y, z + b.z); }
-  pos operator- (const pos& b) const { return pos(x - b.x, y - b.y, z - b.z); }
+  pos operator+ (const pos& b) const { return pos(id, x + b.x, y + b.y, z + b.z); }
+  pos operator- (const pos& b) const { return pos(id, x - b.x, y - b.y, z - b.z); }
 
-  double magnitude_squared() { return x * x + y * y + z * z; }
-  double magnitude() { return sqrt(magnitude_squared()); }
+  float magnitude_squared() { return x * x + y * y + z * z; }
+  float magnitude() { return sqrt(magnitude_squared()); }
 };
 
 namespace std {
 static ostream & operator<< (ostream &out, const pos& p) {
-  out << MP(p.x, p.y, p.z);
+  out << MP(p.id, p.x, p.y, p.z);
   return out;
 }
 
@@ -92,18 +94,35 @@ template <>
 struct hash<pos> {
   size_t operator()(const pos& k) const { return k.hash(); }
 };
-}
+} }
 
-}
 
 namespace dsm {
+typedef unordered_set<pos> PosSet;
+
 template <>
 struct Marshal<pos> {
   static void marshal(const pos& t, string *out) { out->append((char*)&t, sizeof(pos)); }
   static void unmarshal(const StringPiece& s, pos* t) { *t = *(pos*)(s.data); }
 };
 
-}
+template <>
+struct Marshal<PosSet> {
+  static void marshal(const PosSet& t, string *out) {
+    out->clear();
+    for (PosSet::const_iterator i = t.begin(); i != t.end(); ++i) {
+      out->append(reinterpret_cast<const char*>(&(*i)), sizeof(pos));
+    }
+  }
+
+  static void unmarshal(const StringPiece& s, PosSet* t) {
+    t->clear();
+    const pos *p = reinterpret_cast<const pos*>(s.data);
+    for (int i = 0; i < s.len / sizeof(pos); ++i) {
+      t->insert(*p);
+    }
+  }
+};
 
 struct PosSharding : public Sharder<pos> {
   int operator()(const pos& p, int shards) {
@@ -111,9 +130,9 @@ struct PosSharding : public Sharder<pos> {
   }
 };
 
-struct AppendAccum : public Accumulator<string> {
-  void Accumulate(string* a, const string& b) {
-    a->append(b);
+struct SetAccum : public Accumulator<PosSet> {
+  void Accumulate(PosSet* a, const PosSet& b) {
+    a->insert(b.begin(), b.end());
   }
 };
 
@@ -121,16 +140,24 @@ static pos kZero(0, 0, 0);
 
 class NBodyKernel : public DSMKernel {
 public:
-  TypedGlobalTable<pos, string> *curr;
-  TypedGlobalTable<pos, string> *next;
+  TypedGlobalTable<pos, PosSet> *curr;
+  TypedGlobalTable<pos, PosSet> *next;
 
-  unordered_map<pos, string> cache;
+  unordered_map<pos, PosSet> cache;
+  PosSet scratch;
+
+  PosSet& get_set(pos pt) {
+    scratch.clear();
+    scratch.insert(pt);
+    return scratch;
+  }
 
   void CreatePoints() {
-    curr = this->get_table<pos, string>(0);
-    next = this->get_table<pos, string>(1);
+    curr = this->get_table<pos, PosSet>(0);
+    next = this->get_table<pos, PosSet>(1);
     pos ul = pos::pos_for_shard(current_shard());
     
+    int pid = 0;
     // Create randomly distributed particles for each box inside of this shard
     for (int dx = 0; dx < kPartitionSize; ++dx) {
       for (int dy = 0; dy < kPartitionSize; ++dy) {
@@ -138,14 +165,12 @@ public:
           int num_points = max(1, int(FLAGS_particles / pow(kWorldSize, 3)));
           pos b = ul + pos(dx, dy, dz) * kBoxSize;
           for (int i = 0; i < num_points; ++i) {
-            pos pt = b + pos(rand_double() * kBoxSize, 
-                             rand_double() * kBoxSize, 
+            pos pt = b + pos(rand_double() * kBoxSize,
+                             rand_double() * kBoxSize,
                              rand_double() * kBoxSize);
-            
-            curr->update(pt.get_box(), string((char*)&pt, sizeof(pt)));
-//            LOG(INFO) << "Adding: " << pt << " ; " << pt.get_box();
-//            LOG(INFO) << "Created " <<
-//                      curr->get(pt.get_box()).size() / sizeof(pos) << " at " << b;
+            pt.id = pid++;
+
+            curr->update(pt.get_box(), get_set(pt));
           }
         }
       }
@@ -153,23 +178,16 @@ public:
   }
 
   pos compute_force(pos p1, pos p2) {
-    double dist = (p1 - p2).magnitude_squared();
+    float dist = (p1 - p2).magnitude_squared();
     if (dist > kCutoffRadius) { return kZero; }
     if (dist < 1e-8) { return kZero; }
 
     ++interaction_count;
-    
-//    LOG(INFO) << "COMPUTING::: " 
-//              << p1 << " : " << p2 
-//              << " ;; " << dist;
     return (p1 - p2) / dist;
   }
 
-  void compute_update(pos box, const pos *points, int count) {
-    // iterate over points in the surrounding boxes, and compute a
-    // new position.
-
-    string neighbors;
+  void compute_update(pos box, const PosSet& points) {
+    PosSet neighbors;
     for (int dx = -1; dx <= 1; ++dx) {
       for (int dy = -1; dy <= 1; ++dy) {
         for (int dz = -1; dz <= 1; ++dz) {
@@ -179,34 +197,28 @@ public:
             continue;
           }
 
-//          LOG_EVERY_N(INFO, 1000)
-//            << "Fetched: " << MP(dx, dy, dz) << " : " << bk;
-
-          if (cache.find(bk) != cache.end()) {
-            neighbors += cache[bk];
-          } else {
-            string v = curr->get(bk);
-            neighbors += v;
-            cache[bk] = v;
+          if (cache.find(bk) == cache.end()) {
+            cache[bk] = curr->get(bk);
           }
+          neighbors.insert(cache[bk].begin(), cache[bk].end());
         }
       }
     }
 
-    for (int i = 0; i < count; ++i) {
-      pos a = points[i];
+    for (PosSet::const_iterator i = points.begin(); i != points.end(); ++i) {
+      pos a = *i;
       pos a_force = kZero;
 
-      const pos* pb = (pos*) neighbors.data();
-      for (int j = 0; j < neighbors.size() / sizeof(pos); ++j) {
-        const pos& b = pb[j];
+      for (PosSet::iterator j = neighbors.begin(); j != neighbors.end(); ++j) {
+        const pos& b = *j;
         a_force += compute_force(a, b);
       }
 
       a = a + (a_force * kTimestep);
       if (a.get_box().out_of_bounds()) { continue; }
 
-      next->update(a.get_box(), string((char*) &a, sizeof(pos)));
+      LOG_EVERY_N(INFO, 10000) << "Update: " << a;
+      next->update(a.get_box(), get_set(a));
     }
   }
 
@@ -214,17 +226,13 @@ public:
     cache.clear();
 
     // Iterate over each box in this partition.
-    TypedTableIterator<pos, string>* it = curr->get_typed_iterator(current_shard());
-//    int total = curr->get_partition(current_shard())->size();
+    TypedTableIterator<pos, PosSet>* it = curr->get_typed_iterator(current_shard());
 
     for (int count = 0; !it->done(); ++count) {
+      LOG(INFO) << it->key() << " : " << it->value().size();
       interaction_count = 0;
       const pos& box_pos = it->key();
-      const pos* points = (pos*)it->value().data();
-      compute_update(box_pos, points, it->value().size() / sizeof(pos));
-//      LOG(INFO) << "Scanned: " << count << " of " << total
-//                << " local points: " << it->value().size() / sizeof(pos)
-//                << " interactions: " << interaction_count;
+      compute_update(box_pos, it->value());
       it->Next();
     }
     delete it;
@@ -237,6 +245,8 @@ public:
 
   int interaction_count;
 };
+}
+
 REGISTER_KERNEL(NBodyKernel);
 REGISTER_METHOD(NBodyKernel, CreatePoints);
 REGISTER_METHOD(NBodyKernel, Simulate);
@@ -244,17 +254,22 @@ REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
   CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      new PosSharding, new AppendAccum);
+              new PosSharding, new SetAccum);
   
   CreateTable(1, kNumPartitions * kNumPartitions * kNumPartitions, 
-                                      new PosSharding, new AppendAccum);
+              new PosSharding, new SetAccum);
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("NBodyKernel", " CreatePoints",  TableRegistry::Get()->table(0));
-    for (int i = 0; i < FLAGS_iterations; ++i) {
+    m.restore();
+    int &i = m.get_cp_var("iteration", 0);
+    m.run_all("NBodyKernel", "CreatePoints",  TableRegistry::Get()->table(0));
+    for (; i < FLAGS_iterations; ++i) {
       LOG(INFO) << "Running iteration: " << MP(i, FLAGS_iterations);
-      m.run_all("NBodyKernel", " Simulate",  TableRegistry::Get()->table(0));
+      m.run_all("NBodyKernel", "Simulate", TableRegistry::Get()->table(0));
+      m.run_all(RunDescriptor("NBodyKernel", "Swap",
+                              TableRegistry::Get()->table(0),
+                              MakeVector(0, 1)));
     }
   }
 
