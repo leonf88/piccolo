@@ -8,6 +8,8 @@ parallelism = [8, 16, 32, 64]
 
 def hostfile_info(f):
   cores = machines = 0
+  if not f: return cores, machines
+
   mdict = {}
   for l in open(f).readlines():
     cores += int(l.split('=')[1])
@@ -29,7 +31,7 @@ def init_log(results_dir, n, logfile_name):
   if not logfile_name:
     raise KeyError, 'Need a logfile target!'
   
-  output_dir="%s.%s" % (results_dir, n)
+  output_dir="%s/parallelism.%s/" % (results_dir, n)
   system('mkdir -p %s' % output_dir)
   global logfile
   logfile = open('%s/%s' % (output_dir, logfile_name), 'w')
@@ -48,8 +50,9 @@ def run_example(runner,
   
   init_log(results_dir, n, logfile_name)
 
-  machines, cores = hostfile_info(hostfile)
+  cores, machines = hostfile_info(hostfile)
   affinity = 0 if n >= cores else 1
+
 
   log("Running with %s machines, %s cores" % (machines, cores))
   log("Runner: %s", runner)
@@ -57,15 +60,14 @@ def run_example(runner,
   log("Processor affinity: %s", affinity)
 
   cmd = ' '.join(['mpirun',
-                  '-mca mpi_paffinity_alone %s' % affinity,
-                  '-hostfile %s' % hostfile,
+                  '-hostfile %s' % hostfile if hostfile else '',
                   '-bynode',
-                  '-nooversubscribe',
-                  '-tag-output ',
+                  '-mca mpi_paffinity_alone %s' % affinity,
                   '-n %s ' % (n + 1),
                   'bin/%s/examples/example-dsm' % build_type,
                   '--runner=%s' % runner,
-                  '--log_prefix=false']
+                  '--log_prefix=false',
+                  '-v 1']
                   + args)
   run_command(cmd, n, 
               results_dir=results_dir,
