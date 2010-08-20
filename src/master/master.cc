@@ -237,6 +237,8 @@ Master::Master(const ConfigData &conf) :
 }
 
 Master::~Master() {
+  LOG(INFO) << "Total runtime: " << runtime_.elapsed();
+
   LOG(INFO) << "Worker execution time:";
   for (int i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
@@ -260,7 +262,6 @@ Master::~Master() {
 }
 
 void Master::start_checkpoint() {
-  LOG(INFO) << current_run_.checkpoint_tables[0];
   if (checkpointing_) {
     return;
   }
