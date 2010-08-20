@@ -33,7 +33,8 @@ def test_fixed_perf():
 
 
 def test_checkpoint_perf():
-  os.system('pdsh -f20 -g muppets rm -rf %s' % '/scratch/power/checkpoints')
+  #os.system('pdsh -f20 -g muppets rm -rf %s' % '/scratch/power/checkpoints')
+  os.system('rm -rf /scratch/power/checkpoints/')
   runutil.run_example('NBody', 
                     n=1,
                     logfile_name='NBody.checkpoint',

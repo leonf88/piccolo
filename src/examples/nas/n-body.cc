@@ -102,14 +102,17 @@ typedef unordered_set<pos> PosSet;
 
 template <>
 struct Marshal<pos> {
-  static void marshal(const pos& t, string *out) { out->append((char*)&t, sizeof(pos)); }
-  static void unmarshal(const StringPiece& s, pos* t) { *t = *(pos*)(s.data); }
+  static void marshal(const pos& t, string *out) {
+    out->append((char*)&t, sizeof(pos));
+  }
+  static void unmarshal(const StringPiece& s, pos* t) {
+    *t = *(pos*)(s.data);
+  }
 };
 
 template <>
 struct Marshal<PosSet> {
   static void marshal(const PosSet& t, string *out) {
-    out->clear();
     for (PosSet::const_iterator i = t.begin(); i != t.end(); ++i) {
       out->append(reinterpret_cast<const char*>(&(*i)), sizeof(pos));
     }
@@ -229,7 +232,7 @@ public:
     TypedTableIterator<pos, PosSet>* it = curr->get_typed_iterator(current_shard());
 
     for (int count = 0; !it->done(); ++count) {
-      LOG(INFO) << it->key() << " : " << it->value().size();
+//      LOG(INFO) << it->key() << " : " << it->value().size();
       interaction_count = 0;
       const pos& box_pos = it->key();
       compute_update(box_pos, it->value());

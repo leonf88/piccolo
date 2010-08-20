@@ -14,6 +14,7 @@ memory_graph=1
 
 def cleanup(size):
   print "Removing old checkpoints..."
+  return
   os.system('rm -rf /scratch/power/')
   os.system('pdsh -f20 -g muppets mkdir -p %s/%sM' % (checkpoint_write_dir, size))
   os.system('pdsh -f20 -g muppets rm -rf %s/%sM' % (checkpoint_write_dir, size))
@@ -84,8 +85,8 @@ def test_work_stealing():
 
 def test_checkpointing():    
   cleanup(10)
-  run_pr('Pagerank.checkpoint.100M', 10, 1, ['--checkpoint=true', '--restore=true'])
-  run_pr('Pagerank.nocheckpoint.100M', 10, 1, ['--checkpoint=false', '--restore=false'])
+  run_pr('Pagerank.checkpoint.10M', 10, 1, ['--checkpoint=true', '--restore=false'])
+  run_pr('Pagerank.nocheckpoint.10M', 10, 1, ['--checkpoint=false', '--restore=false'])
 
 test_checkpointing()
 #test_fixed_perf()
