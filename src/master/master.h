@@ -156,6 +156,7 @@ private:
 
   TableRegistry::Map& tables_;
   NetworkThread* network_;
+  Timer runtime_;
 };
 }
 
