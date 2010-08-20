@@ -236,6 +236,7 @@ int main(int argc, char** argv) {
   for (index = 0; index < NoofRows_BlocA * NoofCols_BlocB; index++)
     C_Bloc_Matrix[index] = 0;
 
+  t.Reset();
   MPI_Barrier(grid.Comm);
   /* The main loop */
 

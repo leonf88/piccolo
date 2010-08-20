@@ -32,7 +32,7 @@ def test_fixed_perf():
                                 ])
 
 def test_checkpoint():
-  os.system('pdsh -f20 -g muppets rm -rf %s' % '/scratch/power/checkpoints')
+  #os.system('pdsh -f20 -g muppets rm -rf %s' % '/scratch/power/checkpoints')
 
   runutil.run_example('KMeans',
                       logfile_name='KMeans.checkpoint', 
@@ -42,7 +42,7 @@ def test_checkpoint():
                             '--checkpoint_read_dir=/scratch/power/checkpoints/kmeans.%d' % base_size,
                             '--checkpoint_write_dir=/scratch/power/checkpoints/kmeans.%d' % base_size,
                             '--checkpoint=true',
-                            '--restore=true',
+                            '--restore=false',
                             '--work_stealing=false',
                             '--num_dists=64',
                             '--num_points=%d' % (base_size),
