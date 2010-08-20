@@ -157,6 +157,7 @@ void SparseTable<K, V>::Serialize(TableCoder *out) {
   Iterator *i = (Iterator*)get_iterator();
   string k, v;
   while (!i->done()) {
+    k.clear(); v.clear();
     ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), &k);
     ((Marshal<V>*)info_->value_marshal)->marshal(i->value(), &v);
     out->WriteEntry(k, v);
