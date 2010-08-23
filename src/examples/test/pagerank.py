@@ -2,6 +2,7 @@
 
 import traceback
 import os
+import atexit
 import sys; sys.path += ['src/examples/test']
 import runutil, math
 
@@ -11,6 +12,7 @@ scaled_base_size=5
 fixed_base_size=100
 shards=256
 memory_graph=1
+iterations=10
 
 def cleanup(size):
   print "Removing old checkpoints..."
@@ -45,11 +47,11 @@ def run_pr(fname, size, n, args=None, **kw):
                         n=n,
                         logfile_name=fname,
                         build_type='release',
-                        args=['--iterations=%s' % 1,
+                        args=['--iterations=%s' % iterations,
                               '--sleep_time=0.001',
                               '--nodes=%s' % (size * 1000 * 1000),
                               '--memory_graph=%d' % memory_graph,
-                              '--shards=%s' % n,
+                              '--shards=%s' % (n * 16),
                               '--work_stealing=true',
                               '--checkpoint_write_dir=%s/%sM' % (checkpoint_write_dir, size),
                               '--checkpoint_read_dir=%s/%sM' % (checkpoint_read_dir, size),
@@ -88,6 +90,24 @@ def test_checkpointing():
   run_pr('Pagerank.checkpoint.10M', 10, 1, ['--checkpoint=true', '--restore=false'])
   run_pr('Pagerank.nocheckpoint.10M', 10, 1, ['--checkpoint=false', '--restore=false'])
 
-test_checkpointing()
+def test_slow_worker():
+  n = 64
+  graphsize = scaled_base_size * n * 2
+
+  run_pr('Pagerank_noslow_with_stealing', graphsize, n, 
+         ['--checkpoint=false', '--restore=false', '--work_stealing=true', ])
+
+  run_pr('Pagerank_noslow', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=false', ])
+
+  os.system('ssh beaker-2 "pkill -f cpuloop.sh"')
+  atexit.register(os.system, 'ssh beaker-2 "pkill -f cpuloop.sh"')
+  os.system('ssh beaker-2 "taskset -c 0x1 /home/power/cpuloop.sh </dev/null &>/dev/null&"')
+  
+  run_pr('Pagerank_slow_no_stealing', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=false', ])  
+  run_pr('Pagerank_slow_with_stealing', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=true', ])
+
+#test_checkpointing()
 #test_fixed_perf()
 #test_scaled_perf()
+
+test_slow_worker()
