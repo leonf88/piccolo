@@ -42,7 +42,7 @@ def run_example(runner,
                 n=64, 
                 build_type='release',
                 results_dir='results',
-                hostfile=None, #'conf/mpi-beakers',
+                hostfile='conf/mpi-beakers',
                 logfile_name=None,
                 args=None):
   if not logfile_name: logfile_name = runner
@@ -61,13 +61,13 @@ def run_example(runner,
 
   cmd = ' '.join(['mpirun',
                   '-hostfile %s' % hostfile if hostfile else '',
-                  '-bynode',
+                  '-bycore',
+                  '-nooversubscribe',
                   '-mca mpi_paffinity_alone %s' % affinity,
                   '-n %s ' % (n + 1),
                   'bin/%s/examples/example-dsm' % build_type,
                   '--runner=%s' % runner,
                   '--log_prefix=false',
-#                  '-v 1'
                   ]
                   + args)
   run_command(cmd, n, 
