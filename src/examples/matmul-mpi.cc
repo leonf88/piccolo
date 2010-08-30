@@ -60,10 +60,10 @@ int main(int argc, char** argv) {
   int Local_Index, Global_Row_Index, Global_Col_Index;
   int Matrix_Size[4];
   int source, destination, send_tag, recv_tag;
-  double **Matrix_A, **Matrix_B, **Matrix_C;
-  double *A_Bloc_Matrix, *B_Bloc_Matrix, *C_Bloc_Matrix;
+  float **Matrix_A, **Matrix_B, **Matrix_C;
+  float *A_Bloc_Matrix, *B_Bloc_Matrix, *C_Bloc_Matrix;
 
-  double *MatA_array, *MatB_array, *MatC_array;
+  float *MatA_array, *MatB_array, *MatC_array;
 
   MESH_INFO_TYPE grid;
   MPI_Status status;
@@ -94,22 +94,22 @@ int main(int argc, char** argv) {
   if (grid.MyRank == Root) {
     MLOG << "Initializing input.";
 
-    Matrix_A = (double **) malloc(NoofRows_A * sizeof(double *));
+    Matrix_A = (float **) malloc(NoofRows_A * sizeof(float *));
     for (irow = 0; irow < NoofRows_A; irow++) {
-      Matrix_A[irow] = (double *) malloc(NoofCols_A * sizeof(double));
+      Matrix_A[irow] = (float *) malloc(NoofCols_A * sizeof(float));
       for (icol = 0; icol < NoofCols_A; icol++)
         Matrix_A[irow][icol] = 2.0;
     }
 
-    Matrix_B = (double **) malloc(NoofRows_B * sizeof(double *));
+    Matrix_B = (float **) malloc(NoofRows_B * sizeof(float *));
     for (irow = 0; irow < NoofRows_B; irow++) {
-      Matrix_B[irow] = (double *) malloc(NoofCols_B * sizeof(double *));
+      Matrix_B[irow] = (float *) malloc(NoofCols_B * sizeof(float *));
 
       for (icol = 0; icol < NoofCols_B; icol++)
         Matrix_B[irow][icol] = 2.0;
     }
 
-    MatC_array = (double *) malloc(sizeof(double) * NoofRows_A * NoofCols_B);
+    MatC_array = (float *) malloc(sizeof(float) * NoofRows_A * NoofCols_B);
   }
 
   MPI_Barrier(grid.Comm);
@@ -140,12 +140,12 @@ int main(int argc, char** argv) {
   B_Bloc_MatrixSize = NoofRows_BlocB * NoofCols_BlocB;
 
   /* Memory allocating for Bloc Matrices */
-  A_Bloc_Matrix = (double *) malloc(A_Bloc_MatrixSize * sizeof(double));
-  B_Bloc_Matrix = (double *) malloc(B_Bloc_MatrixSize * sizeof(double));
+  A_Bloc_Matrix = (float *) malloc(A_Bloc_MatrixSize * sizeof(float));
+  B_Bloc_Matrix = (float *) malloc(B_Bloc_MatrixSize * sizeof(float));
 
   /* memory for arrangmeent of the data in one dim. arrays before MPI_SCATTER */
-  MatA_array = (double *) malloc(sizeof(double) * NoofRows_A * NoofCols_A);
-  MatB_array = (double *) malloc(sizeof(double) * NoofRows_B * NoofCols_B);
+  MatA_array = (float *) malloc(sizeof(float) * NoofRows_A * NoofCols_A);
+  MatB_array = (float *) malloc(sizeof(float) * NoofRows_B * NoofCols_B);
 
   /*Rearrange the input matrices in one dim arrays by approriate order*/
   if (grid.MyRank == Root) {
@@ -197,11 +197,11 @@ int main(int argc, char** argv) {
   }
 
   /* Scatter the Data  to all processes by MPI_SCATTER */
-//  MPI_Scatter(MatA_array, A_Bloc_MatrixSize, MPI_DOUBLE, A_Bloc_Matrix,
-//              A_Bloc_MatrixSize, MPI_DOUBLE, 0, grid.Comm);
+//  MPI_Scatter(MatA_array, A_Bloc_MatrixSize, MPI_FLOAT, A_Bloc_Matrix,
+//              A_Bloc_MatrixSize, MPI_FLOAT, 0, grid.Comm);
 //
-//  MPI_Scatter(MatB_array, B_Bloc_MatrixSize, MPI_DOUBLE, B_Bloc_Matrix,
-//              B_Bloc_MatrixSize, MPI_DOUBLE, 0, grid.Comm);
+//  MPI_Scatter(MatB_array, B_Bloc_MatrixSize, MPI_FLOAT, B_Bloc_Matrix,
+//              B_Bloc_MatrixSize, MPI_FLOAT, 0, grid.Comm);
 
   for (int i = 0; i < A_Bloc_MatrixSize; ++i) {
     A_Bloc_Matrix[i] = 2.0;
@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
     destination = (grid.Col + grid.p_proc - grid.Row) % grid.p_proc;
     recv_tag = 0;
     send_tag = 0;
-    MPI_Sendrecv_replace(A_Bloc_Matrix, A_Bloc_MatrixSize, MPI_DOUBLE,
+    MPI_Sendrecv_replace(A_Bloc_Matrix, A_Bloc_MatrixSize, MPI_FLOAT,
                          destination, send_tag, source, recv_tag,
                          grid.Row_comm, &status);
   }
@@ -225,14 +225,14 @@ int main(int argc, char** argv) {
     destination = (grid.Row + grid.p_proc - grid.Col) % grid.p_proc;
     recv_tag = 0;
     send_tag = 0;
-    MPI_Sendrecv_replace(B_Bloc_Matrix, B_Bloc_MatrixSize, MPI_DOUBLE,
+    MPI_Sendrecv_replace(B_Bloc_Matrix, B_Bloc_MatrixSize, MPI_FLOAT,
                          destination, send_tag, source, recv_tag,
                          grid.Col_comm, &status);
   }
 
   /* Allocate Memory for Bloc C Array */
-  C_Bloc_Matrix = (double *) malloc(NoofRows_BlocA * NoofCols_BlocB
-      * sizeof(double));
+  C_Bloc_Matrix = (float *) malloc(NoofRows_BlocA * NoofCols_BlocB
+      * sizeof(float));
   for (index = 0; index < NoofRows_BlocA * NoofCols_BlocB; index++)
     C_Bloc_Matrix[index] = 0;
 
@@ -247,7 +247,7 @@ int main(int argc, char** argv) {
       MLOG << "Iterating... " << istage << " of " << grid.p_proc;
     }
 
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 NoofRows_BlocA, NoofCols_BlocB, NoofCols_BlocA,
                 1,
                 A_Bloc_Matrix, NoofRows_BlocA,
@@ -258,14 +258,14 @@ int main(int argc, char** argv) {
     /* Move Bloc of Matrix A by one position left with wraparound */
     source = (grid.Col + 1) % grid.p_proc;
     destination = (grid.Col + grid.p_proc - 1) % grid.p_proc;
-    MPI_Sendrecv_replace(A_Bloc_Matrix, A_Bloc_MatrixSize, MPI_DOUBLE,
+    MPI_Sendrecv_replace(A_Bloc_Matrix, A_Bloc_MatrixSize, MPI_FLOAT,
                          destination, send_tag, source, recv_tag,
                          grid.Row_comm, &status);
 
     /* Move Bloc of Matrix B by one position upwards with wraparound */
     source = (grid.Row + 1) % grid.p_proc;
     destination = (grid.Row + grid.p_proc - 1) % grid.p_proc;
-    MPI_Sendrecv_replace(B_Bloc_Matrix, B_Bloc_MatrixSize, MPI_DOUBLE,
+    MPI_Sendrecv_replace(B_Bloc_Matrix, B_Bloc_MatrixSize, MPI_FLOAT,
                          destination, send_tag, source, recv_tag,
                          grid.Col_comm, &status);
   }
@@ -277,15 +277,15 @@ int main(int argc, char** argv) {
   }
 
   /* Gather output block matrices at processor 0 */
-  MPI_Gather(C_Bloc_Matrix, NoofRows_BlocA * NoofCols_BlocB, MPI_DOUBLE,
-             MatC_array, NoofRows_BlocA * NoofCols_BlocB, MPI_DOUBLE, Root,
+  MPI_Gather(C_Bloc_Matrix, NoofRows_BlocA * NoofCols_BlocB, MPI_FLOAT,
+             MatC_array, NoofRows_BlocA * NoofCols_BlocB, MPI_FLOAT, Root,
              grid.Comm);
 
   /* Memory for output global array for OutputMatrix_C after rearrangement */
   if (grid.MyRank == Root) {
-    Matrix_C = (double **) malloc(NoofRows_A * sizeof(double *));
+    Matrix_C = (float **) malloc(NoofRows_A * sizeof(float *));
     for (irow = 0; irow < NoofRows_A; irow++)
-      Matrix_C[irow] = (double *) malloc(NoofCols_B * sizeof(double));
+      Matrix_C[irow] = (float *) malloc(NoofCols_B * sizeof(float));
   }
 
   /* Rearranging the output matrix in a array by approriate order  */
@@ -333,7 +333,7 @@ void SetUp_Mesh(MESH_INFO_TYPE *grid) {
   MPI_Comm_rank(MPI_COMM_WORLD, &(grid->MyRank));
 
   /* For square mesh */
-  grid->p_proc = (int) sqrt((double) grid->Size);
+  grid->p_proc = (int) sqrt((float) grid->Size);
   if (grid->p_proc * grid->p_proc != grid->Size) {
     if (grid->MyRank == 0) {
       printf("Number of Processors should be perfect square\n");
