@@ -3,11 +3,39 @@
 
 using namespace dsm;
 
-static const int kBlockSize = 400;
 static int bRows = -1;
 static int bCols = -1;
 
-struct Block { double d[kBlockSize*kBlockSize]; };
+struct Block {
+  float *d;
+
+  Block() : d(new float[FLAGS_block_size*FLAGS_block_size]) {}
+  Block(const Block& other) : d(new float[FLAGS_block_size*FLAGS_block_size])  {
+    memcpy(d, other.d, sizeof(float)*FLAGS_block_size*FLAGS_block_size);
+  }
+
+  Block& operator=(const Block& other) {
+    memcpy(d, other.d, sizeof(float)*FLAGS_block_size*FLAGS_block_size);
+    return *this;
+  }
+
+  ~Block() { delete [] d; }
+};
+
+namespace dsm {
+template <>
+struct Marshal<Block> {
+  void marshal(const Block& t, string *out) {
+    out->assign((const char*)t.d,
+                sizeof(float) * FLAGS_block_size * FLAGS_block_size);
+  }
+
+  void unmarshal(const StringPiece& s, Block *t) {
+    CHECK_EQ(s.len, sizeof(float) * FLAGS_block_size * FLAGS_block_size);
+    memcpy(t->d, s.data, s.len);
+  }
+};
+}
 
 static TypedGlobalTable<int, Block>* matrix_a = NULL;
 static TypedGlobalTable<int, Block>* matrix_b = NULL;
@@ -15,7 +43,7 @@ static TypedGlobalTable<int, Block>* matrix_c = NULL;
 
 struct BlockSum : public Accumulator<Block> {
   void Accumulate(Block *a, const Block& b) {
-    for (int i = 0; i < kBlockSize * kBlockSize; ++i) {
+    for (int i = 0; i < FLAGS_block_size * FLAGS_block_size; ++i) {
       a->d[i] += b.d[i];
     }
   }
@@ -37,10 +65,10 @@ struct MatrixMultiplicationKernel : public DSMKernel {
     my_shard = current_shard();
 
     Block b, z;
-    for (int i = 0; i < kBlockSize * kBlockSize; ++i)
+    for (int i = 0; i < FLAGS_block_size * FLAGS_block_size; ++i) {
       b.d[i] = 2;
-
-    memset(z.d, 0, kBlockSize * kBlockSize * sizeof(double));
+      z.d[i] = 0;
+    }
 
     int bcount = 0;
 
@@ -54,8 +82,6 @@ struct MatrixMultiplicationKernel : public DSMKernel {
         matrix_c->update(block_id(by, bx), z);
       }
     }
-
-//    LOG(INFO) << NetworkThread::Get()->id() << " assigned " << bcount;
   }
 
   void Multiply() {
@@ -72,12 +98,22 @@ struct MatrixMultiplicationKernel : public DSMKernel {
           if (!is_local(i, k)) { continue; }
           a = matrix_a->get(block_id(i, k));
           b = matrix_b->get(block_id(k, j));
-          cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                      kBlockSize, kBlockSize, kBlockSize, 1,
-                      a.d, kBlockSize, b.d, kBlockSize, 1, c.d, kBlockSize);
+          cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                      FLAGS_block_size, FLAGS_block_size, FLAGS_block_size, 1,
+                      a.d, FLAGS_block_size, b.d, FLAGS_block_size, 1, c.d, FLAGS_block_size);
           matrix_c->update(block_id(i, j), c);
         }
       }
+    }
+  }
+
+  void Print() {
+    Block b = matrix_c->get(block_id(0, 0));
+    for (int i = 0; i < 5; ++i) {
+      for (int j = 0; j < 5; ++j) {
+        printf("%.2f ", b.d[FLAGS_block_size*i+j]);
+      }
+      printf("\n");
     }
   }
 };
@@ -85,10 +121,11 @@ struct MatrixMultiplicationKernel : public DSMKernel {
 REGISTER_KERNEL(MatrixMultiplicationKernel);
 REGISTER_METHOD(MatrixMultiplicationKernel, Initialize);
 REGISTER_METHOD(MatrixMultiplicationKernel, Multiply);
+REGISTER_METHOD(MatrixMultiplicationKernel, Print);
 
 int MatrixMultiplication(ConfigData& conf) {
-  bCols = FLAGS_edge_size / kBlockSize;
-  bRows = FLAGS_edge_size / kBlockSize;
+  bCols = FLAGS_edge_size / FLAGS_block_size;
+  bRows = FLAGS_edge_size / FLAGS_block_size;
 
   matrix_a = CreateTable(0, bCols * bRows, new Sharding::Mod, new BlockSum);
   matrix_b = CreateTable(1, bCols * bRows, new Sharding::Mod, new BlockSum);
@@ -100,6 +137,7 @@ int MatrixMultiplication(ConfigData& conf) {
   for (int i = 0; i < FLAGS_iterations; ++i) {
     m.run_all("MatrixMultiplicationKernel", "Initialize", matrix_a);
     m.run_all("MatrixMultiplicationKernel", "Multiply", matrix_a);
+    m.run_one("MatrixMultiplicationKernel", "Print", matrix_c);
   }
   return 0;
 }
