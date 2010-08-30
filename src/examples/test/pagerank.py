@@ -10,8 +10,8 @@ checkpoint_write_dir="/scratch/power/checkpoints/"
 checkpoint_read_dir="/scratch/power/checkpoints/"
 scaled_base_size=5
 fixed_base_size=100
-shards=256
-memory_graph=1
+shards=1
+memory_graph=0
 iterations=10
 
 def cleanup(size):
@@ -25,13 +25,13 @@ def system(cmd):
   print cmd
   os.system(cmd)
 
-def make_graph(size, hostfile='fast_hostfile'):
+def make_graph(size, hostfile='conf/mpi-localhost'):
   if memory_graph: return
   system(' '.join(
                   ['mpirun',
                    '-hostfile %s' % hostfile,
                    '-bynode',
-                   '-n %s' % runutil.hostfile_info(hostfile)[1],
+                   '-n %s' % runutil.hostfile_info(hostfile)[0],
                    'bin/release/examples/example-dsm',
                    '--runner=Pagerank',
                    '--build_graph',
@@ -94,14 +94,14 @@ def test_slow_worker():
   n = 64
   graphsize = scaled_base_size * n * 2
 
+  os.system('ssh beaker-10 "pkill -f cpuloop.sh"')
   run_pr('Pagerank_noslow_with_stealing', graphsize, n, 
          ['--checkpoint=false', '--restore=false', '--work_stealing=true', ])
 
   run_pr('Pagerank_noslow', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=false', ])
 
-  os.system('ssh beaker-2 "pkill -f cpuloop.sh"')
-  atexit.register(os.system, 'ssh beaker-2 "pkill -f cpuloop.sh"')
-  os.system('ssh beaker-2 "taskset -c 0x1 /home/power/cpuloop.sh </dev/null &>/dev/null&"')
+  atexit.register(os.system, 'ssh beaker-10 "pkill -f cpuloop.sh"')
+  os.system('ssh beaker-10 "taskset -c 0x1 /home/power/cpuloop.sh </dev/null &>/dev/null&"')
   
   run_pr('Pagerank_slow_no_stealing', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=false', ])  
   run_pr('Pagerank_slow_with_stealing', graphsize, n, ['--checkpoint=false', '--restore=false', '--work_stealing=true', ])
@@ -109,5 +109,5 @@ def test_slow_worker():
 #test_checkpointing()
 #test_fixed_perf()
 #test_scaled_perf()
-
-test_slow_worker()
+#test_slow_worker()
+make_graph(10)
