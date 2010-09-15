@@ -1,6 +1,6 @@
-set(MPILIBS mpi_cxx mpi open-rte open-pal)
-set(STATICLIBS protobuf boost_thread-mt util z)
-set(DYNAMICLIBS lzo2 pthread rt dl numa SDL)
+set(MPILIBS )
+set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal )
+set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
@@ -9,7 +9,7 @@ add_library(example
             k-means.cc 
             matmul.cc
             pagerank.cc 
-            raytrace.cc
+#            raytrace.cc
             shortest-path.cc
             test-tables.cc
             wordcount.cc

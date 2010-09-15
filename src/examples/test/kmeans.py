@@ -4,7 +4,7 @@ import sys; sys.path += ['src/examples/test']
 import os
 import runutil, math
 iterations=5
-base_size=10 * 1000 * 1000
+base_size=250 * 1000 * 1000
 
 def test_scaled_perf():
   for n in runutil.parallelism[4:]:
@@ -25,10 +25,10 @@ def test_fixed_perf():
                           logfile_name='KMeans.fixed_size', 
                           n=n,
                           args=['--iterations=%s' % iterations,
-                                '--sleep_time=0.001',
+                                '--sleep_time=0.0001',
                                 '--work_stealing=false',
-                                '--num_dists=64',
-                                '--num_points=%d' % (base_size*10)
+                                '--num_dists=100',
+                                '--num_points=%d' % (base_size)
                                 ])
 
 def test_checkpoint():
@@ -61,5 +61,5 @@ def test_checkpoint():
                             ])
 
 #test_scaled_perf()
-#test_fixed_perf()
-test_checkpoint()
+test_fixed_perf()
+#test_checkpoint()
