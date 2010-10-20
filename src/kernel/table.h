@@ -131,6 +131,13 @@ public:
   virtual TableBase::Iterator *get_iterator() = 0;
 };
 
+
+template <class K, class V>
+struct TypedTableIterator : public TableIterator {
+  virtual const K& key() = 0;
+  virtual V& value() = 0;
+};
+
 // Key/value typed interface.
 template <class K, class V>
 class TypedTable {
@@ -140,12 +147,6 @@ public:
   virtual void put(const K &k, const V &v) = 0;
   virtual void update(const K &k, const V &v) = 0;
   virtual void remove(const K &k) = 0;
-};
-
-template <class K, class V>
-struct TypedTableIterator : public TableIterator {
-  virtual const K& key() = 0;
-  virtual V& value() = 0;
 };
 
 class TableData;

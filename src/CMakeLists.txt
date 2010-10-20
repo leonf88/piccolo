@@ -5,11 +5,11 @@ project (PICCOLO)
 
 set(ENV{LANG} "C")
 
-set(CMAKE_MODULE_PATH "${PICCOLO_SOURCE_DIR}/../extlib/")
-#find_package(Protobuf REQUIRED)
+find_package(Protobuf REQUIRED)
 find_package(SWIG REQUIRED)
 find_package(PythonLibs REQUIRED)
 
+include("${PICCOLO_SOURCE_DIR}/util/PiccoloPP.cmake")
 include(${SWIG_USE_FILE})
 
 set(CMAKE_CXX_FLAGS "-fPIC -march=core2 -ggdb2 -Wall -Wno-sign-compare -Wno-unused-function -fno-omit-frame-pointer")

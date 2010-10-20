@@ -93,6 +93,7 @@ class TypedGlobalTable :
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
+  typedef TypedTableIterator<K, V> Iterator;
   virtual void Init(const TableDescriptor *tinfo) {
     GlobalTable::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
