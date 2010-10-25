@@ -11,8 +11,7 @@ namespace dsm {
 class LocalTable :
   public TableBase,
   public Checkpointable,
-  public Serializable,
-  public UntypedTable {
+  public Serializable {
 public:
   LocalTable() : delta_file_(NULL) {}
   bool empty() { return size() == 0; }
@@ -27,6 +26,9 @@ public:
   virtual void resize(int64_t size) = 0;
 
   virtual TableIterator* get_iterator() = 0;
+
+  int shard() { return info_->shard; }
+
 protected:
   friend class GlobalTable;
   TableCoder *delta_file_;

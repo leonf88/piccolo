@@ -151,7 +151,7 @@ void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
     LOG_EVERY_N(WARNING, 1000) << "Not local for shard: " << shard;
   }
 
-  LocalTable *t = (LocalTable*)partitions_[shard];
+  UntypedTable *t = (UntypedTable*)partitions_[shard];
   if (!t->contains_str(get_req.key())) {
     get_resp->set_missing_key(true);
   } else {
@@ -163,6 +163,25 @@ void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
 
 void GlobalTable::HandlePutRequests() {
   w_->HandlePutRequests();
+}
+
+ProtoTableCoder::ProtoTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
+
+bool ProtoTableCoder::ReadEntry(string *k, string *v) {
+  if (read_pos_ < t_->kv_data_size()) {
+    k->assign(t_->kv_data(read_pos_).key());
+    v->assign(t_->kv_data(read_pos_).value());
+    ++read_pos_;
+    return true;
+  }
+
+  return false;
+}
+
+void ProtoTableCoder::WriteEntry(StringPiece k, StringPiece v) {
+  Arg *a = t_->add_kv_data();
+  a->set_key(k.data, k.len);
+  a->set_value(v.data, v.len);
 }
 
 void GlobalTable::SendUpdates() {
@@ -180,7 +199,7 @@ void GlobalTable::SendUpdates() {
         put.set_table(id());
         put.set_epoch(w_->epoch());
 
-        RPCTableCoder c(&put);
+        ProtoTableCoder c(&put);
         t->Serialize(&c);
         t->clear();
 
@@ -220,7 +239,7 @@ void GlobalTable::ApplyUpdates(const dsm::TableData& req) {
         << " to " << owner(req.shard());
   }
 
-  RPCTableCoder c(&req);
+  ProtoTableCoder c(&req);
   partitions_[req.shard()]->ApplyUpdates(&c);
 }
 
@@ -228,8 +247,7 @@ void GlobalTable::get_local(const StringPiece &k, string* v) {
   int shard = get_shard_str(k);
   CHECK(is_local_shard(shard));
 
-  LocalTable *h = (LocalTable*)partitions_[shard];
-
+  UntypedTable *h = (UntypedTable*)partitions_[shard];
   v->assign(h->get_str(k));
 }
 }

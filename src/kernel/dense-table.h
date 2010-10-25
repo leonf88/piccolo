@@ -9,16 +9,20 @@ namespace dsm {
 
 template <class K>
 struct BlockInfo {
-  virtual K block_id(const K& k, int block_size) = 0;
-  virtual int block_pos(const K& k, int block_size) = 0;
+  // Returns the key representing the first element in the block
+  // containing 'k'.
+  virtual K start(const K& k, int block_size) = 0;
+
+  // Returns the index offset of 'k' within it's block.
+  virtual int offset(const K& k, int block_size) = 0;
 };
 
 struct IntBlockInfo : public BlockInfo<int> {
-  int block_id(const int& k, int block_size) {
+  int start(const int& k, int block_size) {
     return k - (k % block_size);
   }
 
-  int block_pos(const int& k, int block_size) {
+  int offset(const int& k, int block_size) {
     return k % block_size;
   }
 };
@@ -44,7 +48,10 @@ public:
   typedef typename std::tr1::unordered_map<K, Bucket> BucketMap;
 
   struct Iterator : public TypedTableIterator<K, V> {
-    Iterator(DenseTable<K, V> &parent) : parent_(parent), it_(parent_.m_.begin()), idx_(0) { }
+    Iterator(DenseTable<K, V> &parent) : parent_(parent), it_(parent_.m_.begin()), idx_(0) {}
+
+    Marshal<K> *kmarshal() { return ((Marshal<K>*)parent_.kmarshal()); }
+    Marshal<V> *vmarshal() { return ((Marshal<V>*)parent_.vmarshal()); }
 
     void Next() {
       ++idx_;
@@ -58,14 +65,6 @@ public:
 
     const K& key() { k_ = it_->first + idx_; return k_; }
     V& value() { return it_->second.entries[idx_]; }
-
-    void key_str(string* k) {
-      return ((Marshal<K>*)parent_.info_->key_marshal)->marshal(key(), k);
-    }
-
-    void value_str(string *v) {
-      return ((Marshal<V>*)parent_.info_->value_marshal)->marshal(value(), v);
-    }
 
     DenseTable<K, V> &parent_;
     K k_;
@@ -83,11 +82,11 @@ public:
 
   // return the first key in a bucket
   K start_key(const K& k) {
-    return block_info().block_id(k, info_->block_size);
+    return block_info().start(k, info_->block_size);
   }
 
   int block_pos(const K& k) {
-    return block_info().block_pos(k, info_->block_size);
+    return block_info().offset(k, info_->block_size);
   }
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
@@ -141,27 +140,6 @@ public:
   }
 
   void remove(const K& k) { LOG(FATAL) << "Not implemented."; }
-
-  bool contains_str(const StringPiece& s) {
-    K k;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
-    return contains(k);
-  }
-
-  string get_str(const StringPiece &s) {
-    K k;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
-    string out;
-    ((Marshal<V>*)info_->value_marshal)->marshal(get(k), &out);
-    return out;
-  }
-
-  void update_str(const StringPiece& kstr, const StringPiece &vstr) {
-    K k; V v;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(kstr, &k);
-    ((Marshal<V>*)info_->value_marshal)->unmarshal(vstr, &v);
-    update(k, v);
-  }
 
   TableIterator* get_iterator() { return new Iterator(*this); }
 
@@ -219,6 +197,9 @@ public:
       }
     }
   }
+
+  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
+  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
 
 private:
   BucketMap m_;

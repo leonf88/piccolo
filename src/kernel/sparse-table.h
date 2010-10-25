@@ -27,7 +27,12 @@ private:
 
 public:
   struct Iterator : public TypedTableIterator<K, V> {
-    Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) { Next(); }
+    Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) {
+      Next();
+    }
+
+    Marshal<K>* kmarshal() { return parent_.kmarshal(); }
+    Marshal<V>* vmarshal() { return parent_.vmarshal(); }
 
     void Next() {
       do {
@@ -41,14 +46,6 @@ public:
 
     const K& key() { return parent_.buckets_[pos].k; }
     V& value() { return parent_.buckets_[pos].v; }
-
-    void key_str(string* k) {
-      return ((Marshal<K>*)parent_.info_->key_marshal)->marshal(key(), k);
-    }
-
-    void value_str(string *v) {
-      return ((Marshal<V>*)parent_.info_->value_marshal)->marshal(value(), v);
-    }
 
     int pos;
     SparseTable<K, V> &parent_;
@@ -91,26 +88,8 @@ public:
   void Serialize(TableCoder *out);
   void ApplyUpdates(TableCoder *in);
 
-  bool contains_str(const StringPiece& s) {
-    K k;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
-    return contains(k);
-  }
-
-  string get_str(const StringPiece &s) {
-    K k;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
-    string out;
-    ((Marshal<V>*)info_->value_marshal)->marshal(get(k), &out);
-    return out;
-  }
-
-  void update_str(const StringPiece& kstr, const StringPiece &vstr) {
-    K k; V v;
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(kstr, &k);
-    ((Marshal<V>*)info_->value_marshal)->unmarshal(vstr, &v);
-    update(k, v);
-  }
+  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
+  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
 
 private:
   uint32_t bucket_idx(K k) {

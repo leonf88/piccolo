@@ -3,6 +3,20 @@
 
 namespace dsm {
 
+
+// Encodes or decodes table entries, reading and writing from the
+// specified file.
+struct LocalTableCoder : public TableCoder {
+  LocalTableCoder(const string &f, const string& mode);
+  virtual ~LocalTableCoder();
+
+  virtual void WriteEntry(StringPiece k, StringPiece v);
+  virtual bool ReadEntry(string* k, string *v);
+
+  RecordFile *f_;
+};
+
+
 void LocalTable::start_checkpoint(const string& f) {
   VLOG(1) << "Start checkpoint " << f;
   Timer t;
@@ -44,25 +58,6 @@ void LocalTable::write_delta(const TableData& put) {
   for (int i = 0; i < put.kv_data_size(); ++i) {
     delta_file_->WriteEntry(put.kv_data(i).key(), put.kv_data(i).value());
   }
-}
-
-RPCTableCoder::RPCTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
-
-bool RPCTableCoder::ReadEntry(string *k, string *v) {
-  if (read_pos_ < t_->kv_data_size()) {
-    k->assign(t_->kv_data(read_pos_).key());
-    v->assign(t_->kv_data(read_pos_).value());
-    ++read_pos_;
-    return true;
-  }
-
-  return false;
-}
-
-void RPCTableCoder::WriteEntry(StringPiece k, StringPiece v) {
-  Arg *a = t_->add_kv_data();
-  a->set_key(k.data, k.len);
-  a->set_value(v.data, v.len);
 }
 
 LocalTableCoder::LocalTableCoder(const string& f, const string &mode) :
