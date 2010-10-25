@@ -284,9 +284,6 @@ void NetworkThread::RegisterCallback(int message_type, boost::function<void ()> 
 
 static NetworkThread* net = NULL;
 NetworkThread* NetworkThread::Get() {
-  if (!net) {
-    net = new NetworkThread();
-  }
   return net;
 }
 
@@ -294,12 +291,12 @@ static void ShutdownMPI() {
   NetworkThread::Get()->Shutdown();
 }
 
-static void NetworkInit() {
+void NetworkThread::Init() {
   VLOG(1) << "Initializing network...";
-  NetworkThread::Get();
+  CHECK(net == NULL);
+  net = new NetworkThread();
   atexit(&ShutdownMPI);
 }
 
-REGISTER_INITIALIZER(NetworkInit, { NetworkInit(); });
 }
 

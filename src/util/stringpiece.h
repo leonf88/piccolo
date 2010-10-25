@@ -49,6 +49,17 @@ static const char* strnstr(const char* haystack, const char* needle, int len) {
   return NULL;
 }
 
+template <class Iterator>
+string JoinString(Iterator start, Iterator end, string delim=" ") {
+  string out;
+  while (start != end) {
+    out += *start;
+    ++start;
+    if (start != end) { out += delim; }
+  }
+  return out;
+}
+
 #ifndef SWIG
 string StringPrintf(StringPiece fmt, ...);
 string VStringPrintf(StringPiece fmt, va_list args);
