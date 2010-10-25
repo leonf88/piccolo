@@ -26,6 +26,7 @@ public:
   virtual void clear() = 0;
   virtual void resize(int64_t size) = 0;
 
+  virtual TableIterator* get_iterator() = 0;
 protected:
   friend class GlobalTable;
   TableCoder *delta_file_;
