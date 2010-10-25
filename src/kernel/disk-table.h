@@ -22,7 +22,12 @@ namespace dsm {
 
 class DiskTable : public GlobalTable {
 public:
-  class Partition;
+  struct Partition {
+    File::Info info;
+    uint64_t start_pos;
+    uint64_t end_pos;
+  };
+
   DiskTable(StringPiece filepattern, uint64_t split_files_at);
 
   void Init(const TableDescriptor *tinfo);
@@ -47,8 +52,13 @@ class RecordTable : public DiskTable, private boost::noncopyable {
 public:
   typedef TypedTableIterator<uint64_t, MessageClass*> Iterator;
   RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable(filepattern, split_files_at) {}
+
   Iterator *get_iterator(int shard) {
-    return (Iterator*)CreateRecordIterator(partitions_[shard], new MessageClass);
+    return (Iterator*)CreateRecordIterator(*partitions_[shard], new MessageClass);
+  }
+
+  Iterator *get_typed_iterator(int shard) {
+    return get_iterator(shard);
   }
 private:
 };
