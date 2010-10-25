@@ -1,6 +1,7 @@
 #include "util/common.h"
 #include "kernel/sparse-table.h"
 #include "kernel/dense-table.h"
+#include "kernel/global-table.h"
 
 #include "util/static-initializers.h"
 #include <gflags/gflags.h>
@@ -119,7 +120,7 @@ static void TestSerialize() {
   TableData tdata;
   T* t2 = GetTable<T>();
 
-  RPCTableCoder c(&tdata);
+  ProtoTableCoder c(&tdata);
   t->Serialize(&c);
   t2->ApplyUpdates(&c);
 

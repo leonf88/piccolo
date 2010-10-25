@@ -11,6 +11,16 @@ namespace dsm {
 
 class Worker;
 
+// Encodes table entries using the passed in TableData protocol buffer.
+struct ProtoTableCoder : public TableCoder {
+  ProtoTableCoder(const TableData* in);
+  virtual void WriteEntry(StringPiece k, StringPiece v);
+  virtual bool ReadEntry(string* k, string *v);
+
+  int read_pos_;
+  TableData *t_;
+};
+
 class GlobalTable :
   public TableBase,
   public Checkpointable {
@@ -124,6 +134,9 @@ public:
   virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
     return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard));
   }
+
+  Marshal<K> *kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
+  Marshal<V> *vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
 
 protected:
   LocalTable* create_local(int shard);

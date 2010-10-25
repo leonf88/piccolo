@@ -9,7 +9,7 @@
 namespace dsm {
 
 #ifndef SWIG
-// Commonly used accumulation operators.
+// Commonly used accumulation and sharding operators.
 template <class V>
 struct Accumulators {
   struct Min : public Accumulator<V> {
@@ -80,21 +80,15 @@ public:
   void *block_info;
 };
 
-struct TableIterator {
-  virtual void key_str(string *out) = 0;
-  virtual void value_str(string *out) = 0;
-  virtual bool done() = 0;
-  virtual void Next() = 0;
-};
+class TableIterator;
 
-// Methods common to both global table views and local shards
+// Methods common to both global and local table views.
 class TableBase {
-public:
+  public:
   typedef TableIterator Iterator;
   virtual void Init(const TableDescriptor* info) {
     info_ = new TableDescriptor(*info);
 
-//    CHECK(info_->accum != NULL);
     CHECK(info_->key_marshal != NULL);
     CHECK(info_->value_marshal != NULL);
   }
@@ -102,11 +96,93 @@ public:
   const TableDescriptor& info() const { return *info_; }
 
   int id() const { return info().table_id; }
-  int shard() const { return info().shard; }
   int num_shards() const { return info().num_shards; }
 
 protected:
   TableDescriptor *info_;
+};
+
+class UntypedTable {
+public:
+  virtual bool contains_str(const StringPiece& k) = 0;
+  virtual string get_str(const StringPiece &k) = 0;
+  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+};
+
+// Key/value typed interface.
+template <class K, class V>
+class TypedTable : public UntypedTable {
+public:
+  virtual bool contains(const K &k) = 0;
+  virtual V get(const K &k) = 0;
+  virtual void put(const K &k, const V &v) = 0;
+  virtual void update(const K &k, const V &v) = 0;
+  virtual void remove(const K &k) = 0;
+
+  // Default specialization for untyped methods
+  virtual bool contains_str(const StringPiece& s) {
+    K k;
+    kmarshal()->unmarshal(s, &k);
+    return contains(k);
+  }
+
+  virtual string get_str(const StringPiece &s) {
+    K k;
+    string out;
+
+    kmarshal()->unmarshal(s, &k);
+    vmarshal()->marshal(get(k), &out);
+    return out;
+  }
+
+  virtual void update_str(const StringPiece& kstr, const StringPiece &vstr) {
+    K k; V v;
+    kmarshal()->unmarshal(kstr, &k);
+    vmarshal()->unmarshal(vstr, &v);
+    update(k, v);
+  }
+protected:
+  virtual Marshal<K> *kmarshal() = 0;
+  virtual Marshal<V> *vmarshal() = 0;
+};
+
+struct TableIterator {
+  virtual void key_str(string *out) = 0;
+  virtual void value_str(string *out) = 0;
+  virtual bool done() = 0;
+  virtual void Next() = 0;
+};
+
+template <class K, class V>
+struct TypedTableIterator : public TableIterator {
+  virtual const K& key() = 0;
+  virtual V& value() = 0;
+
+  virtual void key_str(string *out) { kmarshal()->marshal(key(), out); }
+  virtual void value_str(string *out) { vmarshal()->marshal(value(), out); }
+
+protected:
+  virtual Marshal<K> *kmarshal() {
+    static Marshal<K> m;
+    return &m;
+  }
+
+  virtual Marshal<V> *vmarshal() {
+    static Marshal<V> m;
+    return &m;
+  }
+};
+
+
+class TableData;
+
+// Checkpoint and restoration.
+class Checkpointable {
+public:
+  virtual void start_checkpoint(const string& f) = 0;
+  virtual void write_delta(const TableData& put) = 0;
+  virtual void finish_checkpoint() = 0;
+  virtual void restore(const string& f) = 0;
 };
 
 // Interface for serializing tables, either to disk or for transmitting via RPC.
@@ -121,61 +197,6 @@ class Serializable {
 public:
   virtual void ApplyUpdates(TableCoder *in) = 0;
   virtual void Serialize(TableCoder* out) = 0;
-};
-
-class UntypedTable {
-public:
-  virtual bool contains_str(const StringPiece& k) = 0;
-  virtual string get_str(const StringPiece &k) = 0;
-  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
-};
-
-
-template <class K, class V>
-struct TypedTableIterator : public TableIterator {
-  virtual const K& key() = 0;
-  virtual V& value() = 0;
-};
-
-// Key/value typed interface.
-template <class K, class V>
-class TypedTable {
-public:
-  virtual bool contains(const K &k) = 0;
-  virtual V get(const K &k) = 0;
-  virtual void put(const K &k, const V &v) = 0;
-  virtual void update(const K &k, const V &v) = 0;
-  virtual void remove(const K &k) = 0;
-};
-
-class TableData;
-
-// Checkpoint and restoration.
-class Checkpointable {
-public:
-  virtual void start_checkpoint(const string& f) = 0;
-  virtual void write_delta(const TableData& put) = 0;
-  virtual void finish_checkpoint() = 0;
-  virtual void restore(const string& f) = 0;
-};
-
-struct RPCTableCoder : public TableCoder {
-  RPCTableCoder(const TableData* in);
-  virtual void WriteEntry(StringPiece k, StringPiece v);
-  virtual bool ReadEntry(string* k, string *v);
-
-  int read_pos_;
-  TableData *t_;
-};
-
-struct LocalTableCoder : public TableCoder {
-  LocalTableCoder(const string &f, const string& mode);
-  virtual ~LocalTableCoder();
-
-  virtual void WriteEntry(StringPiece k, StringPiece v);
-  virtual bool ReadEntry(string* k, string *v);
-
-  RecordFile *f_;
 };
 }
 
