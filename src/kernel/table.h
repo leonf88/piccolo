@@ -94,7 +94,7 @@ public:
   virtual void Init(const TableDescriptor* info) {
     info_ = new TableDescriptor(*info);
 
-    CHECK(info_->accum != NULL);
+//    CHECK(info_->accum != NULL);
     CHECK(info_->key_marshal != NULL);
     CHECK(info_->value_marshal != NULL);
   }
@@ -128,7 +128,6 @@ public:
   virtual bool contains_str(const StringPiece& k) = 0;
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
-  virtual TableBase::Iterator *get_iterator() = 0;
 };
 
 

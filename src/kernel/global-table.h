@@ -34,7 +34,7 @@ public:
   int owner(int shard) { return get_partition_info(shard)->owner; }
 
   LocalTable *get_partition(int shard);
-  virtual TableIterator* get_iterator(int shard);
+  virtual TableIterator* get_iterator(int shard) = 0;
 
   bool is_local_shard(int shard);
   bool is_local_key(const StringPiece &k);
@@ -64,7 +64,6 @@ public:
   virtual int64_t shard_size(int shard);
 
   virtual int get_shard_str(StringPiece k) = 0;
-
 protected:
   vector<PartitionInfo> partinfo_;
   boost::recursive_mutex& mutex() { return m_; }
@@ -118,9 +117,12 @@ public:
   bool contains(const K &k);
   void remove(const K &k);
   TableIterator* get_iterator(int shard);
-  TypedTableIterator<K, V>* get_typed_iterator(int shard);
   TypedTable<K, V>* partition(int idx) {
     return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]);
+  }
+
+  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
+    return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard));
   }
 
 protected:
@@ -306,11 +308,6 @@ void TypedGlobalTable<K, V>::remove(const K &k) {
 }
 
 template<class K, class V>
-TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
-  return get_typed_iterator(shard);
-}
-
-template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
   TableDescriptor *linfo = new TableDescriptor(info());
   linfo->shard = shard;
@@ -321,7 +318,7 @@ LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
 }
 
 template<class K, class V>
-TypedTableIterator<K, V>* TypedGlobalTable<K, V>::get_typed_iterator(int shard) {
+TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
   if (this->is_local_shard(shard)) {
     return (TypedTableIterator<K, V>*) partitions_[shard]->get_iterator();
   } else {
