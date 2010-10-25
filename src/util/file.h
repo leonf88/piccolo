@@ -249,11 +249,7 @@ public:
   bool eof() { return fp->eof(); }
   void sync() { fp->sync(); }
 
-  void seek(uint64_t pos) {
-    while (fp->tell() < pos) {
-      read(NULL);
-    }
-  }
+  void seek(uint64_t pos);
 
   void writeChunk(StringPiece data);
   bool readChunk(string *s);
