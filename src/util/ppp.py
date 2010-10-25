@@ -99,7 +99,7 @@ using namespace dsm;
 '''
 
 MAP_KERNEL = '''
-class MapKernel%(id)s : public DSMKernel {
+class %(prefix)sMapKernel%(id)s : public DSMKernel {
 public:
   template <class K, %(klasses)s>
   void run_iter(const K& k, %(decl)s) {
@@ -110,7 +110,10 @@ public:
   template <class TableA>
   void run_loop(TableA* a) {
     typename TableA::Iterator *it =  a->get_typed_iterator(current_shard());
-    run_iter(it->key(), %(calls)s);
+    for (; !it->done(); it->Next()) {
+      run_iter(it->key(), %(calls)s);
+    }
+    delete it;
   }
   
   void map() {
@@ -118,12 +121,12 @@ public:
   }
 };
 
-REGISTER_KERNEL(MapKernel%(id)s);
-REGISTER_METHOD(MapKernel%(id)s, map);
+REGISTER_KERNEL(%(prefix)sMapKernel%(id)s);
+REGISTER_METHOD(%(prefix)sMapKernel%(id)s, map);
 '''
 
 RUN_KERNEL = '''
-class RunKernel%(id)s : public DSMKernel {
+class %(prefix)sRunKernel%(id)s : public DSMKernel {
 public:
   void run() {
 #line %(line)s "%(filename)s"
@@ -131,8 +134,8 @@ public:
   }
 };
 
-REGISTER_KERNEL(RunKernel%(id)s);
-REGISTER_METHOD(RunKernel%(id)s, run);
+REGISTER_KERNEL(%(prefix)sRunKernel%(id)s);
+REGISTER_METHOD(%(prefix)sRunKernel%(id)s, run);
 '''
 
 class Counter(object):
@@ -174,10 +177,14 @@ def ParsePMap(s):
   s.push('ParsePMap')
   _, keys, _, code, _ = s.read(r'\(', '{'), ParseKeys(s), s.read('}', ','), ParseCode(s), s.read(r'\)', ';')
   
+  
+  filename = os.path.basename(s._f)
+  prefix = re.sub(r'[\W]', '_', filename)
+  
   id = get_id()
   main_table = keys[0][1]
   
-  s._out += 'm.run_all("MapKernel%d", "map", %s);' % (id, main_table)
+  s._out += 'm.run_all("%sMapKernel%d", "map", %s);' % (prefix, id, main_table)
   
   i = 0
   klasses, decls, calls = [], [], []
@@ -191,7 +198,8 @@ def ParsePMap(s):
       calls += ['%s->get(it->key())' % v]
     i += 1
   
-  s._d += MAP_KERNEL % dict(filename = os.path.basename(s._f),
+  s._d += MAP_KERNEL % dict(filename = filename,
+                            prefix = prefix,
                             line = s._stack[-1][1],
                             id = id,
                             decl = ','.join(decls), 
@@ -206,10 +214,14 @@ def ParsePRunOne(s):
   s.push('ParsePRunOne')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
   
-  id = get_id()
-  s._out += 'm.run_one("RunKernel%d", "map", %s);' % (id, table)
+  filename = os.path.basename(s._f)
+  prefix = re.sub(r'[\W]', '_', filename)
   
-  s._d += RUN_KERNEL % dict(filename = os.path.basename(s._f),
+  id = get_id()
+  s._out += 'm.run_one("%sRunKernel%d", "run", %s);' % (prefix, id, table)
+  
+  s._d += RUN_KERNEL % dict(filename = filename,
+                            prefix = prefix,
                             line = s._stack[-1][1],
                             id = id, 
                             code = code) + '\n'
@@ -220,10 +232,14 @@ def ParsePRunAll(s):
   s.push('ParsePRunAll')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
   
-  id = get_id()
-  s._out += 'm.run_all("RunKernel%d", "map", %s);' % (id, table)
+  filename = os.path.basename(s._f)
+  prefix = re.sub(r'[\W]', '_', filename)
   
-  s._d += RUN_KERNEL % dict(filename = os.path.basename(s._f),
+  id = get_id()
+  s._out += 'm.run_all("%sRunKernel%d", "run", %s);' % (prefix, id, table)
+  
+  s._d += RUN_KERNEL % dict(filename = filename,
+                            prefix = prefix,
                             line = s._stack[-1][1],
                             id = id, 
                             code = code) + '\n'
