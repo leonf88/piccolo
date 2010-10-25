@@ -198,7 +198,10 @@ private:
 template <class C>
 struct KernelRegistrationHelper {
   KernelRegistrationHelper(const char* name) {
-    KernelRegistry::Get()->kernels().insert(make_pair(name, new KernelInfoT<C>(name)));
+    KernelRegistry::Map& kreg = KernelRegistry::Get()->kernels();
+
+    CHECK(kreg.find(name) == kreg.end());
+    kreg.insert(make_pair(name, new KernelInfoT<C>(name)));
   }
 };
 
