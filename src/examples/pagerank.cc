@@ -1,5 +1,5 @@
 #include "client/client.h"
-#include "examples/examples.pb.h"
+#include "examples/examples.h"
 #include "webgraph.h"
 
 #include <sys/time.h>
@@ -21,7 +21,6 @@ DEFINE_bool(memory_graph, false,
             "If true, the web graph will be generated on-demand.");
 
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
-DEFINE_bool(build_graph, false, "");
 DEFINE_int32(nodes, 10000, "");
 
 DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
