@@ -49,7 +49,8 @@ struct BlockSum : public Accumulator<Block> {
   }
 };
 
-struct MatrixMultiplicationKernel : public DSMKernel {
+struct ShardHelper {
+  ShardHelper(int mshard, int nshards) : num_shards(nshards), my_shard(mshard) {}
   int num_shards, my_shard;
 
   int block_id(int y, int x) {
@@ -59,69 +60,7 @@ struct MatrixMultiplicationKernel : public DSMKernel {
   bool is_local(int y, int x) {
     return block_id(y, x) % num_shards == my_shard;
   }
-
-  void Initialize() {
-    num_shards = matrix_a->num_shards();
-    my_shard = current_shard();
-
-    Block b, z;
-    for (int i = 0; i < FLAGS_block_size * FLAGS_block_size; ++i) {
-      b.d[i] = 2;
-      z.d[i] = 0;
-    }
-
-    int bcount = 0;
-
-    for (int by = 0; by < bRows; by ++) {
-      for (int bx = 0; bx < bCols; bx ++) {
-        if (!is_local(by, bx)) { continue; }
-        ++bcount;
-        CHECK(matrix_a->get_shard(block_id(by, bx)) == current_shard());
-        matrix_a->update(block_id(by, bx), b);
-        matrix_b->update(block_id(by, bx), b);
-        matrix_c->update(block_id(by, bx), z);
-      }
-    }
-  }
-
-  void Multiply() {
-    Block a, b, c;
-
-    // If work stealing occurs, this could be a kernel instance that
-    // didn't run Initialize, so fetch parameters again.
-    num_shards = matrix_a->num_shards();
-    my_shard = current_shard();
-
-    for (int k = 0; k < bRows; k++) {
-      for (int i = 0; i < bRows; i++) {
-        for (int j = 0; j < bCols; j++) {
-          if (!is_local(i, k)) { continue; }
-          a = matrix_a->get(block_id(i, k));
-          b = matrix_b->get(block_id(k, j));
-          cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                      FLAGS_block_size, FLAGS_block_size, FLAGS_block_size, 1,
-                      a.d, FLAGS_block_size, b.d, FLAGS_block_size, 1, c.d, FLAGS_block_size);
-          matrix_c->update(block_id(i, j), c);
-        }
-      }
-    }
-  }
-
-  void Print() {
-    Block b = matrix_c->get(block_id(0, 0));
-    for (int i = 0; i < 5; ++i) {
-      for (int j = 0; j < 5; ++j) {
-        printf("%.2f ", b.d[FLAGS_block_size*i+j]);
-      }
-      printf("\n");
-    }
-  }
 };
-
-REGISTER_KERNEL(MatrixMultiplicationKernel);
-REGISTER_METHOD(MatrixMultiplicationKernel, Initialize);
-REGISTER_METHOD(MatrixMultiplicationKernel, Multiply);
-REGISTER_METHOD(MatrixMultiplicationKernel, Print);
 
 int MatrixMultiplication(ConfigData& conf) {
   bCols = FLAGS_edge_size / FLAGS_block_size;
@@ -135,9 +74,65 @@ int MatrixMultiplication(ConfigData& conf) {
   Master m(conf);
 
   for (int i = 0; i < FLAGS_iterations; ++i) {
-    m.run_all("MatrixMultiplicationKernel", "Initialize", matrix_a);
-    m.run_all("MatrixMultiplicationKernel", "Multiply", matrix_a);
-    m.run_one("MatrixMultiplicationKernel", "Print", matrix_c);
+    PRunAll(matrix_a, {
+      int num_shards = matrix_a->num_shards();
+      int my_shard = current_shard();
+
+      ShardHelper sh(my_shard, num_shards);
+
+      Block b, z;
+      for (int i = 0; i < FLAGS_block_size * FLAGS_block_size; ++i) {
+        b.d[i] = 2;
+        z.d[i] = 0;
+      }
+
+      int bcount = 0;
+
+      for (int by = 0; by < bRows; by ++) {
+        for (int bx = 0; bx < bCols; bx ++) {
+          if (!sh.is_local(by, bx)) { continue; }
+          ++bcount;
+          CHECK(matrix_a->get_shard(sh.block_id(by, bx)) == current_shard());
+          matrix_a->update(sh.block_id(by, bx), b);
+          matrix_b->update(sh.block_id(by, bx), b);
+          matrix_c->update(sh.block_id(by, bx), z);
+        }
+      }
+    });
+
+    PRunAll(matrix_a, {
+      Block a, b, c;
+
+      int num_shards = matrix_a->num_shards();
+      int my_shard = current_shard();
+
+      ShardHelper sh(my_shard, num_shards);
+
+      for (int k = 0; k < bRows; k++) {
+        for (int i = 0; i < bRows; i++) {
+          for (int j = 0; j < bCols; j++) {
+            if (!sh.is_local(i, k)) { continue; }
+            a = matrix_a->get(sh.block_id(i, k));
+            b = matrix_b->get(sh.block_id(k, j));
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                        FLAGS_block_size, FLAGS_block_size, FLAGS_block_size, 1,
+                        a.d, FLAGS_block_size, b.d, FLAGS_block_size, 1, c.d, FLAGS_block_size);
+            matrix_c->update(sh.block_id(i, j), c);
+          }
+        }
+      }
+    });
+
+    PRunOne(matrix_c, {
+      ShardHelper sh(current_shard(), matrix_a->num_shards());
+      Block b = matrix_c->get(sh.block_id(0, 0));
+      for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 5; ++j) {
+          printf("%.2f ", b.d[FLAGS_block_size*i+j]);
+        }
+        printf("\n");
+      }
+    });
   }
   return 0;
 }

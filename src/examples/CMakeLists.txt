@@ -4,9 +4,11 @@ set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 piccolo_pp(k-means.pp 
-		   shortest-path.pp
 		   matmul.pp
-		   raytrace.pp) 
+		   pagerank.pp
+		   raytrace.pp
+		   shortest-path.pp)
+		    
 
 add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
 
@@ -14,7 +16,7 @@ add_library(example
 			matmul.pp.cc             
             k-means.pp.cc
             shortest-path.pp.cc
-	        pagerank.cc            
+	        pagerank.pp.cc
             test-tables.cc
             wordcount.cc
             facedet/cpp/pgmimage.c

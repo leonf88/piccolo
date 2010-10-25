@@ -61,8 +61,8 @@ int ShortestPath(ConfigData& conf) {
 
   for (int i = 0; i < 20; ++i) {
     PMap({n : nodes}, {
-        for (int j = 0; j < n->target_size(); ++j) {
-          distance_map->update(n->target(j), distance_map->get(n->id()) + 1);
+        for (int j = 0; j < n.target_size(); ++j) {
+          distance_map->update(n.target(j), distance_map->get(n.id()) + 1);
         }
     });
   }
