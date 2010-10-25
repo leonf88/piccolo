@@ -4,12 +4,6 @@
 using google::protobuf::Message;
 namespace dsm {
 
-struct DiskTable::Partition {
-  File::Info info;
-  uint64_t start_pos;
-  uint64_t end_pos;
-};
-
 DiskTable::DiskTable(StringPiece file_pattern, uint64_t split_files_at) {
   vector<File::Info> files = File::MatchingFileinfo(file_pattern);
   if (split_files_at == 0) { split_files_at = ULONG_MAX; }
@@ -48,10 +42,13 @@ struct RecordIterator : public TypedTableIterator<uint64_t, Message*> {
   void key_str(string *out) { kmarshal_.marshal(pos_, out); }
   void value_str(string *out) { vmarshal_.marshal(*data_, out); }
 
-  bool done() { return done_ || pos_ >= p_.end_pos; }
+  bool done() {
+//    LOG(INFO) << "RecordIterator: " << p_.info.name << " : " << (pos_ >= p_.end_pos) << ":: " << done_;
+    return done_ || pos_ >= p_.end_pos;
+  }
 
   void Next() {
-    done_ = r_.read(data_);
+    done_ = !r_.read(data_);
     pos_ = r_.fp->tell();
   }
 
