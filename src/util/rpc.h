@@ -43,6 +43,7 @@ public:
   int size() const;
 
   static NetworkThread *Get();
+  static void Init();
 
   // Register the given function with the RPC thread.  The function willi be invoked
   // from within the network thread whenever a message of the given type is received.

@@ -89,4 +89,5 @@ string VStringPrintf(StringPiece fmt, va_list l) {
   vsnprintf(buffer, 32768, fmt.AsString().c_str(), l);
   return string(buffer);
 }
+
 }
