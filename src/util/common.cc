@@ -1,6 +1,7 @@
 #include "util/common.h"
 #include "util/file.h"
 #include "util/static-initializers.h"
+#include "util/rpc.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +32,8 @@ DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
 DEFINE_bool(run_tests, false, "");
 
+DEFINE_string(hostfile, "conf/mpi-beakers", "");
+DEFINE_int32(workers, 2, "");
 
 namespace dsm {
 
@@ -166,10 +169,9 @@ void Init(int argc, char** argv) {
   CHECK_EQ(lzo_init(), 0);
 
   google::SetUsageMessage(StringPrintf("%s: invoke from mpirun, using --runner to select control function.", argv[0]));
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
-
 
 #ifdef CPUPROF
   if (FLAGS_cpu_profile) {
@@ -186,16 +188,35 @@ void Init(int argc, char** argv) {
   HeapProfilerStart(StringPrintf("profile/heap.%s.%d", buf, getpid()).c_str());
 #endif
 
-
-
   RunInitializers();
-
-  srandom(time(NULL));
 
   if (FLAGS_run_tests) {
     RunTests();
     exit(0);
   }
 
+  // If we are not running in the context of MPI, go ahead and invoke
+  // mpirun to start ourselves up.
+  if (!getenv("OMPI_UNIVERSE_SIZE")) {
+    string cmd = StringPrintf("mpirun "
+                              " -hostfile %s"
+                              " -bycore"
+                              " -nooversubscribe"
+                              " -n %d"
+                              " %s"
+                              " --log_prefix=false ",
+                              FLAGS_hostfile.c_str(),
+                              FLAGS_workers,
+                              JoinString(&argv[0], &argv[argc]).c_str()
+                              );
+
+    LOG(INFO) << "Invoking MPI..." << cmd;
+    system(cmd.c_str());
+    exit(0);
+  }
+
+  NetworkThread::Init();
+
+  srandom(time(NULL));
 }
 }
