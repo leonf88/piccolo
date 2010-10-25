@@ -304,7 +304,15 @@ bool RecordFile::read(google::protobuf::Message *m) {
     return false; 
   }
 
+  if (!m)
+    return true;
+
   CHECK(m->ParseFromString(buf_));
   return true;
 }
+
+void RecordFile::seek(uint64_t pos) {
+  while (fp->tell() < pos && read(NULL));
+}
+
 }
