@@ -404,7 +404,7 @@ bool Master::restore() {
 
   StartRestore req;
   req.set_epoch(epoch);
-  network_->SyncBroadcast(MTYPE_RESTORE, MTYPE_RESTORE_DONE, req);
+  network_->SyncBroadcast(MTYPE_RESTORE, req);
 
   LOG(INFO) << "Checkpoint restored in " << t.elapsed() << " seconds.";
   return true;
@@ -474,7 +474,7 @@ void Master::send_table_assignments() {
     }
   }
 
-  network_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, MTYPE_SHARD_ASSIGNMENT_DONE, req);
+  network_->SyncBroadcast(MTYPE_SHARD_ASSIGNMENT, req);
 }
 
 bool Master::steal_work(const RunDescriptor& r, int idle_worker,
@@ -745,11 +745,11 @@ void Master::barrier() {
 
   EmptyMessage empty;
   //1st round-trip to make sure all workers have flushed everything
-  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, MTYPE_WORKER_FLUSH_DONE, empty);
+  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
 
   //2nd round-trip to make sure all workers have applied all updates
   //XXX: incorrect if MPI does not guarantee remote delivery
-  network_->SyncBroadcast(MTYPE_WORKER_APPLY, MTYPE_WORKER_APPLY_DONE, empty);
+  network_->SyncBroadcast(MTYPE_WORKER_APPLY, empty);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
     if (!checkpointing_) {
