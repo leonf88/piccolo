@@ -86,7 +86,6 @@ message TableData {
   optional int32 epoch = 11;
   optional int32 marker = 12 [default = -1];
   
-  
   optional bool missing_key = 13;
 }
 
@@ -103,4 +102,13 @@ message StartRestore {
 message CheckpointInfo {
   required int32 checkpoint_epoch = 1;
   required int32 kernel_epoch = 2;
+}
+
+message SwapTable {
+  required int32 table_a = 1;
+  required int32 table_b = 2;
+}
+
+message ClearTable {
+  required int32 table = 1;
 }

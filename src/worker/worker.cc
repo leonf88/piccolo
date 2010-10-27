@@ -44,12 +44,36 @@ Worker::Worker(const ConfigData &c) {
     i->second->set_worker(this);
   }
 
-  NetworkThread::Get()->RegisterCallback(MTYPE_GET_REQUEST,
-                                         boost::bind(&Worker::HandleGetRequests, this));
-  NetworkThread::Get()->RegisterCallback(MTYPE_SHARD_ASSIGNMENT,
-                                         boost::bind(&Worker::HandleShardAssignment, this));
-  NetworkThread::Get()->RegisterCallback(MTYPE_ITERATOR_REQ,
-                                         boost::bind(&Worker::HandleIteratorRequests, this));
+  // Register RPC endpoints.
+  RegisterCallback(MTYPE_GET,
+                   new HashGet, new TableData,
+                   &Worker::HandleGetRequest, this);
+
+  RegisterCallback(MTYPE_SHARD_ASSIGNMENT,
+                   new ShardAssignmentRequest, new EmptyMessage,
+                   &Worker::HandleShardAssignment, this);
+
+  RegisterCallback(MTYPE_ITERATOR,
+                   new IteratorRequest, new IteratorResponse,
+                   &Worker::HandleIteratorRequest, this);
+
+  RegisterCallback(MTYPE_CLEAR_TABLE,
+                   new ClearTable, new EmptyMessage,
+                   &Worker::HandleClearRequest, this);
+
+  RegisterCallback(MTYPE_SWAP_TABLE,
+                   new SwapTable, new EmptyMessage,
+                   &Worker::HandleSwapRequest, this);
+
+  RegisterCallback(MTYPE_WORKER_FLUSH,
+                   new EmptyMessage, new EmptyMessage,
+                   &Worker::HandleFlush, this);
+
+  RegisterCallback(MTYPE_WORKER_APPLY,
+                   new EmptyMessage, new EmptyMessage,
+                   &Worker::HandleApply, this);
+
+  NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_FLUSH);
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -141,26 +165,17 @@ void Worker::KernelLoop() {
   }
 }
 
-void Worker::Flush() {
-  Timer net;
-
-  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
-  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-    i->second->SendUpdates();
-  }
-
-  network_->Flush();
-  stats_["network_time"] += net.elapsed();
-}
-
 void Worker::CheckNetwork() {
   Timer net;
   CheckForMasterUpdates();
-  HandlePutRequests();
+  HandlePutRequest();
 
   // Flush any tables we no longer own.
   for (unordered_set<GlobalTable*>::iterator i = dirty_tables_.begin(); i != dirty_tables_.end(); ++i) {
-    (*i)->SendUpdates();
+    MutableGlobalTable *mg = dynamic_cast<MutableGlobalTable*>(*i);
+    if (mg) {
+      mg->SendUpdates();
+    }
   }
 
   dirty_tables_.clear();
@@ -172,7 +187,10 @@ int64_t Worker::pending_kernel_bytes() const {
 
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-    t += i->second->pending_write_bytes();
+    MutableGlobalTable *mg = dynamic_cast<MutableGlobalTable*>(i->second);
+    if (mg) {
+      t += mg->pending_write_bytes();
+    }
   }
 
   return t;
@@ -233,7 +251,10 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
     if (checkpoint_tables_.find(i->first) != checkpoint_tables_.end()) {
       VLOG(1) << "Starting checkpoint... " << MP(id(), epoch_, epoch) << " : " << i->first;
-      i->second->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
+      Checkpointable *t = dynamic_cast<Checkpointable*>(i->second);
+      CHECK(t != NULL) << "Tried to checkpoint a read-only table?";
+
+      t->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
                                                FLAGS_checkpoint_write_dir.c_str(),
                                                epoch_, i->first));
     }
@@ -270,8 +291,10 @@ void Worker::FinishCheckpoint() {
   }
 
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-     GlobalTable* t = i->second;
-     t->finish_checkpoint();
+    Checkpointable *t = dynamic_cast<Checkpointable*>(i->second);
+    if (t) {
+      t->finish_checkpoint();
+    }
   }
 
   EmptyMessage req;
@@ -285,16 +308,18 @@ void Worker::Restore(int epoch) {
 
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-    GlobalTable* t = i->second;
-    t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
-                            FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+    Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
+    if (t) {
+      t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
+                              FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+    }
   }
 
   EmptyMessage req;
   network_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
 }
 
-void Worker::HandlePutRequests() {
+void Worker::HandlePutRequest() {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
 
   TableData put;
@@ -307,14 +332,15 @@ void Worker::HandlePutRequests() {
     VLOG(2) << "Read put request of size: "
             << put.kv_data_size() << " for " << MP(put.table(), put.shard());
 
-    GlobalTable *t = TableRegistry::Get()->table(put.table());
+    MutableGlobalTable *t = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(put.table()));
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
     if (active_checkpoint_ == CP_MASTER_CONTROLLED ||
         (active_checkpoint_ == CP_ROLLING && put.epoch() < epoch_)) {
       if (checkpoint_tables_.find(t->id()) != checkpoint_tables_.end()) {
-        t->write_delta(put);
+        Checkpointable *ct = dynamic_cast<Checkpointable*>(t);
+        ct->write_delta(put);
       }
     }
 
@@ -325,95 +351,115 @@ void Worker::HandlePutRequests() {
   }
 }
 
-void Worker::HandleGetRequests() {
-  int source;
-  HashGet get_req;
-  while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_GET_REQUEST, &get_req, &source)) {
-    TableData get_resp;
+void Worker::HandleGetRequest(const HashGet& get_req, TableData *get_resp, const RPCInfo& rpc) {
 //    LOG(INFO) << "Get request: " << get_req;
 
-    get_resp.Clear();
-    get_resp.set_source(config_.worker_id());
-    get_resp.set_table(get_req.table());
-    get_resp.set_shard(-1);
-    get_resp.set_done(true);
-    get_resp.set_epoch(epoch_);
+  get_resp->Clear();
+  get_resp->set_source(config_.worker_id());
+  get_resp->set_table(get_req.table());
+  get_resp->set_shard(-1);
+  get_resp->set_done(true);
+  get_resp->set_epoch(epoch_);
 
-    {
-      GlobalTable * t = TableRegistry::Get()->table(get_req.table());
-      t->handle_get(get_req, &get_resp);
+  {
+    GlobalTable * t = TableRegistry::Get()->table(get_req.table());
+    t->handle_get(get_req, get_resp);
+  }
+
+  VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard()) << " - found? " << !get_resp->missing_key();
+}
+
+void Worker::HandleSwapRequest(const SwapTable& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  MutableGlobalTable *ta = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table_a()));
+  MutableGlobalTable *tb = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table_b()));
+
+  ta->local_swap(tb);
+}
+
+void Worker::HandleClearRequest(const ClearTable& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  MutableGlobalTable *ta = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table()));
+
+  for (int i = 0; i < ta->num_shards(); ++i) {
+    if (ta->is_local_shard(i)) {
+      ta->get_partition(i)->clear();
     }
-
-    network_->Send(source, MTYPE_GET_RESPONSE, get_resp);
-    VLOG(2) << "Returning result for " << MP(get_req.table(), get_req.shard()) << " - found? " << !get_resp.missing_key();
   }
 }
 
-void Worker::HandleIteratorRequests() {
-  int source;
-  IteratorRequest iterator_req;
-  while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_ITERATOR_REQ, &iterator_req, &source)) {
-    IteratorResponse iterator_resp;
-    int table = iterator_req.table();
-    int shard = iterator_req.shard();
+void Worker::HandleIteratorRequest(const IteratorRequest& iterator_req, IteratorResponse *iterator_resp, const RPCInfo& rpc) {
+  int table = iterator_req.table();
+  int shard = iterator_req.shard();
 
-    GlobalTable * t = TableRegistry::Get()->table(table);
-    TableIterator* it = NULL;
-    if (iterator_req.id() == -1) {
-      it = t->get_iterator(shard);
-      uint32_t id = iterator_id_++;
-      iterators_[id] = it;
-      iterator_resp.set_id(id);
-    } else {
-      it = iterators_[iterator_req.id()];
-      iterator_resp.set_id(iterator_req.id());
-      CHECK_NE(it, (void *)NULL);
-      it->Next();
-    }
+  GlobalTable * t = TableRegistry::Get()->table(table);
+  TableIterator* it = NULL;
+  if (iterator_req.id() == -1) {
+    it = t->get_iterator(shard);
+    uint32_t id = iterator_id_++;
+    iterators_[id] = it;
+    iterator_resp->set_id(id);
+  } else {
+    it = iterators_[iterator_req.id()];
+    iterator_resp->set_id(iterator_req.id());
+    CHECK_NE(it, (void *)NULL);
+    it->Next();
+  }
 
-    iterator_resp.set_done(it->done());
-    if (!it->done()) {
-      it->key_str(iterator_resp.mutable_key());
-      it->value_str(iterator_resp.mutable_value());
-    }
-
-    network_->Send(source, MTYPE_ITERATOR_RESP, iterator_resp);
+  iterator_resp->set_done(it->done());
+  if (!it->done()) {
+    it->key_str(iterator_resp->mutable_key());
+    it->value_str(iterator_resp->mutable_value());
   }
 }
 
-void Worker::HandleShardAssignment() {
-  ShardAssignmentRequest shard_req;
-  while (network_->TryRead(config_.master_id(), MTYPE_SHARD_ASSIGNMENT, &shard_req)) {
-    for (int i = 0; i < shard_req.assign_size(); ++i) {
-      const ShardAssignment &a = shard_req.assign(i);
-      GlobalTable *t = TableRegistry::Get()->table(a.table());
-      int old_owner = t->owner(a.shard());
-      t->get_partition_info(a.shard())->owner = a.new_worker();
+void Worker::HandleShardAssignment(const ShardAssignmentRequest& shard_req, EmptyMessage *resp, const RPCInfo& rpc) {
+  LOG(INFO) << "Shard assignment: " << shard_req.DebugString();
+  for (int i = 0; i < shard_req.assign_size(); ++i) {
+    const ShardAssignment &a = shard_req.assign(i);
+    GlobalTable *t = TableRegistry::Get()->table(a.table());
+    int old_owner = t->owner(a.shard());
+    t->get_partition_info(a.shard())->sinfo.set_owner(a.new_worker());
 
-      VLOG(3) << "Setting owner: " << MP(a.shard(), a.new_worker());
+    VLOG(3) << "Setting owner: " << MP(a.shard(), a.new_worker());
 
-      if (a.new_worker() == id() && old_owner != id()) {
-        VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
+    if (a.new_worker() == id() && old_owner != id()) {
+      VLOG(1)  << "Setting self as owner of " << MP(a.table(), a.shard());
 
-        // Don't consider ourselves canonical for this shard until we receive updates
-        // from the old owner.
-        if (old_owner != -1) {
-          LOG(INFO) << "Setting " << MP(a.table(), a.shard())
-                   << " as tainted.  Old owner was: " << old_owner
-                   << " new owner is :  " << id();
-          t->get_partition_info(a.shard())->tainted = true;
-        }
-      } else if (old_owner == id() && a.new_worker() != id()) {
-        VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
-        // A new worker has taken ownership of this shard.  Flush our data out.
-        t->get_partition_info(a.shard())->dirty = true;
-        dirty_tables_.insert(t);
+      // Don't consider ourselves canonical for this shard until we receive updates
+      // from the old owner.
+      if (old_owner != -1) {
+        LOG(INFO) << "Setting " << MP(a.table(), a.shard())
+                 << " as tainted.  Old owner was: " << old_owner
+                 << " new owner is :  " << id();
+        t->get_partition_info(a.shard())->tainted = true;
       }
+    } else if (old_owner == id() && a.new_worker() != id()) {
+      VLOG(1) << "Lost ownership of " << MP(a.table(), a.shard()) << " to " << a.new_worker();
+      // A new worker has taken ownership of this shard.  Flush our data out.
+      t->get_partition_info(a.shard())->dirty = true;
+      dirty_tables_.insert(t);
     }
-
-    EmptyMessage empty;
-    network_->Send(config_.master_id(), MTYPE_SHARD_ASSIGNMENT_DONE, empty);
   }
+}
+
+
+void Worker::HandleFlush(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  Timer net;
+
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+    if (t) {
+      t->SendUpdates();
+    }
+  }
+
+  network_->Flush();
+  stats_["network_time"] += net.elapsed();
+}
+
+
+void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  HandlePutRequest();
 }
 
 void Worker::CheckForMasterUpdates() {
@@ -446,17 +492,6 @@ void Worker::CheckForMasterUpdates() {
   while (network_->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
     Restore(restore_msg.epoch());
   }
-
-  // Flush all pending updates if the master requests it.
-  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_FLUSH, &empty)) {
-    Flush();
-    network_->Send(config_.master_id(), MTYPE_WORKER_FLUSH_DONE, empty);
-  }
-
-  while (network_->TryRead(config_.master_id(), MTYPE_WORKER_APPLY, &empty)) {
-		HandlePutRequests();
-    network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, empty);
-	}
 }
 
 bool StartWorker(const ConfigData& conf) {
