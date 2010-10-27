@@ -59,14 +59,6 @@ public:
     }
   }
 
-  void TestClear() {
-    min_hash->clear(current_shard());
-    max_hash->clear(current_shard());
-    sum_hash->clear(current_shard());
-    replace_hash->clear(current_shard());
-    string_hash->clear(current_shard());
-  }
-
   void TestIterator() {
     int n = min_hash->num_shards();
     for (int k = 0; k < n; k++) {
@@ -85,7 +77,6 @@ REGISTER_KERNEL(TableKernel);
 REGISTER_METHOD(TableKernel, TestPut);
 REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
-REGISTER_METHOD(TableKernel, TestClear);
 REGISTER_METHOD(TableKernel, TestIterator);
 
 static int TestTables(ConfigData &conf) {
