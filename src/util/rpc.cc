@@ -20,9 +20,8 @@ static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
 }
 
 struct Header {
-  Header() : sync_request(0), sync_reply(0) {}
-  bool sync_request;
-  bool sync_reply;
+  Header() : is_reply(false) {}
+  bool is_reply;
 };
 
 // Represents an active RPC to a remote peer.
@@ -129,6 +128,13 @@ void NetworkThread::CollectActive() {
   }
 }
 
+void NetworkThread::InvokeCallback(CallbackInfo *ci, RPCInfo rpc) {
+  ci->call(rpc);
+  Header reply_header;
+  reply_header.is_reply = true;
+  Send(new RPCRequest(rpc.source, rpc.tag, *ci->resp, reply_header));
+}
+
 void NetworkThread::Run() {
   while (running) {
     MPI::Status st;
@@ -144,25 +150,34 @@ void NetworkThread::Run() {
       world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
 
       Header *h = (Header*)&data[0];
-      if (h->sync_request) {
-//        LOG(INFO) << "Got sync packet; replying...";
-        EmptyMessage msg;
-        Send(source, MTYPE_SYNC_REPLY, msg);
-      }
 
       stats["bytes_received"] += bytes;
       stats[StringPrintf("received.%s", MessageTypes_Name((MessageTypes)tag).c_str())] += 1;
       CHECK_LT(source, kMaxHosts);
 
       VLOG(3) << "Received packet - source: " << source << " tag: " << tag;
-
-      {
+      if (h->is_reply) {
         boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
-        incoming[tag][source].push_back(data);
-      }
+        replies[tag][source].push_back(data);
+      } else {
+        if (callbacks_[tag] != NULL) {
+          CallbackInfo *ci = callbacks_[tag];
+          ci->req->ParseFromArray(&data[0] + sizeof(Header), data.size() - sizeof(Header));
+          DLOG(INFO) << "Got incoming: " << ci->req->ShortDebugString();
 
-      if (callbacks_[tag] != NULL) {
-        callbacks_[tag]();
+          RPCInfo rpc = { source, id(), tag };
+          if (ci->spawn_thread) {
+            new boost::thread(boost::bind(&NetworkThread::InvokeCallback, this, ci, rpc));
+          } else {
+            ci->call(rpc);
+            Header reply_header;
+            reply_header.is_reply = true;
+            Send(new RPCRequest(source, tag, *ci->resp, reply_header));
+          }
+        } else {
+          boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
+          requests[tag][source].push_back(data);
+        }
       }
     } else {
       Sleep(FLAGS_sleep_time);
@@ -184,11 +199,32 @@ void NetworkThread::Run() {
   }
 }
 
-bool NetworkThread::check_queue(int src, int type, Message* data) {
+bool NetworkThread::check_request_queue(int src, int type, Message* data) {
   CHECK_LT(src, kMaxHosts);
-	CHECK_LT(type, kMaxMethods);
+  CHECK_LT(type, kMaxMethods);
 
-  Queue& q = incoming[type][src];
+  Queue& q = requests[type][src];
+  if (!q.empty()) {
+    boost::recursive_mutex::scoped_lock sl(q_lock[type]);
+    if (q.empty())
+      return false;
+
+    const string& s = q.front();
+    if (data) {
+      data->ParseFromArray(s.data() + sizeof(Header), s.size() - sizeof(Header));
+    }
+
+    q.pop_front();
+    return true;
+  }
+  return false;
+}
+
+bool NetworkThread::check_reply_queue(int src, int type, Message* data) {
+  CHECK_LT(src, kMaxHosts);
+  CHECK_LT(type, kMaxMethods);
+
+  Queue& q = replies[type][src];
   if (!q.empty()) {
     boost::recursive_mutex::scoped_lock sl(q_lock[type]);
     if (q.empty())
@@ -222,13 +258,21 @@ bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
       }
     }
   } else {
-    if (check_queue(src, type, data)) {
+    if (check_request_queue(src, type, data)) {
       if (source) { *source = src; }
       return true;
     }
   }
 
   return false;
+}
+
+void NetworkThread::Call(int dst, int method, const Message &msg, Message *reply) {
+  Send(dst, method, msg);
+  Timer t;
+  while (!check_reply_queue(dst, method, reply)) {
+    Sleep(FLAGS_sleep_time);
+  }
 }
 
   // Enqueue the given request for transmission.
@@ -265,21 +309,37 @@ void NetworkThread::Broadcast(int method, const Message& msg) {
   }
 }
 
-void NetworkThread::SyncBroadcast(int method, int reply, const Message& msg) {
+void NetworkThread::SyncBroadcast(int method, const Message& msg) {
+  DLOG(INFO) << "Sending: " << msg.ShortDebugString();
   Broadcast(method, msg);
-  WaitForSync(reply, world_->Get_size() - 1);
+  WaitForSync(method, world_->Get_size() - 1);
 }
 
-void NetworkThread::WaitForSync(int reply, int count) {
+void NetworkThread::WaitForSync(int method, int count) {
   EmptyMessage empty;
   while (count > 0) {
-    Read(MPI::ANY_SOURCE, reply, &empty, NULL);
-    --count;
+    for (int i = 0; i < world_->Get_size(); ++i) {
+      if (check_reply_queue(i, method, NULL))
+        --count;
+    }
+    Sleep(FLAGS_sleep_time);
   }
 }
 
-void NetworkThread::RegisterCallback(int message_type, boost::function<void ()> cb) {
-  callbacks_[message_type] = cb;
+void NetworkThread::_RegisterCallback(int message_type, Message *req, Message* resp, Callback cb) {
+  CallbackInfo *cbinfo = new CallbackInfo;
+
+  cbinfo->spawn_thread = false;
+  cbinfo->req = req;
+  cbinfo->resp = resp;
+  cbinfo->call = cb;
+
+  CHECK_LT(message_type, kMaxMethods) << "Message type: " << message_type << " over limit.";
+  callbacks_[message_type] =  cbinfo;
+}
+
+void NetworkThread::SpawnThreadFor(int req_type) {
+  callbacks_[req_type]->spawn_thread = true;
 }
 
 static NetworkThread* net = NULL;

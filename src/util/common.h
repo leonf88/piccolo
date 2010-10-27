@@ -12,8 +12,8 @@
 
 #include "glog/logging.h"
 #include "google/gflags.h"
+#include <google/protobuf/message.h>
 
-#include "util/common.pb.h"
 #include "util/hash.h"
 #include "util/static-initializers.h"
 #include "util/stringpiece.h"
@@ -129,7 +129,6 @@ struct Marshal<T, typename boost::enable_if<boost::is_base_of<string, T> >::type
   void marshal(const string& t, string *out) { *out = t; }
   void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
 };
-
 
 template <class T>
 struct Marshal<T, typename boost::enable_if<boost::is_base_of<google::protobuf::Message, T> >::type> {
