@@ -39,13 +39,17 @@ public:
   void CheckNetwork();
 
   // Returns true if any non-trivial operations were performed.
-  void HandleGetRequests();
-  void HandleShardAssignment();
-  void HandleIteratorRequests();
-  void HandlePutRequests();
+  void HandleGetRequest(const HashGet& get_req, TableData *get_resp, const RPCInfo& rpc);
+  void HandleSwapRequest(const SwapTable& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleClearRequest(const ClearTable& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleIteratorRequest(const IteratorRequest& iterator_req, IteratorResponse *iterator_resp, const RPCInfo& rpc);
+  void HandleShardAssignment(const ShardAssignmentRequest& req, EmptyMessage *resp, const RPCInfo& rpc);
+
+  void HandlePutRequest();
 
   // Barrier: wait until all table data is transmitted.
-  void Flush();
+  void HandleFlush(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
 
   int peer_for_shard(int table_id, int shard) const;
   int id() const { return config_.worker_id(); };
