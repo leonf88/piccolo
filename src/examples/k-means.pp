@@ -1,3 +1,5 @@
+#include "client/client.h"
+
 DEFINE_int64(num_clusters, 2, "");
 DEFINE_int64(num_points, 100, "");
 DEFINE_bool(dump_results, false, "");

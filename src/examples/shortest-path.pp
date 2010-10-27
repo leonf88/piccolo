@@ -77,6 +77,7 @@ int ShortestPath(ConfigData& conf) {
       if (d >= 1000) { d = -1; }
       fprintf(stderr, "%3d ", d);
     }
+    fprintf(stderr, "\n");
   });
   return 0;
 }

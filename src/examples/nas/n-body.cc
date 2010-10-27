@@ -140,12 +140,11 @@ struct SetAccum : public Accumulator<PosSet> {
 };
 
 static pos kZero(0, 0, 0);
+static TypedGlobalTable<pos, PosSet> *curr;
+static TypedGlobalTable<pos, PosSet> *next;
 
 class NBodyKernel : public DSMKernel {
 public:
-  TypedGlobalTable<pos, PosSet> *curr;
-  TypedGlobalTable<pos, PosSet> *next;
-
   unordered_map<pos, PosSet> cache;
   PosSet scratch;
 
@@ -156,8 +155,6 @@ public:
   }
 
   void CreatePoints() {
-    curr = this->get_table<pos, PosSet>(0);
-    next = this->get_table<pos, PosSet>(1);
     pos ul = pos::pos_for_shard(current_shard());
     
     int pid = 0;
@@ -241,11 +238,6 @@ public:
     delete it;
   }
 
-  void Swap() {
-    curr->clear(current_shard());
-    swap(curr, next);
-  }
-
   int interaction_count;
 };
 }
@@ -253,13 +245,12 @@ public:
 REGISTER_KERNEL(NBodyKernel);
 REGISTER_METHOD(NBodyKernel, CreatePoints);
 REGISTER_METHOD(NBodyKernel, Simulate);
-REGISTER_METHOD(NBodyKernel, Swap);
 
 int NBody(ConfigData& conf) {
-  CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions, 
+  curr = CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions,
               new PosSharding, new SetAccum);
   
-  CreateTable(1, kNumPartitions * kNumPartitions * kNumPartitions, 
+  next = CreateTable(1, kNumPartitions * kNumPartitions * kNumPartitions,
               new PosSharding, new SetAccum);
 
   if (!StartWorker(conf)) {
@@ -270,9 +261,9 @@ int NBody(ConfigData& conf) {
     for (; i < FLAGS_iterations; ++i) {
       LOG(INFO) << "Running iteration: " << MP(i, FLAGS_iterations);
       m.run_all("NBodyKernel", "Simulate", TableRegistry::Get()->table(0));
-      m.run_all(RunDescriptor("NBodyKernel", "Swap",
-                              TableRegistry::Get()->table(0),
-                              MakeVector(0, 1)));
+
+      curr->clear();
+      curr->swap(next);
     }
   }
 
