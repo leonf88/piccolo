@@ -20,33 +20,32 @@ using google::protobuf::Message;
 
 namespace dsm {
 
-struct PartitionInfo {
+struct FilePartition {
   File::Info info;
   uint64_t start_pos;
   uint64_t end_pos;
 };
 
 template <class K, class V>
-class DiskTable : public TypedGlobalTable<K, V> {
+class DiskTable : public GlobalTableBase {
 public:
-  DiskTable(StringPiece filepattern, uint64_t split_files_at);
+  typedef TypedTableIterator<K, V> Iterator;
 
+  DiskTable(StringPiece filepattern, uint64_t split_files_at);
   void Init(const TableDescriptor *tinfo);
 
   virtual TableIterator* get_iterator(int shard) = 0;
-  int64_t shard_size(int shard);
+  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
+    return (TypedTableIterator<K, V>*)get_iterator(shard);
+  }
 
-  // These are not currently implemented or not necessary for disk based tables.
-  int get_shard_str(StringPiece k) { return -1; }
-  void start_checkpoint(const string& f) {}
-  void write_delta(const TableData& d) {}
-  void finish_checkpoint() {}
-  void restore(const string& f) {}
+  int64_t shard_size(int shard);
+  int shard_for_key_str(const StringPiece &k) { return 0; }
 protected:
-  vector<PartitionInfo*> partitions_;
+  vector<FilePartition*> pinfo_;
 };
 
-TypedTableIterator<uint64_t, Message>* CreateRecordIterator(PartitionInfo info, Message* msg);
+TypedTableIterator<uint64_t, Message>* CreateRecordIterator(FilePartition info, Message* msg);
 
 template <class MessageClass>
 class RecordTable : public DiskTable<uint64_t, MessageClass> {
@@ -55,7 +54,7 @@ public:
   RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable<uint64_t, MessageClass>(filepattern, split_files_at) {}
 
   Iterator *get_iterator(int shard) {
-    return (Iterator*)CreateRecordIterator(*this->partitions_[shard], new MessageClass);
+    return (Iterator*)CreateRecordIterator(*this->pinfo_[shard], new MessageClass);
   }
 private:
 };
@@ -77,24 +76,24 @@ DiskTable<K, V>::DiskTable(StringPiece file_pattern, uint64_t split_files_at) {
   for (int i = 0; i < files.size(); ++i) {
     File::Info fi = files[i];
     for (uint64_t j = 0; j < fi.stat.st_size; j += split_files_at) {
-      PartitionInfo *p = new PartitionInfo();
+      FilePartition*p = new FilePartition();
       p->info = fi;
       p->start_pos = j;
       p->end_pos = min(j + split_files_at, (uint64_t)fi.stat.st_size);
-      partitions_.push_back(p);
+      pinfo_.push_back(p);
     }
   }
 }
 
 template <class K, class V>
 int64_t DiskTable<K, V>::shard_size(int shard) {
-  return partitions_[shard]->end_pos - partitions_[shard]->start_pos;
+  return pinfo_[shard]->end_pos - pinfo_[shard]->start_pos;
 }
 
 template <class K, class V>
 void DiskTable<K, V>::Init(const TableDescriptor *tinfo) {
-  ((TableDescriptor*)tinfo)->num_shards = partitions_.size();
-  GlobalTable::Init(tinfo);
+  ((TableDescriptor*)tinfo)->num_shards = pinfo_.size();
+  GlobalTableBase::Init(tinfo);
 }
 
 }

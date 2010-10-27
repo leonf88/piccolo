@@ -56,9 +56,9 @@ static TextTable* CreateTextTable(int id, StringPiece file_pattern, bool split_l
 // Swig doesn't like templatized default arguments; work around that here.
 template<class K, class V>
 static TypedGlobalTable<K, V>* CreateTable(int id,
-                                           int shards,
-                                           Sharder<K>* sharding,
-                                           Accumulator<V>* accum) {
+                                            int shards,
+                                            Sharder<K>* sharding,
+                                            Accumulator<V>* accum) {
   TableDescriptor *info = new TableDescriptor(id, shards);
   info->key_marshal = new Marshal<K>;
   info->value_marshal = new Marshal<V>;

@@ -5,7 +5,7 @@ using google::protobuf::Message;
 namespace dsm {
 
 struct RecordIterator : public TypedTableIterator<uint64_t, Message> {
-  RecordIterator(const PartitionInfo& p, Message *msg) : p_(p), r_(p.info.name, "r") {
+  RecordIterator(const FilePartition& p, Message *msg) : p_(p), r_(p.info.name, "r") {
     r_.seek(p.start_pos);
     data_ = msg;
     Next();
@@ -30,19 +30,19 @@ struct RecordIterator : public TypedTableIterator<uint64_t, Message> {
   uint64_t pos_;
   bool done_;
   Message *data_;
-  PartitionInfo p_;
+  FilePartition p_;
   RecordFile r_;
 
   Marshal<uint64_t> kmarshal_;
   Marshal<Message> vmarshal_;
 };
 
-TypedTableIterator<uint64_t, Message>* CreateRecordIterator(PartitionInfo p, Message *msg) {
+TypedTableIterator<uint64_t, Message>* CreateRecordIterator(FilePartition p, Message *msg) {
   return new RecordIterator(p, msg);
 }
 
 struct TextIterator : public TypedTableIterator<uint64_t, string> {
-  TextIterator(const PartitionInfo& p) : p_(p), f_(p.info.name, "r") {
+  TextIterator(const FilePartition& p) : p_(p), f_(p.info.name, "r") {
     f_.seek(p.start_pos);
     done_ = false;
     Next();
@@ -62,7 +62,7 @@ struct TextIterator : public TypedTableIterator<uint64_t, string> {
   bool done_;
   uint64_t pos_;
   string line_;
-  PartitionInfo p_;
+  FilePartition p_;
   LocalFile f_;
 
   Marshal<uint64_t> kmarshal_;
@@ -70,7 +70,7 @@ struct TextIterator : public TypedTableIterator<uint64_t, string> {
 };
 
 TypedTableIterator<uint64_t, string> *TextTable::get_iterator(int shard) {
-  return new TextIterator(*partitions_[shard]);
+  return new TextIterator(*pinfo_[shard]);
 }
 
 }

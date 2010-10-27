@@ -132,7 +132,7 @@ public:
 
   template <class K, class V>
   TypedGlobalTable<K, V>* get_table(int id) {
-    return (TypedGlobalTable<K, V>*)get_table(id);
+    return dynamic_cast<TypedGlobalTable<K, V>*>(get_table(id));
   }
 private:
   friend class Worker;

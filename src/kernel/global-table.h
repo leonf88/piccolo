@@ -10,6 +10,7 @@
 namespace dsm {
 
 class Worker;
+class Master;
 
 // Encodes table entries using the passed in TableData protocol buffer.
 struct ProtoTableCoder : public TableCoder {
@@ -21,71 +22,33 @@ struct ProtoTableCoder : public TableCoder {
   TableData *t_;
 };
 
-class GlobalTable :
-  public TableBase,
-  public Checkpointable {
+class GlobalTableBase :
+  virtual public GlobalTable {
 public:
-  virtual void Init(const TableDescriptor* tinfo);
-  virtual ~GlobalTable();
+  virtual ~GlobalTableBase();
 
-  struct PartitionInfo {
-    PartitionInfo() : dirty(false), tainted(false), owner(-1) {}
-    bool dirty;
-    bool tainted;
-    int owner;
-    ShardInfo sinfo;
-  };
+  void Init(const TableDescriptor *tinfo);
 
-  virtual PartitionInfo* get_partition_info(int shard) {
-    return &partinfo_[shard];
-  }
+  void UpdatePartitions(const ShardInfo& sinfo);
 
-  bool tainted(int shard) { return get_partition_info(shard)->tainted; }
-  int owner(int shard) { return get_partition_info(shard)->owner; }
-
-  LocalTable *get_partition(int shard);
   virtual TableIterator* get_iterator(int shard) = 0;
 
-  bool is_local_shard(int shard);
-  bool is_local_key(const StringPiece &k);
+  virtual bool is_local_shard(int shard);
+  virtual bool is_local_key(const StringPiece &k);
+
+  int64_t shard_size(int shard);
 
   // Fill in a response from a remote worker for the given key.
   void handle_get(const HashGet& req, TableData* resp);
 
-  // Handle updates from the master or other workers.
-  void SendUpdates();
-  void ApplyUpdates(const TableData& req);
-  void HandlePutRequests();
-  void UpdatePartitions(const ShardInfo& sinfo);
+  PartitionInfo* get_partition_info(int shard) { return &partinfo_[shard]; }
+  LocalTable* get_partition(int shard) { return partitions_[shard]; }
 
-  int pending_write_bytes();
+  bool tainted(int shard) { return get_partition_info(shard)->tainted; }
+  int owner(int shard) { return get_partition_info(shard)->sinfo.owner(); }
 
-  // Clear any local data for which this table has ownership.
-  // Updates waiting to be sent to other workers are *not* cleared.
-  void clear(int shard);
-  bool empty();
-  void resize(int64_t new_size);
-
-  virtual void start_checkpoint(const string& f);
-  virtual void write_delta(const TableData& d);
-  virtual void finish_checkpoint();
-  virtual void restore(const string& f);
-
-  virtual int64_t shard_size(int shard);
-
-  virtual int get_shard_str(StringPiece k) = 0;
 protected:
-  vector<PartitionInfo> partinfo_;
-  boost::recursive_mutex& mutex() { return m_; }
-  vector<LocalTable*> partitions_;
-  vector<LocalTable*> cache_;
-
-  volatile int pending_writes_;
-  boost::recursive_mutex m_;
-
-  friend class Worker;
-  Worker *w_;
-  int worker_id_;
+  virtual int shard_for_key_str(const StringPiece& k) = 0;
 
   void set_worker(Worker *w);
 
@@ -94,26 +57,63 @@ protected:
 
   // Fetch key k from the node owning it.  Returns true if the key exists.
   bool get_remote(int shard, const StringPiece &k, string* v);
+
+  Worker *w_;
+  int worker_id_;
+
+  vector<LocalTable*> partitions_;
+  vector<LocalTable*> cache_;
+
+  boost::recursive_mutex& mutex() { return m_; }
+  boost::recursive_mutex m_;
+
+  vector<PartitionInfo> partinfo_;
+};
+
+class MutableGlobalTableBase :
+  virtual public GlobalTableBase,
+  virtual public MutableGlobalTable,
+  virtual public Checkpointable {
+public:
+  MutableGlobalTableBase() : pending_writes_(0) {}
+
+  void SendUpdates();
+  void ApplyUpdates(const TableData& req);
+  void HandlePutRequests();
+
+  int pending_write_bytes();
+
+  void clear();
+  void resize(int64_t new_size);
+
+  void start_checkpoint(const string& f);
+  void write_delta(const TableData& d);
+  void finish_checkpoint();
+  void restore(const string& f);
+
+  void swap(GlobalTable *b);
+
+protected:
+  int64_t pending_writes_;
+  void local_swap(GlobalTable *b);
 };
 
 template <class K, class V>
 class TypedGlobalTable :
-  public GlobalTable,
+  virtual public GlobalTable,
+  public MutableGlobalTableBase,
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
   typedef TypedTableIterator<K, V> Iterator;
   virtual void Init(const TableDescriptor *tinfo) {
-    GlobalTable::Init(tinfo);
+    GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
       partitions_[i] = create_local(i);
     }
-
-    pending_writes_ = 0;
   }
 
   int get_shard(const K& k);
-  int get_shard_str(StringPiece k);
   V get_local(const K& k);
 
   // Store the given key-value pair in this hash. If 'k' has affinity for a
@@ -139,7 +139,8 @@ public:
   Marshal<V> *vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
 
 protected:
-  LocalTable* create_local(int shard);
+  int shard_for_key_str(const StringPiece& k);
+  virtual LocalTable* create_local(int shard);
 };
 
 static const int kWriteFlushCount = 1000000;
@@ -147,14 +148,13 @@ static const int kWriteFlushCount = 1000000;
 template<class K, class V>
 class RemoteIterator : public TypedTableIterator<K, V> {
 public:
-  RemoteIterator(GlobalTable *table, int shard) :
+  RemoteIterator(TypedGlobalTable<K, V> *table, int shard) :
     owner_(table), shard_(shard), done_(false) {
     request_.set_table(table->id());
     request_.set_shard(shard_);
-    int target_worker = table->get_partition_info(shard)->owner;
+    int target_worker = table->owner(shard);
 
-    NetworkThread::Get()->Send(target_worker+1, MTYPE_ITERATOR_REQ, request_);
-    NetworkThread::Get()->Read(target_worker+1, MTYPE_ITERATOR_RESP, &response_);
+    NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
 
     request_.set_id(response_.id());
   }
@@ -172,9 +172,8 @@ public:
   }
 
   void Next() {
-    int target_worker = owner_->get_partition_info(shard_)->owner;
-    NetworkThread::Get()->Send(target_worker+1, MTYPE_ITERATOR_REQ, request_);
-    NetworkThread::Get()->Read(target_worker+1, MTYPE_ITERATOR_RESP, &response_);
+    int target_worker = dynamic_cast<GlobalTable*>(owner_)->owner(shard_);
+    NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
     ++index_;
   }
 
@@ -189,7 +188,7 @@ public:
   }
 
 private:
-  GlobalTable* owner_;
+  TableBase* owner_;
   IteratorRequest request_;
   IteratorResponse response_;
   int id_;
@@ -215,7 +214,7 @@ int TypedGlobalTable<K, V>::get_shard(const K& k) {
 }
 
 template<class K, class V>
-int TypedGlobalTable<K, V>::get_shard_str(StringPiece k) {
+int TypedGlobalTable<K, V>::shard_for_key_str(const StringPiece& k) {
   return get_shard(unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k));
 }
 
