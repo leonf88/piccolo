@@ -6,40 +6,36 @@ static const int kMaxNetworkChunk = 1 << 20;
 
 namespace dsm {
 
-void GlobalTable::UpdatePartitions(const ShardInfo& info) {
+void GlobalTableBase::UpdatePartitions(const ShardInfo& info) {
   partinfo_[info.shard()].sinfo.CopyFrom(info);
 }
 
-GlobalTable::~GlobalTable() {
+GlobalTableBase::~GlobalTableBase() {
   for (int i = 0; i < partitions_.size(); ++i) {
     delete partitions_[i];
   }
 }
 
-LocalTable *GlobalTable::get_partition(int shard) {
-  return partitions_[shard];
-}
-
-TableIterator* GlobalTable::get_iterator(int shard) {
+TableIterator* GlobalTableBase::get_iterator(int shard) {
   return partitions_[shard]->get_iterator();
 }
 
-bool GlobalTable::is_local_shard(int shard) {
+bool GlobalTableBase::is_local_shard(int shard) {
   return owner(shard) == worker_id_;
 }
 
-bool GlobalTable::is_local_key(const StringPiece &k) {
-  return is_local_shard(get_shard_str(k));
+bool GlobalTableBase::is_local_key(const StringPiece &k) {
+  return is_local_shard(shard_for_key_str(k));
 }
 
-void GlobalTable::Init(const dsm::TableDescriptor *info) {
+void GlobalTableBase::Init(const TableDescriptor *info) {
   TableBase::Init(info);
   worker_id_ = -1;
   partitions_.resize(info->num_shards);
   partinfo_.resize(info->num_shards);
 }
 
-int64_t GlobalTable::shard_size(int shard) {
+int64_t GlobalTableBase::shard_size(int shard) {
   if (is_local_shard(shard)) {
     return partitions_[shard]->size();
   } else {
@@ -47,24 +43,7 @@ int64_t GlobalTable::shard_size(int shard) {
   }
 }
 
-void GlobalTable::clear(int shard) {
-  if (is_local_shard(shard)) {
-    partitions_[shard]->clear();
-  } else {
-    LOG(FATAL) << "Tried to clear a non-local shard - this is not supported.";
-  }
-}
-
-bool GlobalTable::empty() {
-  for (int i = 0; i < partitions_.size(); ++i) {
-    if (is_local_shard(i) && !partitions_[i]->empty()) {
-      return false;
-    }
-  }
-  return true;
-}
-
-void GlobalTable::resize(int64_t new_size) {
+void MutableGlobalTableBase::resize(int64_t new_size) {
   for (int i = 0; i < partitions_.size(); ++i) {
     if (is_local_shard(i)) {
       partitions_[i]->resize(new_size / partitions_.size());
@@ -72,12 +51,12 @@ void GlobalTable::resize(int64_t new_size) {
   }
 }
 
-void GlobalTable::set_worker(Worker* w) {
+void GlobalTableBase::set_worker(Worker* w) {
   w_ = w;
   worker_id_ = w->id();
 }
 
-bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
+bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   HashGet req;
   TableData resp;
 
@@ -91,8 +70,7 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
 
   VLOG(2) << "Sending get request to: " << MP(peer, shard);
-  NetworkThread::Get()->Send(peer + 1, MTYPE_GET_REQUEST, req);
-  NetworkThread::Get()->Read(peer + 1, MTYPE_GET_RESPONSE, &resp);
+  NetworkThread::Get()->Call(peer + 1, MTYPE_GET, req, &resp);
 
   if (resp.missing_key()) {
     return false;
@@ -102,7 +80,27 @@ bool GlobalTable::get_remote(int shard, const StringPiece& k, string* v) {
   return true;
 }
 
-void GlobalTable::start_checkpoint(const string& f) {
+void MutableGlobalTableBase::swap(GlobalTable *b) {
+  SwapTable req;
+
+  req.set_table_a(this->id());
+  req.set_table_b(b->id());
+  VLOG(2) << StringPrintf("Sending swap request (%d <--> %d)", req.table_a(), req.table_b());
+
+  NetworkThread::Get()->SyncBroadcast(MTYPE_SWAP_TABLE, req);
+}
+
+void MutableGlobalTableBase::clear() {
+  ClearTable req;
+
+  req.set_table(this->id());
+  VLOG(2) << StringPrintf("Sending clear request (%d)", req.table());
+
+  NetworkThread::Get()->SyncBroadcast(MTYPE_CLEAR_TABLE, req);
+}
+
+
+void MutableGlobalTableBase::start_checkpoint(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
@@ -112,7 +110,7 @@ void GlobalTable::start_checkpoint(const string& f) {
   }
 }
 
-void GlobalTable::write_delta(const TableData& d) {
+void MutableGlobalTableBase::write_delta(const TableData& d) {
   if (!is_local_shard(d.shard())) {
     LOG_EVERY_N(INFO, 1000) << "Ignoring delta write for forwarded data";
     return;
@@ -121,7 +119,7 @@ void GlobalTable::write_delta(const TableData& d) {
   partitions_[d.shard()]->write_delta(d);
 }
 
-void GlobalTable::finish_checkpoint() {
+void MutableGlobalTableBase::finish_checkpoint() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
@@ -131,7 +129,7 @@ void GlobalTable::finish_checkpoint() {
   }
 }
 
-void GlobalTable::restore(const string& f) {
+void MutableGlobalTableBase::restore(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
@@ -143,7 +141,7 @@ void GlobalTable::restore(const string& f) {
   }
 }
 
-void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
+void GlobalTableBase::handle_get(const HashGet& get_req, TableData *get_resp) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
   int shard = get_req.shard();
@@ -151,7 +149,7 @@ void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
     LOG_EVERY_N(WARNING, 1000) << "Not local for shard: " << shard;
   }
 
-  UntypedTable *t = (UntypedTable*)partitions_[shard];
+  UntypedTable *t = dynamic_cast<UntypedTable*>(partitions_[shard]);
   if (!t->contains_str(get_req.key())) {
     get_resp->set_missing_key(true);
   } else {
@@ -161,8 +159,8 @@ void GlobalTable::handle_get(const HashGet& get_req, TableData *get_resp) {
   }
 }
 
-void GlobalTable::HandlePutRequests() {
-  w_->HandlePutRequests();
+void MutableGlobalTableBase::HandlePutRequests() {
+  w_->HandlePutRequest();
 }
 
 ProtoTableCoder::ProtoTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
@@ -184,7 +182,7 @@ void ProtoTableCoder::WriteEntry(StringPiece k, StringPiece v) {
   a->set_value(v.data, v.len);
 }
 
-void GlobalTable::SendUpdates() {
+void MutableGlobalTableBase::SendUpdates() {
   TableData put;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
@@ -218,7 +216,7 @@ void GlobalTable::SendUpdates() {
   pending_writes_ = 0;
 }
 
-int GlobalTable::pending_write_bytes() {
+int MutableGlobalTableBase::pending_write_bytes() {
   int64_t s = 0;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
@@ -230,7 +228,7 @@ int GlobalTable::pending_write_bytes() {
   return s;
 }
 
-void GlobalTable::ApplyUpdates(const dsm::TableData& req) {
+void MutableGlobalTableBase::ApplyUpdates(const dsm::TableData& req) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
   if (!is_local_shard(req.shard())) {
@@ -243,11 +241,21 @@ void GlobalTable::ApplyUpdates(const dsm::TableData& req) {
   partitions_[req.shard()]->ApplyUpdates(&c);
 }
 
-void GlobalTable::get_local(const StringPiece &k, string* v) {
-  int shard = get_shard_str(k);
+void GlobalTableBase::get_local(const StringPiece &k, string* v) {
+  int shard = shard_for_key_str(k);
   CHECK(is_local_shard(shard));
 
   UntypedTable *h = (UntypedTable*)partitions_[shard];
   v->assign(h->get_str(k));
+}
+
+void MutableGlobalTableBase::local_swap(GlobalTable *b) {
+  CHECK(this != b);
+
+  MutableGlobalTableBase *mb = dynamic_cast<MutableGlobalTableBase*>(b);
+  std::swap(partinfo_, mb->partinfo_);
+  std::swap(partitions_, mb->partitions_);
+  std::swap(cache_, mb->cache_);
+  std::swap(pending_writes_, mb->pending_writes_);
 }
 }

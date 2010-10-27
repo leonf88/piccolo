@@ -82,9 +82,16 @@ public:
 
 class TableIterator;
 
+class Table {
+public:
+  virtual const TableDescriptor& info() const = 0;
+  virtual int id() const = 0;
+  virtual int num_shards() const = 0;
+};
+
 // Methods common to both global and local table views.
-class TableBase {
-  public:
+class TableBase : virtual public Table {
+public:
   typedef TableIterator Iterator;
   virtual void Init(const TableDescriptor* info) {
     info_ = new TableDescriptor(*info);
@@ -94,7 +101,6 @@ class TableBase {
   }
 
   const TableDescriptor& info() const { return *info_; }
-
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
 
@@ -111,7 +117,7 @@ public:
 
 // Key/value typed interface.
 template <class K, class V>
-class TypedTable : public UntypedTable {
+class TypedTable : virtual public UntypedTable {
 public:
   virtual bool contains(const K &k) = 0;
   virtual V get(const K &k) = 0;
@@ -171,6 +177,64 @@ protected:
     static Marshal<V> m;
     return &m;
   }
+};
+
+// Global table interfaces
+
+class Worker;
+class Master;
+class LocalTable;
+
+struct PartitionInfo {
+  PartitionInfo() : dirty(false), tainted(false) {}
+  bool dirty;
+  bool tainted;
+  ShardInfo sinfo;
+};
+
+class GlobalTable :
+  virtual public TableBase {
+public:
+  virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
+  virtual TableIterator* get_iterator(int shard) = 0;
+
+  virtual bool is_local_shard(int shard) = 0;
+  virtual bool is_local_key(const StringPiece &k) = 0;
+
+  virtual PartitionInfo* get_partition_info(int shard) = 0;
+  virtual LocalTable* get_partition(int shard) = 0;
+
+  virtual bool tainted(int shard) = 0;
+  virtual int owner(int shard) = 0;
+protected:
+  friend class Worker;
+  friend class Master;
+
+  virtual void set_worker(Worker *w) = 0;
+
+  // Fill in a response from a remote worker for the given key.
+  virtual void handle_get(const HashGet& req, TableData* resp) = 0;
+  virtual int64_t shard_size(int shard) = 0;
+};
+
+class MutableGlobalTable :
+  virtual public GlobalTable {
+public:
+  // Handle updates from the master or other workers.
+  virtual void SendUpdates() = 0;
+  virtual void ApplyUpdates(const TableData& req) = 0;
+  virtual void HandlePutRequests() = 0;
+
+  virtual int pending_write_bytes() = 0;
+
+  virtual void clear() = 0;
+  virtual void resize(int64_t new_size) = 0;
+
+  // Exchange the content of this table with that of table 'b'.
+  virtual void swap(GlobalTable *b) = 0;
+protected:
+  friend class Worker;
+  virtual void local_swap(GlobalTable *b) = 0;
 };
 
 

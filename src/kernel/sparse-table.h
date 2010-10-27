@@ -188,7 +188,7 @@ bool SparseTable<K, V>::contains(const K& k) {
 template <class K, class V>
 V SparseTable<K, V>::get(const K& k) {
   int b = bucket_for_key(k);
-  CHECK_NE(b, -1) << "No entry for requested key: " << k;
+  CHECK_NE(b, -1) << "No entry for requested key";
 
   return buckets_[b].v;
 }
