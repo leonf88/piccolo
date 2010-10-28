@@ -1,5 +1,6 @@
 #include "examples.h"
 #include <SDL/SDL.h>
+#include <libgen.h>
 
 using namespace dsm;
 
@@ -81,13 +82,14 @@ public:
     int frame = get_arg<int>("frame");
     Timer t;
 
-    string cmd = StringPrintf("povray +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFI1 +KFF%d +W%d +H%d %s 2>/dev/null",
+    const char* libdir = dirname(strdup(FLAGS_source.c_str()));
+
+    string cmd = StringPrintf("povray +O- -D +FP24 +SC%d +EC%d +SR%d +ER%d  +Q8 +SF%d +EF%d +KFI1 +KFF%d +W%d +H%d +L%s %s 2>/dev/null",
                               c, min(c + FLAGS_block_size, FLAGS_width),
                               r, min(r + FLAGS_block_size, FLAGS_height),
                               frame, frame, FLAGS_frames,
                               FLAGS_width, FLAGS_height,
-                              FLAGS_source.c_str(),
-                              current_shard());
+                              libdir, FLAGS_source.c_str());
 
     FILE *f = popen(cmd.c_str(), "r");
 
@@ -145,16 +147,18 @@ static int RayTrace(ConfigData &conf) {
   geom = CreateTable(1, shards, new Sharding::Mod, new Accumulators<int>::Replace);
 
   MarshalledMap args;
-  if (!StartWorker(conf)) {
-    Master m(conf);
-    for (int i = 1; i <= FLAGS_frames; ++i) {
-      args.put<int>("frame", i);
-      RunDescriptor r("RayTraceKernel", "TraceFrame",  geom);
-      r.params = args;
-      m.run_all(r);
+  StartWorker(conf);
 
-      m.run_one("RayTraceKernel", "DrawFrame",  pixels);
-    }
+  CHECK_NE(FLAGS_source.empty(), true);
+
+  Master m(conf);
+  for (int i = 1; i <= FLAGS_frames; ++i) {
+    args.put<int>("frame", i);
+    RunDescriptor r("RayTraceKernel", "TraceFrame",  geom);
+    r.params = args;
+    m.run_all(r);
+
+    m.run_one("RayTraceKernel", "DrawFrame",  pixels);
   }
   return 0;
 }
