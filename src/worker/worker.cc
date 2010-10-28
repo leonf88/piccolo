@@ -412,7 +412,7 @@ void Worker::HandleIteratorRequest(const IteratorRequest& iterator_req, Iterator
 }
 
 void Worker::HandleShardAssignment(const ShardAssignmentRequest& shard_req, EmptyMessage *resp, const RPCInfo& rpc) {
-  LOG(INFO) << "Shard assignment: " << shard_req.DebugString();
+//  LOG(INFO) << "Shard assignment: " << shard_req.DebugString();
   for (int i = 0; i < shard_req.assign_size(); ++i) {
     const ShardAssignment &a = shard_req.assign(i);
     GlobalTable *t = TableRegistry::Get()->table(a.table());
