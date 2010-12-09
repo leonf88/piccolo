@@ -68,6 +68,13 @@ protected:
   boost::recursive_mutex m_;
 
   vector<PartitionInfo> partinfo_;
+
+  struct CacheEntry {
+    double last_read_time;
+    string value;
+  };
+
+  unordered_map<StringPiece, CacheEntry> remote_cache_;
 };
 
 class MutableGlobalTableBase :

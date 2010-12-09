@@ -159,6 +159,7 @@ void SparseTable<K, V>::ApplyUpdates(TableCoder *in) {
 
 template <class K, class V>
 void SparseTable<K, V>::resize(int64_t size) {
+  CHECK_GT(size, 0);
   if (size_ == size)
     return;
 

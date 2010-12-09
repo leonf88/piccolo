@@ -57,6 +57,19 @@ void GlobalTableBase::set_worker(Worker* w) {
 }
 
 bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
+  {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+    if (remote_cache_.find(k) != remote_cache_.end()) {
+      CacheEntry& c = remote_cache_[k];
+      if ((Now() - c.last_read_time) < info().max_stale_time) {
+        *v = c.value;
+        return true;
+      } else {
+        remote_cache_.erase(k);
+      }
+    }
+  }
+
   HashGet req;
   TableData resp;
 
@@ -77,6 +90,12 @@ bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   }
 
   *v = resp.kv_data(0).value();
+
+  if (info().max_stale_time > 0) {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+    CacheEntry c = { Now(), *v };
+    remote_cache_[k] = c;
+  }
   return true;
 }
 
