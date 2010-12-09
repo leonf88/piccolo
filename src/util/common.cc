@@ -32,7 +32,7 @@ DEFINE_bool(dump_stacktrace, true, "");
 DEFINE_bool(localtest, false, "");
 DEFINE_bool(run_tests, false, "");
 
-DEFINE_string(hostfile, "conf/mpi-beakers", "");
+DEFINE_string(hostfile, "conf/mpi-cluster", "");
 DEFINE_int32(workers, 2, "");
 
 namespace dsm {
