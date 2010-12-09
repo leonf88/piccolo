@@ -28,10 +28,12 @@ release: bin/release/Makefile
 debug: bin/debug/Makefile
 	@cd bin/debug  && $(MAKE) 
 
+docs:
+	@cd docs/ && $(MAKE)
+
 clean:
 	rm -rf bin/*
 
 .DEFAULT: bin/debug/Makefile bin/release/Makefile
 	@cd bin/release && $(MAKE) $@
 	@cd bin/debug && $(MAKE) $@
-	

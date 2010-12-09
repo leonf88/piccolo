@@ -14,10 +14,10 @@ piccolo_pp(k-means.pp
 add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
 
 add_library(example 
-			matmul.pp.cc             
+	    matmul.pp.cc             
             k-means.pp.cc
             shortest-path.pp.cc
-	        pagerank.pp.cc
+	    pagerank.pp.cc
             test-tables.cc
             wordcount.pp.cc
             raytrace.pp.cc
