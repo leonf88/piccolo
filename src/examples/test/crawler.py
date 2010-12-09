@@ -8,7 +8,7 @@ for n in [2]:#runutil.parallelism:
   os.system('rm logs.%d/*' % n)
   cmd = ' '.join(['mpirun',
                   '-bynode',
- #                 '-hostfile conf/mpi-beakers',
+                  '-hostfile conf/mpi-cluster',
 #                  '-nooversubscribe',
                   '-n %d' % (1 + n),
                   'python src/examples/crawler/crawler.py',
