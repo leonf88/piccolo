@@ -163,7 +163,7 @@ void NetworkThread::Run() {
         if (callbacks_[tag] != NULL) {
           CallbackInfo *ci = callbacks_[tag];
           ci->req->ParseFromArray(&data[0] + sizeof(Header), data.size() - sizeof(Header));
-          DLOG(INFO) << "Got incoming: " << ci->req->ShortDebugString();
+          VLOG(2) << "Got incoming: " << ci->req->ShortDebugString();
 
           RPCInfo rpc = { source, id(), tag };
           if (ci->spawn_thread) {
@@ -310,7 +310,7 @@ void NetworkThread::Broadcast(int method, const Message& msg) {
 }
 
 void NetworkThread::SyncBroadcast(int method, const Message& msg) {
-  DLOG(INFO) << "Sending: " << msg.ShortDebugString();
+  VLOG(2) << "Sending: " << msg.ShortDebugString();
   Broadcast(method, msg);
   WaitForSync(method, world_->Get_size() - 1);
 }

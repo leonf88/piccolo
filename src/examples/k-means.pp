@@ -36,20 +36,20 @@ static int KMeans(ConfigData& conf) {
   points = CreateTable(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);
   actual = CreateTable(2, num_shards, new Sharding::Mod, new Accumulators<Cluster>::Replace);
   
+  clusters->mutable_info().max_stale_time = 10.;
+
   if (!StartWorker(conf)) {
     Master m(conf);
     if (!m.restore()) {
-      m.run_one("KMeansKernel", "initialize_dists",  points);
+      // Initialize the cluster centers that we are attempting to find, and
+      // our initial guesses.
+      PRunOne(clusters, {
+        for (int i = 0; i < FLAGS_num_clusters; ++i) {
+          actual->update(i, random_cluster());
+          clusters->update(i, random_cluster());
+        }
+      });
     }
-
-    // Initialize the cluster centers that we are attempting to find, and 
-    // our initial guesses.
-    PRunOne(clusters, {
-      for (int i = 0; i < FLAGS_num_clusters; ++i) {
-        actual->update(i, random_cluster());
-        clusters->update(i, random_cluster());
-      }
-    });
 
     // Initialize points: points are created in a small cloud around each cluster center.
     PRunAll(points, {

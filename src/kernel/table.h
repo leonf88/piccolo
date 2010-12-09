@@ -56,6 +56,7 @@ public:
     table_id = id;
     num_shards = shards;
     block_size = 500;
+    max_stale_time = 0.;
   }
 
   TableDescriptor(const TableDescriptor& t) {
@@ -75,9 +76,12 @@ public:
   void *value_marshal;
   TableFactory *partition_factory;
 
-  // for dense tables
+  // For dense tables
   int block_size;
   void *block_info;
+
+  // For global tables, the maximum amount of time to cache remote values
+  double max_stale_time;
 };
 
 class TableIterator;
@@ -85,6 +89,7 @@ class TableIterator;
 class Table {
 public:
   virtual const TableDescriptor& info() const = 0;
+  virtual TableDescriptor& mutable_info() = 0;
   virtual int id() const = 0;
   virtual int num_shards() const = 0;
 };
@@ -101,6 +106,7 @@ public:
   }
 
   const TableDescriptor& info() const { return *info_; }
+  TableDescriptor& mutable_info() { return *info_; }
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
 
