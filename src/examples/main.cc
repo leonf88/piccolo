@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 //  LOG(INFO) << "Running: " << FLAGS_runner;
   CHECK_NE(FLAGS_runner, "");
   RunnerRegistry::KernelRunner k = RunnerRegistry::Get()->runner(FLAGS_runner);
-  CHECK(k != NULL);
+  CHECK(k != NULL) << "Could not find kernel runner " << FLAGS_runner;
   k(conf);
   LOG(INFO) << "Exiting.";
 }

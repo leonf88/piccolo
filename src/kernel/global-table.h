@@ -7,6 +7,10 @@
 #include "util/file.h"
 #include "util/rpc.h"
 
+#include <queue>
+
+#define FETCH_NUM 3
+
 namespace dsm {
 
 class Worker;
@@ -159,7 +163,11 @@ public:
     owner_(table), shard_(shard), done_(false) {
     request_.set_table(table->id());
     request_.set_shard(shard_);
+    request_.set_row_count(FETCH_NUM);
     int target_worker = table->owner(shard);
+
+    // << CRM 2011-01-18 >>
+    while (!cached_results.empty()) cached_results.pop();
 
     NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
 
@@ -167,11 +175,13 @@ public:
   }
 
   void key_str(string *out) {
-    *out = response_.key();
+    *out = cached_results.front().first;
+//    *out = response_.key();
   }
 
   void value_str(string *out) {
-    *out = response_.value();
+    *out = cached_results.front().second;
+//    *out = response_.value();
   }
 
   bool done() {
@@ -180,17 +190,28 @@ public:
 
   void Next() {
     int target_worker = dynamic_cast<GlobalTable*>(owner_)->owner(shard_);
-    NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
+    if (!cached_results.empty()) cached_results.pop();
+    if (cached_results.empty()) {
+      NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
+      for(int i=1; i<=response_.row_count(); i++) {
+        std::pair<std::string, std::string> row;
+        row.first = response_.key(i-1);
+        row.second = response_.value(i-1);
+        cached_results.push(row);
+      }
+    } else printf("using cache!\n");
     ++index_;
   }
 
   const K& key() {
-    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
+//    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
+    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(cached_results.front().first, &key_);
     return key_;
   }
 
   V& value() {
-    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
+//    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
+    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(cached_results.front().second, &value_);
     return value_;
   }
 
@@ -205,6 +226,9 @@ private:
   K key_;
   V value_;
   bool done_;
+
+  // << CRM 2011-01-18 >>
+  std::queue<std::pair<std::string, std::string> > cached_results;
 };
 
 
