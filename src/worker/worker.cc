@@ -404,10 +404,19 @@ void Worker::HandleIteratorRequest(const IteratorRequest& iterator_req, Iterator
     it->Next();
   }
 
-  iterator_resp->set_done(it->done());
-  if (!it->done()) {
-    it->key_str(iterator_resp->mutable_key());
-    it->value_str(iterator_resp->mutable_value());
+  iterator_resp->set_row_count(0);
+  for(int i=1; i<=iterator_req.row_count(); i++) {
+    iterator_resp->set_done(it->done());
+    if (!it->done()) {
+      std::string* respkey = iterator_resp->add_key();
+      it->key_str(respkey);
+      std::string* respvalue = iterator_resp->add_value();
+      it->value_str(respvalue);
+      iterator_resp->set_row_count(i);
+
+      if (i<iterator_req.row_count())
+        it->Next ();
+    }
   }
 }
 
