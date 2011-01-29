@@ -19,6 +19,7 @@ add_library(example
             shortest-path.pp.cc
 	    pagerank.pp.cc
             test-tables.cc
+            test-tables2.cc
             wordcount.pp.cc
             raytrace.pp.cc
             facedet/cpp/pgmimage.c
