@@ -69,7 +69,7 @@ struct TextIterator : public TypedTableIterator<uint64_t, string> {
   Marshal<string> vmarshal_;
 };
 
-TypedTableIterator<uint64_t, string> *TextTable::get_iterator(int shard) {
+TypedTableIterator<uint64_t, string> *TextTable::get_iterator(int shard,unsigned int fetch_num) {
   return new TextIterator(*pinfo_[shard]);
 }
 

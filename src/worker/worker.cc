@@ -405,6 +405,8 @@ void Worker::HandleIteratorRequest(const IteratorRequest& iterator_req, Iterator
   }
 
   iterator_resp->set_row_count(0);
+  iterator_resp->clear_key();
+  iterator_resp->clear_value();
   for(int i=1; i<=iterator_req.row_count(); i++) {
     iterator_resp->set_done(it->done());
     if (!it->done()) {
@@ -413,11 +415,13 @@ void Worker::HandleIteratorRequest(const IteratorRequest& iterator_req, Iterator
       std::string* respvalue = iterator_resp->add_value();
       it->value_str(respvalue);
       iterator_resp->set_row_count(i);
-
       if (i<iterator_req.row_count())
         it->Next ();
-    }
+    } else break;
   }
+  VLOG(2) << "[PREFETCH] Returning " << iterator_resp->row_count()
+	<< " rows in response to request for " << iterator_req.row_count() 
+    << " rows in table " << table << ", shard " << shard << endl;
 }
 
 void Worker::HandleShardAssignment(const ShardAssignmentRequest& shard_req, EmptyMessage *resp, const RPCInfo& rpc) {

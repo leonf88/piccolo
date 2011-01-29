@@ -18,8 +18,8 @@ using namespace std;
 static int NUM_WORKERS = 2;
 
 DEFINE_string(infopn, "trainpn_random.info", "File containing list of training images");
-DEFINE_string(netname, "/home/kerm/piccolo/src/examples/facedet/netsave.net", "Filename of neural network save file");
-DEFINE_string(pathpn, "/home/kerm/piccolo/src/examples/facedet/trainset/", "Path to training data");
+DEFINE_string(netname, "/home/kerm/piccolo.hg/src/examples/facedet/netsave.net", "Filename of neural network save file");
+DEFINE_string(pathpn, "/home/kerm/piccolo.hg/src/examples/facedet/trainset/", "Path to training data");
 DEFINE_int32(epochs, 100, "Number of training epochs");
 DEFINE_int32(hidden_neurons, 16, "Number of hidden heurons");
 DEFINE_int32(savedelta, 100, "Save net every (savedelta) epochs");
@@ -44,6 +44,7 @@ namespace dsm {
 	template <> struct Marshal<IMAGE> {
 		static void marshal(const IMAGE& t, string *out) {
 			char sizes[4];
+			out->clear();
 			sizes[0] = (char)((t.rows)/256);
 			sizes[1] = (char)((t.rows)%256);
 			sizes[2] = (char)((t.cols)/256);
@@ -53,6 +54,7 @@ namespace dsm {
 			sizes[0] = (char)(((strlen(t.name))>256)?256:(strlen(t.name)));
 			out->append(sizes,1);
 			out->append((char*)(t.name),(int)sizes[0]);
+			LOG(ERROR) << "Marshalled image " << t.name << " to string of size " << out->length() << endl;
 		}
 		static void unmarshal(const StringPiece &s, IMAGE* t) {
 			int r,c,sl;
@@ -72,6 +74,7 @@ namespace dsm {
 			}
 			strncpy(t->name,s.data+5+sizeof(int)*r*c,sl);
 			t->name[sl] = '\0';
+			LOG(ERROR) << "Unmarshalled image " << t->name << " from string" << endl;
 		}
 	};
 }
@@ -112,13 +115,14 @@ class FCKernel : public DSMKernel {
 			netname = FLAGS_netname;
 			pathpn = FLAGS_pathpn;
 			infopn = FLAGS_infopn;
+			fprintf(stdout,"Initialize kernel invoked.\n");
 
 			/*** Create imagelists ***/
 			trainlist = imgl_alloc();
 
 			/*** Don't try to train if there's no training data ***/
 			if (infopn.length() == 0 || pathpn.length() == 0) {
-				printf("FaceClass: Must specify path and filename of training data\n");
+				fprintf(stderr,"FaceClass: Must specify path and filename of training data\n");
 				exit(-1);
 			}
 
@@ -127,7 +131,7 @@ class FCKernel : public DSMKernel {
 
 			/*** If we haven't specified a network save file, we should... ***/
 			if (netname.length() == 0) {
-				printf("Faceclass: Must specify an output file\n");
+				fprintf(stderr,"Faceclass: Must specify an output file\n");
 				exit(-1);
 			}
 
@@ -135,19 +139,27 @@ class FCKernel : public DSMKernel {
 			bpnn.bpnn_initialize(seed);
 
 			/*** Show number of images in train, test1, test2 ***/
-			printf("%d images in training set\n", trainlist->n);
+			fprintf(stdout,"%d images in training set\n", trainlist->n);
 
 			/*** If we've got at least one image to train on, go train the net ***/
 			train_n = trainlist->n;
 			if (train_n <= 0) {
-				printf("FaceClass: Must have at least one image to train from\n");
+				fprintf(stderr,"FaceClass: Must have at least one image to train from\n");
 				exit(-1);
 			}
 
 			/*** Turn the IMAGELIST into a database of images, ie,  TypedGlobalTable<int, IMAGE>* train_ims ***/
-
+			train_ims->resize(trainlist->n);
+			//std::string test;
+			//dsm::Marshal<IMAGE> mar;
 			for(i=0;i<trainlist->n;i++) {
+				//mar.marshal(*(trainlist->list[i]),&test);
+				//fprintf(stdout,"Will marshall %d (%s) to %s\n",i,(trainlist->list[i])->name,test.c_str());
 				train_ims->update(i,*(trainlist->list[i]));
+				if (!train_ims->contains(i)) {
+					fprintf(stderr,"[Insert] Did not find key %d just inserted!\n",i);
+					exit(-1);
+				}
 			}
 
 			/*** If requested, grab all the images out again and make sure they're correct ***/
@@ -158,15 +170,16 @@ class FCKernel : public DSMKernel {
 					if (testim.rows == (trainlist->list[i])->rows &&
 							testim.cols == (trainlist->list[i])->cols) {
 						if (!strcmp(testim.name,(trainlist->list[i])->name)) {
-							bool immatch = true;
+							int immatch = 0;
 							for(j=0;j<(testim.rows*testim.cols);j++) {
 								if (testim.data[j] != (trainlist->list[i])->data[j]) {
-									immatch = false;
+									immatch++;
 									break;
 								}
 							}
-							if (!immatch) {
-								fprintf(stderr,"[Verify] Image %d did not match image data in DB\n",i);
+							if (immatch) {
+								fprintf(stderr,"[Verify] Image %d did not match image data in DB (%d/%d pixels mismatched)\n",
+									i,immatch,(testim.rows*testim.cols));
 							} else {
 								goodims++;
 							}
@@ -174,7 +187,13 @@ class FCKernel : public DSMKernel {
 							fprintf(stderr,"[Verify] Image %d did not match image name in DB\n",i);
 						}
 					} else {
-						fprintf(stderr,"[Verify] Image %d has incorrect dimensions in DB\n",i);
+						if (train_ims->contains(i)) {
+							fprintf(stderr,"[Verify] Image %d has incorrect dimensions in DB (got %dx%d, expected %dx%d)\n",
+								i,testim.cols,testim.rows,
+								(trainlist->list[i])->cols,(trainlist->list[i])->rows);
+						} else {
+							fprintf(stderr,"[Verify] Image key %d not found in DB!\n",i);
+						}
 					}
 				}
 				printf("[Verify] %d of %d images matched correctly in the DB\n",goodims,trainlist->n);
@@ -389,11 +408,10 @@ int Faceclass(ConfigData& conf) {
 	StartWorker(conf);
 	Master m(conf);
 
-
 	NUM_WORKERS = conf.num_workers();
 	printf("---- Initializing FaceClass on %d workers ----\n",NUM_WORKERS);
 
-	//m.run_all("FCKernel","InitKernel");
+	//m.run_all("FCKernel","InitKernel",train_ims);
 	m.run_one("FCKernel","Initialize",nn_weights);
 
 	if (FLAGS_epochs > 0) {

@@ -16,7 +16,7 @@ GlobalTableBase::~GlobalTableBase() {
   }
 }
 
-TableIterator* GlobalTableBase::get_iterator(int shard) {
+TableIterator* GlobalTableBase::get_iterator(int shard, unsigned int fetch_num) {
   return partitions_[shard]->get_iterator();
 }
 

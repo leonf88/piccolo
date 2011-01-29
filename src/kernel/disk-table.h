@@ -34,7 +34,7 @@ public:
   DiskTable(StringPiece filepattern, uint64_t split_files_at);
   void Init(const TableDescriptor *tinfo);
 
-  virtual TableIterator* get_iterator(int shard) = 0;
+  virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
   virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
     return (TypedTableIterator<K, V>*)get_iterator(shard);
   }
@@ -53,7 +53,7 @@ public:
   typedef TypedTableIterator<uint64_t, MessageClass> Iterator;
   RecordTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable<uint64_t, MessageClass>(filepattern, split_files_at) {}
 
-  Iterator *get_iterator(int shard) {
+  Iterator *get_iterator(int shard, unsigned int fetch_num) {
     return (Iterator*)CreateRecordIterator(*this->pinfo_[shard], new MessageClass);
   }
 private:
@@ -64,7 +64,7 @@ public:
   typedef TypedTableIterator<uint64_t, string> Iterator;
 
   TextTable(StringPiece filepattern, uint64_t split_files_at=0) : DiskTable<uint64_t, string>(filepattern, split_files_at) {}
-  TypedTableIterator<uint64_t, string> *get_iterator(int shard);
+  TypedTableIterator<uint64_t, string> *get_iterator(int shard, unsigned int fetch_num = FETCH_NUM);
 };
 
 

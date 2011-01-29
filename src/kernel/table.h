@@ -1,6 +1,8 @@
 #ifndef ACCUMULATOR_H
 #define ACCUMULATOR_H
 
+#define FETCH_NUM 2048
+
 #include "util/common.h"
 #include "util/file.h"
 #include "worker/worker.pb.h"
@@ -202,7 +204,7 @@ class GlobalTable :
   virtual public TableBase {
 public:
   virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
-  virtual TableIterator* get_iterator(int shard) = 0;
+  virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
 
   virtual bool is_local_shard(int shard) = 0;
   virtual bool is_local_key(const StringPiece &k) = 0;

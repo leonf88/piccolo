@@ -9,8 +9,6 @@
 
 #include <queue>
 
-#define FETCH_NUM 3
-
 namespace dsm {
 
 class Worker;
@@ -35,7 +33,7 @@ public:
 
   void UpdatePartitions(const ShardInfo& sinfo);
 
-  virtual TableIterator* get_iterator(int shard) = 0;
+  virtual TableIterator* get_iterator(int shard, unsigned int fetch_num = FETCH_NUM) = 0;
 
   virtual bool is_local_shard(int shard);
   virtual bool is_local_key(const StringPiece &k);
@@ -137,13 +135,13 @@ public:
   V get(const K &k);
   bool contains(const K &k);
   void remove(const K &k);
-  TableIterator* get_iterator(int shard);
+  TableIterator* get_iterator(int shard, unsigned int fetch_num = FETCH_NUM);
   TypedTable<K, V>* partition(int idx) {
     return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]);
   }
 
-  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
-    return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard));
+  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard,unsigned int fetch_num = FETCH_NUM) {
+    return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard,fetch_num));
   }
 
   Marshal<K> *kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
@@ -159,17 +157,23 @@ static const int kWriteFlushCount = 1000000;
 template<class K, class V>
 class RemoteIterator : public TypedTableIterator<K, V> {
 public:
-  RemoteIterator(TypedGlobalTable<K, V> *table, int shard) :
-    owner_(table), shard_(shard), done_(false) {
+  RemoteIterator(TypedGlobalTable<K, V> *table, int shard, unsigned int fetch_num = FETCH_NUM) :
+    owner_(table), shard_(shard), done_(false), fetch_num_(fetch_num) {
     request_.set_table(table->id());
     request_.set_shard(shard_);
-    request_.set_row_count(FETCH_NUM);
+    request_.set_row_count(fetch_num_);
     int target_worker = table->owner(shard);
 
     // << CRM 2011-01-18 >>
     while (!cached_results.empty()) cached_results.pop();
 
+    VLOG(2) << "Created RemoteIterator on table " << table->id() << ", shard " << shard <<" @" << this << endl;
     NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
+    for(int i=1; i<=response_.row_count(); i++) {
+      pair<string, string> row;
+      row = make_pair(response_.key(i-1),response_.value(i-1));
+      cached_results.push(row);
+    }
 
     request_.set_id(response_.id());
   }
@@ -185,33 +189,43 @@ public:
   }
 
   bool done() {
-    return response_.done();
+    return response_.done() && cached_results.empty();
   }
 
   void Next() {
     int target_worker = dynamic_cast<GlobalTable*>(owner_)->owner(shard_);
     if (!cached_results.empty()) cached_results.pop();
     if (cached_results.empty()) {
+      if (response_.done())								//if the last response indicated no more
+        return;											//data and now no cache, don't try.
       NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
+      if (response_.row_count() < 1 && !response_.done())
+        LOG(ERROR) << "Call to server requesting " << request_.row_count() <<
+			" rows returned " << response_.row_count() << " rows." << endl;
       for(int i=1; i<=response_.row_count(); i++) {
-        std::pair<std::string, std::string> row;
-        row.first = response_.key(i-1);
-        row.second = response_.value(i-1);
+        pair<string, string> row;
+		row = make_pair(response_.key(i-1),response_.value(i-1));
         cached_results.push(row);
       }
-    } else printf("using cache!\n");
+    } else {
+      VLOG(1) << "[PREFETCH] Using cached key for Next()" << endl;
+    }
     ++index_;
   }
 
   const K& key() {
+    if (cached_results.empty())
+      LOG(FATAL) << "Cache miss on key!" << endl;
 //    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
-    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(cached_results.front().first, &key_);
+    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal((cached_results.front().first), &key_);
     return key_;
   }
 
   V& value() {
+    if (cached_results.empty())
+      LOG(FATAL) << "Cache miss on key!" << endl;
 //    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
-    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(cached_results.front().second, &value_);
+    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal((cached_results.front().second), &value_);
     return value_;
   }
 
@@ -228,7 +242,8 @@ private:
   bool done_;
 
   // << CRM 2011-01-18 >>
-  std::queue<std::pair<std::string, std::string> > cached_results;
+  queue<pair<string, string> > cached_results;
+  unsigned int fetch_num_;
 };
 
 
@@ -361,11 +376,11 @@ LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
 }
 
 template<class K, class V>
-TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard) {
+TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard, unsigned int fetch_num) {
   if (this->is_local_shard(shard)) {
     return (TypedTableIterator<K, V>*) partitions_[shard]->get_iterator();
   } else {
-    return new RemoteIterator<K, V>(this, shard);
+    return new RemoteIterator<K, V>(this, shard, fetch_num);
   }
 }
 

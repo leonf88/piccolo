@@ -232,7 +232,7 @@ public:
   };
 
   InMemoryTable(int num_shards) : DiskTable<uint64_t, Page>("", 0), num_shards_(num_shards) {}
-  Iterator *get_iterator(int shard) { return new Iterator(shard, num_shards_); }
+  Iterator *get_iterator(int shard, unsigned int fetch_num) { return new Iterator(shard, num_shards_); }
 
 private:
   int num_shards_;
