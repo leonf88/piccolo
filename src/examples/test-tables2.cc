@@ -12,6 +12,8 @@ static TypedGlobalTable<int, string>* string_hash = NULL;
 
 //static TypedGlobalTable<int, Pair>* pair_hash = NULL;
 
+#define PREFETCH 512
+
 class TableKernel2 : public DSMKernel {
 public:
   void TestPut2() {
@@ -47,11 +49,11 @@ public:
     int totalrows = 0;
     int num_shards = min_hash->num_shards();
     for(int j=0; j<num_shards; j++) {
-		TypedTableIterator<int, int> *it_min = min_hash->get_typed_iterator(j,512);
-		TypedTableIterator<int, int> *it_max = max_hash->get_typed_iterator(j,512);
-		TypedTableIterator<int, int> *it_replace = replace_hash->get_typed_iterator(j,512);
-		TypedTableIterator<int, int> *it_sum = sum_hash->get_typed_iterator(j,512);
-		TypedTableIterator<int, string> *it_string = string_hash->get_typed_iterator(j,512);
+		TypedTableIterator<int, int> *it_min = min_hash->get_typed_iterator(j,PREFETCH);
+		TypedTableIterator<int, int> *it_max = max_hash->get_typed_iterator(j,PREFETCH);
+		TypedTableIterator<int, int> *it_replace = replace_hash->get_typed_iterator(j,PREFETCH);
+		TypedTableIterator<int, int> *it_sum = sum_hash->get_typed_iterator(j,PREFETCH);
+		TypedTableIterator<int, string> *it_string = string_hash->get_typed_iterator(j,PREFETCH);
 		int i=0;
 		for(; !it_min->done() && !it_max->done() && !it_replace->done() && !it_sum->done() && !it_string->done() ; )
 		{

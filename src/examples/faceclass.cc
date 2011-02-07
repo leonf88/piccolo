@@ -16,6 +16,7 @@ using namespace dsm;
 using namespace std;
 
 static int NUM_WORKERS = 2;
+#define PREFETCH 1024
 
 DEFINE_string(infopn, "trainpn_random.info", "File containing list of training images");
 DEFINE_string(netname, "/home/kerm/piccolo.hg/src/examples/facedet/netsave.net", "Filename of neural network save file");
@@ -54,7 +55,7 @@ namespace dsm {
 			sizes[0] = (char)(((strlen(t.name))>256)?256:(strlen(t.name)));
 			out->append(sizes,1);
 			out->append((char*)(t.name),(int)sizes[0]);
-			LOG(ERROR) << "Marshalled image " << t.name << " to string of size " << out->length() << endl;
+			VLOG(3) << "Marshalled image " << t.name << " to string of size " << out->length() << endl;
 		}
 		static void unmarshal(const StringPiece &s, IMAGE* t) {
 			int r,c,sl;
@@ -74,7 +75,7 @@ namespace dsm {
 			}
 			strncpy(t->name,s.data+5+sizeof(int)*r*c,sl);
 			t->name[sl] = '\0';
-			LOG(ERROR) << "Unmarshalled image " << t->name << " from string" << endl;
+			VLOG(3) << "Unmarshalled image " << t->name << " from string" << endl;
 		}
 	};
 }
@@ -150,17 +151,10 @@ class FCKernel : public DSMKernel {
 
 			/*** Turn the IMAGELIST into a database of images, ie,  TypedGlobalTable<int, IMAGE>* train_ims ***/
 			train_ims->resize(trainlist->n);
-			//std::string test;
-			//dsm::Marshal<IMAGE> mar;
 			for(i=0;i<trainlist->n;i++) {
-				//mar.marshal(*(trainlist->list[i]),&test);
-				//fprintf(stdout,"Will marshall %d (%s) to %s\n",i,(trainlist->list[i])->name,test.c_str());
 				train_ims->update(i,*(trainlist->list[i]));
-				if (!train_ims->contains(i)) {
-					fprintf(stderr,"[Insert] Did not find key %d just inserted!\n",i);
-					exit(-1);
-				}
 			}
+			train_ims->SendUpdates();
 
 			/*** If requested, grab all the images out again and make sure they're correct ***/
 			if(FLAGS_verify == true) {
@@ -221,6 +215,7 @@ class FCKernel : public DSMKernel {
 			for(i=0;i<1+1;i++) {								// Output layer biases
 				nn_biases->update(i+(imgsize+1)+(hiddenn+1),net->output_units[i]);
 			}
+			nn_biases->SendUpdates();
 			for(i=0;i<(imgsize+1);i++) {						// Input->Hidden weights
 				for(j=0;j<(hiddenn+1);j++) {
 					nn_weights->update((i*(hiddenn+1))+j,net->input_weights[i][j]);
@@ -231,6 +226,7 @@ class FCKernel : public DSMKernel {
 					nn_weights->update((((imgsize+1)*(hiddenn+1))+(i*(1+1))+j),net->hidden_weights[i][j]);
 				}
 			}
+			nn_weights->SendUpdates();
 			printf("NN biases and weights stored in tables\n");
 
 			/*** If requested, grab all the weights/biases out again and make sure they're correct ***/
@@ -266,6 +262,15 @@ class FCKernel : public DSMKernel {
 				}
 
 			}
+			performance->update(0,0);
+			performance->update(1,0.0f);
+			performance->SendUpdates();
+			if (FLAGS_verify == true) {
+				if (performance->get(0) != 0)
+					fprintf(stderr,"[Verify] Performance image count was not zero.\n");
+				if (performance->get(1) != 0)
+					fprintf(stderr,"[Verify] Performance accumulated error was not zero.\n");
+			}
 		}
 
 		void TrainIteration() {
@@ -274,7 +279,7 @@ class FCKernel : public DSMKernel {
 				exit(-1);
 			}
 
-			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard());
+			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard(),PREFETCH);
 			for (; !it->done(); it->Next()) {
 				IMAGE thisimg = it->value();						//grab this image
 
@@ -294,17 +299,17 @@ class FCKernel : public DSMKernel {
 						net->hidden_weights, net->hidden_units, &hid_err);
 
 				/*** Adjust input and hidden weights in database. ***/
+				double thiseta = FLAGS_eta/(double)nn_biases->num_shards();		//aka conf.num_workers
 				UpdateBPNNWithDeltas(net->output_delta, 1, net->hidden_units, hiddenn,
-						net->hidden_weights, net->hidden_prev_weights, FLAGS_eta, FLAGS_momentum,((imgsize+1)*(hiddenn+1)));
+						net->hidden_weights, net->hidden_prev_weights, thiseta, FLAGS_momentum,((imgsize+1)*(hiddenn+1)));
 				UpdateBPNNWithDeltas(net->hidden_delta, hiddenn, net->input_units, imgsize,
-						net->input_weights, net->input_prev_weights, FLAGS_eta, FLAGS_momentum,0);
+						net->input_weights, net->input_prev_weights, thiseta, FLAGS_momentum,0);
 
 				/*** Adjust input and hidden weights. ***/
 				bpnn.bpnn_adjust_weights(net->output_delta, 1, net->hidden_units, hiddenn,
-						net->hidden_weights, net->hidden_prev_weights, FLAGS_eta, FLAGS_momentum);
+						net->hidden_weights, net->hidden_prev_weights, thiseta, FLAGS_momentum);
 				bpnn.bpnn_adjust_weights(net->hidden_delta, hiddenn, net->input_units, imgsize,
-						net->input_weights, net->input_prev_weights, FLAGS_eta, FLAGS_momentum);
-
+						net->input_weights, net->input_prev_weights, thiseta, FLAGS_momentum);
 			}
 
 		}
@@ -318,7 +323,8 @@ class FCKernel : public DSMKernel {
 				exit(-1);
 			}
 
-			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard());
+			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard(),PREFETCH);
+
 			for (; !it->done(); it->Next()) {
 				IMAGE thisimg = it->value();						//grab this image
 
@@ -332,7 +338,9 @@ class FCKernel : public DSMKernel {
 				classed = (net->output_units[1] > 0.5);
 				classed = (net->target[1] > 0.5)?classed:!classed;
 				performance->update(0,classed?1:0);					//accumulate correct classifications
+
 			}
+			performance->SendUpdates();
 		}
 
 		void DisplayPerformance() {
@@ -347,31 +355,43 @@ class FCKernel : public DSMKernel {
 				  );
 			performance->update(0,-ims_correct);
 			performance->update(1,-total_err);
+			performance->SendUpdates();
+			if (performance->get(0) != 0)
+				LOG(FATAL) << "!!BUG!! Correct image count not reset to zero" << endl;
+			if (performance->get(1) != 0)
+				LOG(FATAL) << "!!BUG!! Accumulated error not reset to zero" << endl;
 		}
 
 	private:
 		int TableToBPNN(BPNN* thisnet) {
-			int i,j;
+			int num_shards = nn_biases->num_shards();
 
-			for(i=0;i<imgsize+1;i++) {							// Input layer biases
-				net->input_units[i] = nn_biases->get(i);
-			}
-			for(i=0;i<hiddenn+1;i++) {							// Hidden layer biases
-				net->hidden_units[i] = nn_biases->get(i+(imgsize+1));
-			}
-			for(i=0;i<1+1;i++) {								// Output layer biases
-				net->output_units[i] = nn_biases->get(i+(imgsize+1)+(hiddenn+1));
-			}
-			for(i=0;i<(imgsize+1);i++) {						// Input->Hidden weights
-				for(j=0;j<(hiddenn+1);j++) {
-					net->input_weights[i][j] = nn_weights->get((i*(hiddenn+1))+j);
+			for(int j=0; j<num_shards; j++) {
+				TypedTableIterator<int, double> *it_biases = nn_biases->get_typed_iterator(j,PREFETCH);
+				for(; !it_biases->done(); it_biases->Next()) {
+					if (it_biases->key() < imgsize+1) {
+						net->input_units[it_biases->key()] = it_biases->value();
+					} else if (it_biases->key() < hiddenn+1+imgsize+1) {
+						net->hidden_units[it_biases->key()-(imgsize+1)] = it_biases->value();
+					} else {
+						net->output_units[it_biases->key()-(hiddenn+1+imgsize+1)] = it_biases->value();
+					}
+				}
+
+				TypedTableIterator<int, double> *it_weights = nn_weights->get_typed_iterator(j,PREFETCH);
+				for(; !it_weights->done(); it_weights->Next()) {
+					if (it_weights->key() < (imgsize+1)*(hiddenn+1)) {		//Input -> Hidden weights
+						int row = it_weights->key()/(hiddenn+1);
+						int col = it_weights->key()%(hiddenn+1);
+						net->input_weights[row][col] = it_weights->value();
+					} else {												//Hidden -> Output weights
+						int row = (it_weights->key()-(imgsize+1)*(hiddenn+1))/(1+1);
+						int col = (it_weights->key()-(imgsize+1)*(hiddenn+1))%(1+1);
+						net->hidden_weights[row][col] = it_weights->value();
+					}
 				}
 			}
-			for(i=0;i<(hiddenn+1);i++) {						//Hidden->Output weights
-				for(j=0;j<(1+1);j++) {
-					net->hidden_weights[i][j] = nn_weights->get((((imgsize+1)*(hiddenn+1))+(i*(1+1))+j));
-				}
-			}
+
 			return 0;			//success
 		}
 
@@ -379,13 +399,21 @@ class FCKernel : public DSMKernel {
 				double **oldw, double eta, double momentum,int idx_offset) {
 			double newval_dw;
 			int k, j;
+
+			double updates = 0;
 			ly[0] = 1.0;
 			for (j = 1; j <= ndelta; j++) {
 				for (k = 0; k <= nly; k++) {
 					newval_dw = ((eta * delta[j] * ly[k]) + (momentum * oldw[k][j]));
 					nn_weights->update(idx_offset+(k*(ndelta+1))+j,newval_dw);
+
+					updates+= newval_dw;
+
 				}
 			}
+
+			nn_weights->SendUpdates();
+
 		}
 
 
@@ -412,7 +440,7 @@ int Faceclass(ConfigData& conf) {
 	printf("---- Initializing FaceClass on %d workers ----\n",NUM_WORKERS);
 
 	//m.run_all("FCKernel","InitKernel",train_ims);
-	m.run_one("FCKernel","Initialize",nn_weights);
+	m.run_one("FCKernel","Initialize",train_ims);
 
 	if (FLAGS_epochs > 0) {
 		printf("Training underway (going to %d epochs)\n", FLAGS_epochs);

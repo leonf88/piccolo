@@ -167,7 +167,7 @@ public:
     // << CRM 2011-01-18 >>
     while (!cached_results.empty()) cached_results.pop();
 
-    VLOG(2) << "Created RemoteIterator on table " << table->id() << ", shard " << shard <<" @" << this << endl;
+    VLOG(3) << "Created RemoteIterator on table " << table->id() << ", shard " << shard <<" @" << this << endl;
     NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
     for(int i=1; i<=response_.row_count(); i++) {
       pair<string, string> row;
@@ -179,13 +179,17 @@ public:
   }
 
   void key_str(string *out) {
-    *out = cached_results.front().first;
-//    *out = response_.key();
+    if (!cached_results.empty())
+		VLOG(4) << "Pulling first of " << cached_results.size() << " results" << endl;
+    if (!cached_results.empty())
+        *out = cached_results.front().first;
   }
 
   void value_str(string *out) {
-    *out = cached_results.front().second;
-//    *out = response_.value();
+    if (!cached_results.empty())
+		VLOG(4) << "Pulling first of " << cached_results.size() << " results" << endl;
+    if (!cached_results.empty())
+        *out = cached_results.front().second;
   }
 
   bool done() {
@@ -208,7 +212,7 @@ public:
         cached_results.push(row);
       }
     } else {
-      VLOG(1) << "[PREFETCH] Using cached key for Next()" << endl;
+      VLOG(4) << "[PREFETCH] Using cached key for Next()" << endl;
     }
     ++index_;
   }
@@ -216,7 +220,6 @@ public:
   const K& key() {
     if (cached_results.empty())
       LOG(FATAL) << "Cache miss on key!" << endl;
-//    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal(response_.key(), &key_);
     ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal((cached_results.front().first), &key_);
     return key_;
   }
@@ -224,7 +227,6 @@ public:
   V& value() {
     if (cached_results.empty())
       LOG(FATAL) << "Cache miss on key!" << endl;
-//    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal(response_.value(), &value_);
     ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal((cached_results.front().second), &value_);
     return value_;
   }
@@ -302,7 +304,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   //  boost::recursive_mutex::scoped_lock sl(mutex());
   partition(shard)->update(k, v);
 
-//  LOG(INFO) << "local: " << k << " : " << is_local_shard(shard) << " : " << worker_id_;
+  //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
     ++pending_writes_;
   }
