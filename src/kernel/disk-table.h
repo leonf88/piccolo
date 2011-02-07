@@ -36,7 +36,7 @@ public:
 
   virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
   virtual TypedTableIterator<K, V>* get_typed_iterator(int shard) {
-    return (TypedTableIterator<K, V>*)get_iterator(shard);
+    return (TypedTableIterator<K, V>*)get_iterator(shard);		//TODO?????
   }
 
   int64_t shard_size(int shard);
