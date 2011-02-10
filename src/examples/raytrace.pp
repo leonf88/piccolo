@@ -67,9 +67,6 @@ public:
     GlobalTable *t = get_table(0);
     if (t->is_local_shard(0)) {
       t->get_partition(0)->resize(FLAGS_width * FLAGS_height);
-
-      SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO);
-      screen = SDL_SetVideoMode(FLAGS_width, FLAGS_height, 32, SDL_SWSURFACE);
     }
   }
 
@@ -151,6 +148,10 @@ static int RayTrace(ConfigData &conf) {
 
   CHECK_NE(FLAGS_source.empty(), true);
 
+
+  SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO);
+  screen = SDL_SetVideoMode(FLAGS_width, FLAGS_height, 32, SDL_SWSURFACE);
+
   Master m(conf);
   for (int i = 1; i <= FLAGS_frames; ++i) {
     args.put<int>("frame", i);
@@ -158,7 +159,21 @@ static int RayTrace(ConfigData &conf) {
     r.params = args;
     m.run_all(r);
 
-    m.run_one("RayTraceKernel", "DrawFrame",  pixels);
+    //    DenseTable<Pos, RGB>* p = (DenseTable<Pos, RGB>*)pixels->get_partition(0);
+    TypedTableIterator<Pos, RGB>* it = pixels->get_typed_iterator(0, 1000000);
+    it->Next();
+    while (!it->done()) {
+      int x = it->key().a_;
+      int y = it->key().b_;
+      RGB &b = it->value();
+      Uint32 *bufp = (Uint32 *)screen->pixels + x*screen->pitch/4 + y;
+      *bufp = SDL_MapRGB(screen->format, b.r, b.g, b.b);
+      it->Next();
+    }
+
+    SDL_UpdateRect(screen, 0, 0, FLAGS_width, FLAGS_height);
+
+    //m.run_one("RayTraceKernel", "DrawFrame",  pixels);
   }
   return 0;
 }

@@ -179,7 +179,9 @@ void GlobalTableBase::handle_get(const HashGet& get_req, TableData *get_resp) {
 }
 
 void MutableGlobalTableBase::HandlePutRequests() {
-  w_->HandlePutRequest();
+  if (w_) {
+    w_->HandlePutRequest();
+  }
 }
 
 ProtoTableCoder::ProtoTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
