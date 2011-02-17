@@ -27,9 +27,12 @@ struct TableHelper {
 struct SharderBase {};
 struct AccumulatorBase {};
 struct BlockInfoBase {};
-struct TriggerBase {};
 
 
+struct TriggerBase {
+  Table *table;
+  TableHelper *helper;
+};
 
 #ifndef SWIG
 
@@ -39,8 +42,8 @@ struct TriggerBase {};
 // When firing, triggers are activated in the order specified at
 // initialization time.
 template <class K, class V>
-struct Trigger {
-  virtual void Fire(Table *t, const K& k, const V& current, const V& update) = 0;
+struct Trigger : public TriggerBase {
+  virtual void Fire(const K& k, const V& current, const V& update) = 0;
 };
 
 // Each table is associated with a single accumulator.  Accumulators are
@@ -181,6 +184,16 @@ public:
 
   TableHelper *helper() { return info().helper; }
   int helper_id() { return helper()->id(); }
+
+  int num_triggers() { return info_->triggers.size(); }
+  TriggerBase *trigger(int idx) { return info_->triggers[idx]; }
+
+  void register_trigger(TriggerBase *t) {
+    CHECK(helper() != NULL);
+    t->helper = helper();
+    t->table = this;
+    info_->triggers.push_back(t);
+  }
 
   void set_helper(TableHelper *w) {
     info_->helper = w;
