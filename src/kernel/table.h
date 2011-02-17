@@ -10,15 +10,40 @@
 
 namespace dsm {
 
+struct SharderBase {};
+struct AccumulatorBase {};
+struct BlockInfoBase {};
+struct TriggerBase {};
+
+struct TableBase;
+struct Table;
+
+class Worker;
+class Master;
+class LocalTable;
+class TableData;
+
 #ifndef SWIG
 
+// Triggers are registered at table initialization time, and
+// are executed in response to changes to a table.s
+//
+// When firing, triggers are activated in the order specified at
+// initialization time.
+template <class K, class V>
+struct Trigger {
+  virtual void Fire(Table *t, const K& k, const V& current, const V& update) = 0;
+};
+
+// Each table is associated with a single accumulator.  Accumulators are
+// applied whenever an update is supplied for an existing key-value cell.
 template <class V>
-struct Accumulator {
+struct Accumulator : public AccumulatorBase {
   virtual void Accumulate(V* a, const V& b) = 0;
 };
 
 template <class K>
-struct Sharder {
+struct Sharder : public SharderBase {
   virtual int operator()(const K& k, int shards) = 0;
 };
 
@@ -57,8 +82,6 @@ struct Sharding {
 };
 #endif
 
-struct TableBase;
-
 struct TableFactory {
   virtual TableBase* New() = 0;
 };
@@ -83,15 +106,21 @@ public:
   int shard;
   int default_shard_size;
 
-  void *accum;
-  void *sharder;
-  void *key_marshal;
-  void *value_marshal;
+  vector<TriggerBase*> triggers;
+
+  AccumulatorBase *accum;
+  SharderBase *sharder;
+
+  MarshalBase *key_marshal;
+  MarshalBase *value_marshal;
+
+  // Used by global tables when constructing new partitions for local
+  // use or for buffering.
   TableFactory *partition_factory;
 
   // For dense tables
   int block_size;
-  void *block_info;
+  BlockInfoBase *block_info;
 
   // For global tables, the maximum amount of time to cache remote values
   double max_stale_time;
@@ -99,12 +128,24 @@ public:
 
 class TableIterator;
 
-class Table {
-public:
+struct Table {
   virtual const TableDescriptor& info() const = 0;
   virtual TableDescriptor& mutable_info() = 0;
   virtual int id() const = 0;
   virtual int num_shards() const = 0;
+};
+
+struct UntypedTable {
+  virtual bool contains_str(const StringPiece& k) = 0;
+  virtual string get_str(const StringPiece &k) = 0;
+  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+};
+
+struct TableIterator {
+  virtual void key_str(string *out) = 0;
+  virtual void value_str(string *out) = 0;
+  virtual bool done() = 0;
+  virtual void Next() = 0;
 };
 
 // Methods common to both global and local table views.
@@ -125,13 +166,6 @@ public:
 
 protected:
   TableDescriptor *info_;
-};
-
-class UntypedTable {
-public:
-  virtual bool contains_str(const StringPiece& k) = 0;
-  virtual string get_str(const StringPiece &k) = 0;
-  virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
 };
 
 // Key/value typed interface.
@@ -171,12 +205,6 @@ protected:
   virtual Marshal<V> *vmarshal() = 0;
 };
 
-struct TableIterator {
-  virtual void key_str(string *out) = 0;
-  virtual void value_str(string *out) = 0;
-  virtual bool done() = 0;
-  virtual void Next() = 0;
-};
 
 template <class K, class V>
 struct TypedTableIterator : public TableIterator {
@@ -197,67 +225,6 @@ protected:
     return &m;
   }
 };
-
-// Global table interfaces
-
-class Worker;
-class Master;
-class LocalTable;
-
-struct PartitionInfo {
-  PartitionInfo() : dirty(false), tainted(false) {}
-  bool dirty;
-  bool tainted;
-  ShardInfo sinfo;
-};
-
-class GlobalTable :
-  virtual public TableBase {
-public:
-  virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
-  virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
-
-  virtual bool is_local_shard(int shard) = 0;
-  virtual bool is_local_key(const StringPiece &k) = 0;
-
-  virtual PartitionInfo* get_partition_info(int shard) = 0;
-  virtual LocalTable* get_partition(int shard) = 0;
-
-  virtual bool tainted(int shard) = 0;
-  virtual int owner(int shard) = 0;
-protected:
-  friend class Worker;
-  friend class Master;
-
-  virtual void set_worker(Worker *w) = 0;
-
-  // Fill in a response from a remote worker for the given key.
-  virtual void handle_get(const HashGet& req, TableData* resp) = 0;
-  virtual int64_t shard_size(int shard) = 0;
-};
-
-class MutableGlobalTable :
-  virtual public GlobalTable {
-public:
-  // Handle updates from the master or other workers.
-  virtual void SendUpdates() = 0;
-  virtual void ApplyUpdates(const TableData& req) = 0;
-  virtual void HandlePutRequests() = 0;
-
-  virtual int pending_write_bytes() = 0;
-
-  virtual void clear() = 0;
-  virtual void resize(int64_t new_size) = 0;
-
-  // Exchange the content of this table with that of table 'b'.
-  virtual void swap(GlobalTable *b) = 0;
-protected:
-  friend class Worker;
-  virtual void local_swap(GlobalTable *b) = 0;
-};
-
-
-class TableData;
 
 // Checkpoint and restoration.
 class Checkpointable {

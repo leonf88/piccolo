@@ -332,7 +332,7 @@ void Worker::HandlePutRequest() {
     VLOG(2) << "Read put request of size: "
             << put.kv_data_size() << " for " << MP(put.table(), put.shard());
 
-    MutableGlobalTable *t = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(put.table()));
+    MutableGlobalTable *t = TableRegistry::Get()->mutable_table(put.table());
     t->ApplyUpdates(put);
 
     // Record messages from our peer channel up until they checkpointed.
@@ -370,14 +370,14 @@ void Worker::HandleGetRequest(const HashGet& get_req, TableData *get_resp, const
 }
 
 void Worker::HandleSwapRequest(const SwapTable& req, EmptyMessage *resp, const RPCInfo& rpc) {
-  MutableGlobalTable *ta = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table_a()));
-  MutableGlobalTable *tb = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table_b()));
+  MutableGlobalTable *ta = TableRegistry::Get()->mutable_table(req.table_a());
+  MutableGlobalTable *tb = TableRegistry::Get()->mutable_table(req.table_b());
 
   ta->local_swap(tb);
 }
 
 void Worker::HandleClearRequest(const ClearTable& req, EmptyMessage *resp, const RPCInfo& rpc) {
-  MutableGlobalTable *ta = dynamic_cast<MutableGlobalTable*>(TableRegistry::Get()->table(req.table()));
+  MutableGlobalTable *ta = TableRegistry::Get()->mutable_table(req.table());
 
   for (int i = 0; i < ta->num_shards(); ++i) {
     if (ta->is_local_shard(i)) {

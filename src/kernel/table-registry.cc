@@ -22,6 +22,11 @@ GlobalTable* TableRegistry::table(int id) {
   return tmap_[id];
 }
 
+MutableGlobalTable* TableRegistry::mutable_table(int id) {
+  CHECK(tmap_.find(id) != tmap_.end());
+  return reinterpret_cast<MutableGlobalTable*>(tmap_[id]);
+}
+
 
 static void CreateStatsTable() {
   CreateTable(

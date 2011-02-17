@@ -101,7 +101,7 @@ namespace dsm {
 typedef unordered_set<pos> PosSet;
 
 template <>
-struct Marshal<pos> {
+struct Marshal<pos> : public MarshalBase {
   static void marshal(const pos& t, string *out) {
     out->append((char*)&t, sizeof(pos));
   }
@@ -111,7 +111,7 @@ struct Marshal<pos> {
 };
 
 template <>
-struct Marshal<PosSet> {
+struct Marshal<PosSet> : public MarshalBase {
   static void marshal(const PosSet& t, string *out) {
     for (PosSet::const_iterator i = t.begin(); i != t.end(); ++i) {
       out->append(reinterpret_cast<const char*>(&(*i)), sizeof(pos));
