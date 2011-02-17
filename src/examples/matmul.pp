@@ -24,7 +24,7 @@ struct Block {
 
 namespace dsm {
 template <>
-struct Marshal<Block> {
+struct Marshal<Block> : MarshalBase {
   void marshal(const Block& t, string *out) {
     out->assign((const char*)t.d,
                 sizeof(float) * FLAGS_block_size * FLAGS_block_size);

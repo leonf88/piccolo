@@ -3,12 +3,13 @@
 
 #include "util/common.h"
 #include "worker/worker.pb.h"
+#include "kernel/table.h"
 #include <boost/noncopyable.hpp>
 
 namespace dsm {
 
 template <class K>
-struct BlockInfo {
+struct BlockInfo : BlockInfoBase {
   // Returns the key representing the first element in the block
   // containing 'k'.
   virtual K start(const K& k, int block_size) = 0;

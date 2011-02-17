@@ -42,7 +42,7 @@ static TypedGlobalTable<int, double>* performance = NULL;
 // Marshalling for IMAGE* type
 //-----------------------------------------------
 namespace dsm {
-	template <> struct Marshal<IMAGE> {
+	template <> struct Marshal<IMAGE> : MarshalBase {
 		static void marshal(const IMAGE& t, string *out) {
 			char sizes[4];
 			out->clear();

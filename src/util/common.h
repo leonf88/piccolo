@@ -101,8 +101,10 @@ private:
   unordered_map<string, double> p_;
 };
 
+struct MarshalBase {};
+
 template <class T, class Enable = void>
-struct Marshal {
+struct Marshal : public MarshalBase {
   virtual void marshal(const T& t, string* out) {
     GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
     out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
@@ -115,13 +117,13 @@ struct Marshal {
 };
 
 template <class T>
-struct Marshal<T, typename boost::enable_if<boost::is_base_of<string, T> >::type>  {
+struct Marshal<T, typename boost::enable_if<boost::is_base_of<string, T> >::type> : public MarshalBase {
   void marshal(const string& t, string *out) { *out = t; }
   void unmarshal(const StringPiece& s, string *t) { t->assign(s.data, s.len); }
 };
 
 template <class T>
-struct Marshal<T, typename boost::enable_if<boost::is_base_of<google::protobuf::Message, T> >::type> {
+struct Marshal<T, typename boost::enable_if<boost::is_base_of<google::protobuf::Message, T> >::type> : public MarshalBase {
   void marshal(const google::protobuf::Message& t, string *out) { t.SerializePartialToString(out); }
   void unmarshal(const StringPiece& s, google::protobuf::Message* t) { t->ParseFromArray(s.data, s.len); }
 };

@@ -24,8 +24,60 @@ struct ProtoTableCoder : public TableCoder {
   TableData *t_;
 };
 
-class GlobalTableBase :
-  virtual public GlobalTable {
+
+struct PartitionInfo {
+  PartitionInfo() : dirty(false), tainted(false) {}
+  bool dirty;
+  bool tainted;
+  ShardInfo sinfo;
+};
+
+class GlobalTable : virtual public TableBase {
+public:
+  virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
+  virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
+
+  virtual bool is_local_shard(int shard) = 0;
+  virtual bool is_local_key(const StringPiece &k) = 0;
+
+  virtual PartitionInfo* get_partition_info(int shard) = 0;
+  virtual LocalTable* get_partition(int shard) = 0;
+
+  virtual bool tainted(int shard) = 0;
+  virtual int owner(int shard) = 0;
+protected:
+  friend class Worker;
+  friend class Master;
+
+  virtual void set_worker(Worker *w) = 0;
+
+  // Fill in a response from a remote worker for the given key.
+  virtual void handle_get(const HashGet& req, TableData* resp) = 0;
+  virtual int64_t shard_size(int shard) = 0;
+};
+
+class MutableGlobalTable : virtual public GlobalTable {
+public:
+  // Handle updates from the master or other workers.
+  virtual void SendUpdates() = 0;
+  virtual void ApplyUpdates(const TableData& req) = 0;
+  virtual void HandlePutRequests() = 0;
+
+  virtual int pending_write_bytes() = 0;
+
+  virtual void clear() = 0;
+  virtual void resize(int64_t new_size) = 0;
+
+  // Exchange the content of this table with that of table 'b'.
+  virtual void swap(GlobalTable *b) = 0;
+protected:
+  friend class Worker;
+  virtual void local_swap(GlobalTable *b) = 0;
+};
+
+
+
+class GlobalTableBase : virtual public GlobalTable {
 public:
   virtual ~GlobalTableBase();
 

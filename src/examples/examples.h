@@ -11,7 +11,7 @@ DECLARE_bool(build_graph);
 
 namespace dsm {
 template <>
-struct Marshal<Bucket> {
+struct Marshal<Bucket> : public MarshalBase {
   static void marshal(const Bucket& t, string *out) { t.SerializePartialToString(out); }
   static void unmarshal(const StringPiece& s, Bucket* t) { t->ParseFromArray(s.data, s.len); }
 };
