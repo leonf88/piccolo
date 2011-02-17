@@ -41,7 +41,7 @@ Worker::Worker(const ConfigData &c) {
   // HACKHACKHACK - register ourselves with any existing tables
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-    i->second->set_worker(this);
+    i->second->set_helper(this);
   }
 
   // Register RPC endpoints.

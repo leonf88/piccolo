@@ -45,11 +45,10 @@ public:
 
   virtual bool tainted(int shard) = 0;
   virtual int owner(int shard) = 0;
+
 protected:
   friend class Worker;
   friend class Master;
-
-  virtual void set_worker(Worker *w) = 0;
 
   // Fill in a response from a remote worker for the given key.
   virtual void handle_get(const HashGet& req, TableData* resp) = 0;
@@ -75,8 +74,6 @@ protected:
   virtual void local_swap(GlobalTable *b) = 0;
 };
 
-
-
 class GlobalTableBase : virtual public GlobalTable {
 public:
   virtual ~GlobalTableBase();
@@ -100,11 +97,8 @@ public:
 
   bool tainted(int shard) { return get_partition_info(shard)->tainted; }
   int owner(int shard) { return get_partition_info(shard)->sinfo.owner(); }
-
 protected:
   virtual int shard_for_key_str(const StringPiece& k) = 0;
-
-  void set_worker(Worker *w);
 
   // Fetch the given key, using only local information.
   void get_local(const StringPiece &k, string *v);

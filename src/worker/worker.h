@@ -21,7 +21,7 @@ namespace dsm {
 // start a worker and exit when the computation is finished.
 bool StartWorker(const ConfigData& conf);
 
-class Worker : private boost::noncopyable {
+class Worker : public TableHelper, private boost::noncopyable {
 struct Stub;
 public:
   Worker(const ConfigData &c);
@@ -38,7 +38,6 @@ public:
   void CheckForMasterUpdates();
   void CheckNetwork();
 
-  // Returns true if any non-trivial operations were performed.
   void HandleGetRequest(const HashGet& get_req, TableData *get_resp, const RPCInfo& rpc);
   void HandleSwapRequest(const SwapTable& req, EmptyMessage *resp, const RPCInfo& rpc);
   void HandleClearRequest(const ClearTable& req, EmptyMessage *resp, const RPCInfo& rpc);
