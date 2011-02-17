@@ -49,7 +49,7 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
   ${MPI_LINK_FLAGS}
   -lpthread -lutil -lnuma -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
-  DEPENDS ${swig_out} worker master common kernel
- )
+  DEPENDS ${swig_out} worker master common kernel example
+)
   
- ADD_CUSTOM_TARGET(_piccolo ALL DEPENDS _piccolo.so)
+ADD_CUSTOM_TARGET(_piccolo ALL DEPENDS _piccolo.so)
