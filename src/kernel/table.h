@@ -10,18 +10,26 @@
 
 namespace dsm {
 
+struct TableBase;
+struct Table;
+
+class TableData;
+
+// This interface is used by global tables to communicate with the outside
+// world and determine the current state of a computation.
+struct TableHelper {
+  virtual int id() const = 0;
+  virtual int epoch() const = 0;
+  virtual int peer_for_shard(int table, int shard) const = 0;
+  virtual void HandlePutRequest() = 0;
+};
+
 struct SharderBase {};
 struct AccumulatorBase {};
 struct BlockInfoBase {};
 struct TriggerBase {};
 
-struct TableBase;
-struct Table;
 
-class Worker;
-class Master;
-class LocalTable;
-class TableData;
 
 #ifndef SWIG
 
@@ -93,10 +101,13 @@ public:
     num_shards = shards;
     block_size = 500;
     max_stale_time = 0.;
-  }
-
-  TableDescriptor(const TableDescriptor& t) {
-    memcpy(this, &t, sizeof(t));
+    helper_id = -1;
+    helper = NULL;
+    partition_factory = NULL;
+    block_info = NULL;
+    key_marshal = value_marshal = NULL;
+    accum = NULL;
+    sharder = NULL;
   }
 
   int table_id;
@@ -114,16 +125,20 @@ public:
   MarshalBase *key_marshal;
   MarshalBase *value_marshal;
 
-  // Used by global tables when constructing new partitions for local
-  // use or for buffering.
+  // For global tables, factory for constructing new partitions.
   TableFactory *partition_factory;
 
-  // For dense tables
+  // For dense tables, information on block layout and size.
   int block_size;
   BlockInfoBase *block_info;
 
   // For global tables, the maximum amount of time to cache remote values
   double max_stale_time;
+
+  // For global tables, reference to the local worker.  Used for passing
+  // off remote access requests.
+  TableHelper *helper;
+  int helper_id;
 };
 
 class TableIterator;
@@ -163,6 +178,14 @@ public:
   TableDescriptor& mutable_info() { return *info_; }
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
+
+  TableHelper *helper() { return info().helper; }
+  int helper_id() { return helper()->id(); }
+
+  void set_helper(TableHelper *w) {
+    info_->helper = w;
+    info_->helper_id = w->id();
+  }
 
 protected:
   TableDescriptor *info_;

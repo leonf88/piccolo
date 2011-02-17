@@ -1,5 +1,4 @@
 #include "kernel/global-table.h"
-#include "worker/worker.h"
 
 static const int kMaxNetworkPending = 1 << 26;
 static const int kMaxNetworkChunk = 1 << 20;
@@ -21,7 +20,7 @@ TableIterator* GlobalTableBase::get_iterator(int shard, unsigned int fetch_num) 
 }
 
 bool GlobalTableBase::is_local_shard(int shard) {
-  return owner(shard) == worker_id_;
+  return owner(shard) == helper_id();
 }
 
 bool GlobalTableBase::is_local_key(const StringPiece &k) {
@@ -30,7 +29,6 @@ bool GlobalTableBase::is_local_key(const StringPiece &k) {
 
 void GlobalTableBase::Init(const TableDescriptor *info) {
   TableBase::Init(info);
-  worker_id_ = -1;
   partitions_.resize(info->num_shards);
   partinfo_.resize(info->num_shards);
 }
@@ -49,11 +47,6 @@ void MutableGlobalTableBase::resize(int64_t new_size) {
       partitions_[i]->resize(new_size / partitions_.size());
     }
   }
-}
-
-void GlobalTableBase::set_worker(Worker* w) {
-  w_ = w;
-  worker_id_ = w->id();
 }
 
 bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
@@ -77,7 +70,7 @@ bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   req.set_table(info().table_id);
   req.set_shard(shard);
 
-  int peer = w_->peer_for_shard(info().table_id, shard);
+  int peer = helper()->peer_for_shard(info().table_id, shard);
 
   DCHECK_GE(peer, 0);
   DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
@@ -180,7 +173,7 @@ void GlobalTableBase::handle_get(const HashGet& get_req, TableData *get_resp) {
 
 void MutableGlobalTableBase::HandlePutRequests() {
   if (w_) {
-    w_->HandlePutRequest();
+    helper()->HandlePutRequest();
   }
 }
 
@@ -214,9 +207,9 @@ void MutableGlobalTableBase::SendUpdates() {
       do {
         put.Clear();
         put.set_shard(i);
-        put.set_source(w_->id());
+        put.set_source(helper()->id());
         put.set_table(id());
-        put.set_epoch(w_->epoch());
+        put.set_epoch(helper()->epoch());
 
         ProtoTableCoder c(&put);
         t->Serialize(&c);
