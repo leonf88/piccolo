@@ -350,6 +350,11 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   //  boost::recursive_mutex::scoped_lock sl(mutex());
   partition(shard)->update(k, v);
 
+  // invoke any registered triggers.
+  for (int i = 0; i < num_triggers(); ++i) {
+    reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+  }
+
   //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
     ++pending_writes_;
