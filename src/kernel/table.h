@@ -11,6 +11,17 @@
 namespace dsm {
 
 #ifndef SWIG
+
+template <class V>
+struct Accumulator {
+  virtual void Accumulate(V* a, const V& b) = 0;
+};
+
+template <class K>
+struct Sharder {
+  virtual int operator()(const K& k, int shards) = 0;
+};
+
 // Commonly used accumulation and sharding operators.
 template <class V>
 struct Accumulators {

@@ -101,16 +101,6 @@ private:
   unordered_map<string, double> p_;
 };
 
-template <class V>
-struct Accumulator {
-  virtual void Accumulate(V* a, const V& b) = 0;
-};
-
-template <class K>
-struct Sharder {
-  virtual int operator()(const K& k, int shards) = 0;
-};
-
 template <class T, class Enable = void>
 struct Marshal {
   virtual void marshal(const T& t, string* out) {
