@@ -88,8 +88,8 @@ public:
   void Serialize(TableCoder *out);
   void ApplyUpdates(TableCoder *in);
 
-  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
-  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
+  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
+  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
 
 private:
   uint32_t bucket_idx(K k) {
@@ -137,8 +137,8 @@ void SparseTable<K, V>::Serialize(TableCoder *out) {
   string k, v;
   while (!i->done()) {
     k.clear(); v.clear();
-    ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), &k);
-    ((Marshal<V>*)info_->value_marshal)->marshal(i->value(), &v);
+    ((Marshal<K>*)info_.key_marshal)->marshal(i->key(), &k);
+    ((Marshal<V>*)info_.value_marshal)->marshal(i->value(), &v);
     out->WriteEntry(k, v);
     i->Next();
   }
@@ -151,8 +151,8 @@ void SparseTable<K, V>::ApplyUpdates(TableCoder *in) {
   V v;
   string kt, vt;
   while (in->ReadEntry(&kt, &vt)) {
-    ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
-    ((Marshal<V>*)info_->value_marshal)->unmarshal(vt, &v);
+    ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
+    ((Marshal<V>*)info_.value_marshal)->unmarshal(vt, &v);
     update(k, v);
   }
 }
@@ -199,7 +199,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
   int b = bucket_for_key(k);
 
   if (b != -1) {
-    ((Accumulator<V>*)info_->accum)->Accumulate(&buckets_[b].v, v);
+    ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
   } else {
     put(k, v);
   }

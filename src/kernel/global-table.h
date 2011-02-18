@@ -190,8 +190,8 @@ public:
     return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard,fetch_num));
   }
 
-  Marshal<K> *kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
-  Marshal<V> *vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
+  Marshal<K> *kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
+  Marshal<V> *vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
 
 protected:
   int shard_for_key_str(const StringPiece& k);
@@ -348,12 +348,17 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
   //  boost::recursive_mutex::scoped_lock sl(mutex());
-  partition(shard)->update(k, v);
 
   // invoke any registered triggers.
+  bool doUpdate = true;
   for (int i = 0; i < num_triggers(); ++i) {
-    reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+    doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+    //for now, let NACKS disallow chained triggers (?)
+    if (!doUpdate) break;
   }
+
+  if (doUpdate)
+    partition(shard)->update(k, v);
 
   //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
@@ -410,7 +415,7 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   }
 
   string v_str;
-  return get_remote(shard, marshal(static_cast<Marshal<K>* >(info_->key_marshal), k), &v_str);
+  return get_remote(shard, marshal(static_cast<Marshal<K>* >(info_.key_marshal), k), &v_str);
 }
 
 template<class K, class V>
@@ -422,7 +427,7 @@ template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
   TableDescriptor *linfo = new TableDescriptor(info());
   linfo->shard = shard;
-  LocalTable* t = (LocalTable*)info_->partition_factory->New();
+  LocalTable* t = (LocalTable*)info_.partition_factory->New();
   t->Init(linfo);
 
   return t;

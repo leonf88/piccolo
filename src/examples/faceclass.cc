@@ -24,7 +24,7 @@ DEFINE_string(pathpn, "/home/kerm/piccolo.hg/src/examples/facedet/trainset/", "P
 DEFINE_int32(epochs, 100, "Number of training epochs");
 DEFINE_int32(hidden_neurons, 16, "Number of hidden heurons");
 DEFINE_int32(savedelta, 100, "Save net every (savedelta) epochs");
-DEFINE_int32(sharding, 100, "Images per kernel execution");
+DEFINE_int32(sharding, 1000, "Images per kernel execution");
 DEFINE_bool(list_errors, false, "If true, will ennumerate misclassed images");
 DEFINE_int32(total_ims, 43115, "Total number of images in DB");
 DEFINE_int32(im_x, 32, "Image width in pixels");
@@ -33,10 +33,51 @@ DEFINE_bool(verify, true, "If true, will check initial data put into tables for 
 DEFINE_double(eta, 0.3, "Learning rate of BPNN");
 DEFINE_double(momentum, 0.3, "Momentum of BPNN");
 
-static TypedGlobalTable<int, double>* nn_weights  = NULL;
-static TypedGlobalTable<int, double>* nn_biases   = NULL;
-static TypedGlobalTable<int, IMAGE>*  train_ims   = NULL;
-static TypedGlobalTable<int, double>* performance = NULL;
+static TypedGlobalTable<int, BPNN>*   nn_models      = NULL;
+static TypedGlobalTable<int, BPNN>*   nn_prev_models = NULL;
+static TypedGlobalTable<int, IMAGE>*  train_ims      = NULL;
+static TypedGlobalTable<int, double>* performance    = NULL;
+
+//-----------------------------------------------
+// Marshalling for BPNN type
+//-----------------------------------------------
+namespace dsm{
+	template <> struct Marshal<BPNN> : MarshalBase {
+		static void marshal(const BPNN& t, string *out) {
+			int sizes[3];
+			int i;
+			VLOG(1) << "Marshalling BPNN from " << t.input_n << ", " << t.hidden_n << ", " << t.output_n << endl;
+			sizes[0] = t.input_n;
+			sizes[1] = t.hidden_n;
+			sizes[2] = t.output_n;
+			out->append((char*)sizes,3*sizeof(int));
+			for(i=0;i<t.input_n+1;i++) {
+				out->append((char*)t.input_weights[i],(1+t.hidden_n)*sizeof(double));
+			}
+			for(i=0;i<t.hidden_n+1;i++) {
+				out->append((char*)t.hidden_weights[i],(1+t.output_n)*sizeof(double));
+			}
+			VLOG(1) << "Marshalled BPNN to string of size " << out->length() << endl;
+		}
+		static void unmarshal(const StringPiece &s, BPNN* t) {
+			BackProp bpnn;
+			int sizes[3];
+			memcpy(sizes,s.data,3*sizeof(int));
+			int offset = 3*sizeof(int), i;
+			bpnn.bpnn_recreate(t,sizes[0],sizes[1],sizes[2],true);
+			for(i=0;i<t->input_n+1;i++) {
+				memcpy(t->input_weights[i],s.data+offset,(1+t->hidden_n)*sizeof(double));
+				offset += (1+t->hidden_n)*sizeof(double);
+			}
+			for(i=0;i<t->hidden_n+1;i++) {
+				memcpy(t->hidden_weights[i],s.data+offset,(1+t->output_n)*sizeof(double));
+				offset += (1+t->output_n)*sizeof(double);
+			}
+			VLOG(1) << "Unmarshalled BPNN from string" << endl;
+		}
+	};
+}
+			
 
 //-----------------------------------------------
 // Marshalling for IMAGE* type
@@ -205,79 +246,58 @@ class FCKernel : public DSMKernel {
 				net = bpnn.bpnn_create(imgsize, hiddenn, 1);
 			}
 
-			/*** Put initial network into database ***/
-			for(i=0;i<imgsize+1;i++) {							// Input layer biases
-				nn_biases->update(i,net->input_units[i]);
-			}
-			for(i=0;i<hiddenn+1;i++) {							// Hidden layer biases
-				nn_biases->update(i+(imgsize+1),net->hidden_units[i]);
-			}
-			for(i=0;i<1+1;i++) {								// Output layer biases
-				nn_biases->update(i+(imgsize+1)+(hiddenn+1),net->output_units[i]);
-			}
-			nn_biases->SendUpdates();
-			for(i=0;i<(imgsize+1);i++) {						// Input->Hidden weights
-				for(j=0;j<(hiddenn+1);j++) {
-					nn_weights->update((i*(hiddenn+1))+j,net->input_weights[i][j]);
-				}
-			}
-			for(i=0;i<(hiddenn+1);i++) {						//Hidden->Output weights
-				for(j=0;j<(1+1);j++) {
-					nn_weights->update((((imgsize+1)*(hiddenn+1))+(i*(1+1))+j),net->hidden_weights[i][j]);
-				}
-			}
-			nn_weights->SendUpdates();
-			printf("NN biases and weights stored in tables\n");
-
-			/*** If requested, grab all the weights/biases out again and make sure they're correct ***/
-			if(FLAGS_verify == true) {
-				for(i=0;i<imgsize+1;i++) {							// Input layer biases
-					if (net->input_units[i] != nn_biases->get(i)) {
-						fprintf(stderr,"[Verify] NN bias (input,%d) did not match\n",i);
-					}
-				}
-				for(i=0;i<hiddenn+1;i++) {							// Hidden layer biases
-					if (net->hidden_units[i] != nn_biases->get(i+(imgsize+1))) {
-						fprintf(stderr,"[Verify] NN bias (hidden,%d) did not match\n",i);
-					}
-				}
-				for(i=0;i<1+1;i++) {								// Output layer biases
-					if (net->output_units[i] != nn_biases->get(i+(imgsize+1)+(hiddenn+1))) {
-						fprintf(stderr,"[Verify] NN bias (output,%d) did not match\n",i);
-					}
-				}
-				for(i=0;i<(imgsize+1);i++) {						// Input->Hidden weights
-					for(j=0;j<(hiddenn+1);j++) {
-						if (net->input_weights[i][j] != nn_weights->get((i*(hiddenn+1))+j)) {
-							fprintf(stderr,"[Verify] NN weight (input,%d,%d) did not match\n",i,j);
-						}
-					}
-				}
-				for(i=0;i<(hiddenn+1);i++) {						//Hidden->Output weights
-					for(j=0;j<(1+1);j++) {
-						if (net->hidden_weights[i][j] != nn_weights->get((((imgsize+1)*(hiddenn+1))+(i*(1+1))+j))) {
-							fprintf(stderr,"[Verify] NN weight (hidden,%d,%d) did not match\n",i,j);
-						}
-					}
-				}
-
-			}
-			performance->update(0,0);
-			performance->update(1,0.0f);
+			nn_prev_models->update(0,*net);	
+			nn_prev_models->SendUpdates();
+			
+			performance->update(0,0.0f);
 			performance->SendUpdates();
 			if (FLAGS_verify == true) {
-				if (performance->get(0) != 0)
+				if (performance->get(0) != 0.0)
 					fprintf(stderr,"[Verify] Performance image count was not zero.\n");
-				if (performance->get(1) != 0)
-					fprintf(stderr,"[Verify] Performance accumulated error was not zero.\n");
 			}
 		}
 
 		void TrainIteration() {
-			if (0 > TableToBPNN(net)) {
-				fprintf(stderr,"Fatal error: could not load bpnn from table\n");
-				exit(-1);
+			int whichtable = 0;
+
+			double cum_perf = 0.0;
+			vector<double> perfs;
+			vector<int> indices;
+			double perfmin = 999.99, perfmax = -999.99;
+
+			for(int i=0; i < nn_prev_models->num_shards(); i++) {
+				if (nn_prev_models->contains(i) && performance->contains(i)) {
+					if (performance->get(i) > perfmax)
+						perfmax = performance->get(i);
+					if (performance->get(i) < perfmin)
+						perfmin = performance->get(i);
+				}
 			}
+			for(int i=0; i < nn_prev_models->num_shards(); i++) {
+				if (nn_prev_models->contains(i) && performance->contains(i)) {
+					cum_perf += (performance->get(i))-perfmin;
+					perfs.push_back(cum_perf);
+					indices.push_back(i);
+				}
+			}
+			float whichmodelperf = (cum_perf)*((float)rand()/(float)RAND_MAX);
+//			printf("\nPicked 0 <= %f <= %f\n",whichmodelperf,cum_perf);
+			vector<int>::iterator it1 = indices.begin();
+			vector<double>::iterator it2 = perfs.begin();
+			for(;it1 < indices.end() && it2 < perfs.end(); it1++, it2++) {
+				if (whichmodelperf <= *it2) {
+//					printf("%d->%f; ",*it1,*it2);
+					whichtable = *it1;
+					if (0 > (net = TableToBPNN(whichtable))) {
+						fprintf(stderr,"Fatal error: could not load bpnn from table\n");
+						exit(-1);
+					}
+					break;
+				}
+			}
+
+//			printf("Shard %d picked model %d\n",current_shard(),whichtable);
+			
 
 			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard(),PREFETCH);
 			for (; !it->done(); it->Next()) {
@@ -298,61 +318,79 @@ class FCKernel : public DSMKernel {
 				bpnn.bpnn_hidden_error(net->hidden_delta, hiddenn, net->output_delta, 1,
 						net->hidden_weights, net->hidden_units, &hid_err);
 
-				/*** Adjust input and hidden weights in database. ***/
-				double thiseta = FLAGS_eta/(double)nn_biases->num_shards();		//aka conf.num_workers
-				UpdateBPNNWithDeltas(net->output_delta, 1, net->hidden_units, hiddenn,
-						net->hidden_weights, net->hidden_prev_weights, thiseta, FLAGS_momentum,((imgsize+1)*(hiddenn+1)));
-				UpdateBPNNWithDeltas(net->hidden_delta, hiddenn, net->input_units, imgsize,
-						net->input_weights, net->input_prev_weights, thiseta, FLAGS_momentum,0);
-
 				/*** Adjust input and hidden weights. ***/
+//				double thiseta = FLAGS_eta/(double)train_ims->num_shards();
+
+				double thiseta = FLAGS_eta;
 				bpnn.bpnn_adjust_weights(net->output_delta, 1, net->hidden_units, hiddenn,
 						net->hidden_weights, net->hidden_prev_weights, thiseta, FLAGS_momentum);
 				bpnn.bpnn_adjust_weights(net->hidden_delta, hiddenn, net->input_units, imgsize,
 						net->input_weights, net->input_prev_weights, thiseta, FLAGS_momentum);
 			}
 
+//			printf("Current shard is %d\n",current_shard());
+			nn_models->update(current_shard(),*net);
+			nn_models->SendUpdates();
+			//bpnn.bpnn_free(net,false);
 		}
 
 		void PerformanceCheck() {
 			double delta,err;
 			bool classed;										//true if this image was correct classed
 
-			if (0 > TableToBPNN(net)) {
-				fprintf(stderr,"Fatal error: could not load bpnn from table\n");
-				exit(-1);
+			for(int j = 0; j < nn_prev_models->num_shards(); j++) {
+				if (nn_prev_models->contains(j)) {
+					if (0 > (net = TableToBPNN(j))) {
+						fprintf(stderr,"Fatal error: could not load bpnn from table\n");
+						exit(-1);
+					}
+					TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(j,PREFETCH);
+
+					for (; !it->done(); it->Next()) {
+						IMAGE thisimg = it->value();						//grab this image
+
+						imnet.load_input_with_image(&thisimg, net);			//load the input layer
+						bpnn.bpnn_feedforward(net);
+						imnet.load_target(&thisimg, net);					//load target output layer
+						delta = net->target[1] - net->output_units[1];
+						err   = 0.5*delta*delta;							//.5delta^2
+	//					performance->update(1,err);							//accumulate more error
+
+						classed = (net->output_units[1] > 0.5);
+						classed = (net->target[1] > 0.5)?classed:!classed;
+						performance->update(j,(classed?1:0));					//accumulate correct classifications
+					}
+					//bpnn.bpnn_free(net,false);
+				}
 			}
-
-			TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(current_shard(),PREFETCH);
-
-			for (; !it->done(); it->Next()) {
-				IMAGE thisimg = it->value();						//grab this image
-
-				imnet.load_input_with_image(&thisimg, net);			//load the input layer
-				bpnn.bpnn_feedforward(net);
-				imnet.load_target(&thisimg, net);					//load target output layer
-				delta = net->target[1] - net->output_units[1];
-				err   = 0.5*delta*delta;							//.5delta^2
-				performance->update(1,err);							//accumulate more error
-
-				classed = (net->output_units[1] > 0.5);
-				classed = (net->target[1] > 0.5)?classed:!classed;
-				performance->update(0,classed?1:0);					//accumulate correct classifications
-
-			}
+//			printf("Got %d of %d images\n",correctims,ims);
 			performance->SendUpdates();
+
+			//This part is like swap()
+			nn_prev_models->update(current_shard(),*net);
+			nn_prev_models->SendUpdates();
+
 		}
 
 		void DisplayPerformance() {
+			double sumperf = 0.0, thisperf;
+			int perfshards = 0;
 
-			double ims_correct = performance->get(0);
-			double total_err   = performance->get(1);
-			printf("Performance: %d of %d (%.0f%%) images correctly classified, average err %f\n",
-					(int)ims_correct,
-					FLAGS_total_ims,
-					round(100*(ims_correct/((double)FLAGS_total_ims))),
-					(total_err/((double)FLAGS_total_ims))
-				  );
+			for(int j = 0; j < performance->num_shards(); j++) {
+				for(TypedTableIterator<int, double> *it = performance->get_typed_iterator(j,PREFETCH);
+						!it->done(); it->Next())
+				{
+					thisperf = it->value();
+					performance->update(it->key(),-it->value());
+					thisperf /=(double)FLAGS_total_ims;
+					sumperf += thisperf;
+					perfshards++;
+				}
+			}
+
+			printf("Performance: globally, %2.2f%% images correctly classified\n",
+				100.0*(sumperf/(double)perfshards));
+/*
 			performance->update(0,-ims_correct);
 			performance->update(1,-total_err);
 			performance->SendUpdates();
@@ -360,64 +398,18 @@ class FCKernel : public DSMKernel {
 				LOG(FATAL) << "!!BUG!! Correct image count not reset to zero" << endl;
 			if (performance->get(1) != 0)
 				LOG(FATAL) << "!!BUG!! Accumulated error not reset to zero" << endl;
+*/
 		}
 
 	private:
-		int TableToBPNN(BPNN* thisnet) {
-			int num_shards = nn_biases->num_shards();
-
-			for(int j=0; j<num_shards; j++) {
-				TypedTableIterator<int, double> *it_biases = nn_biases->get_typed_iterator(j,PREFETCH);
-				for(; !it_biases->done(); it_biases->Next()) {
-					if (it_biases->key() < imgsize+1) {
-						net->input_units[it_biases->key()] = it_biases->value();
-					} else if (it_biases->key() < hiddenn+1+imgsize+1) {
-						net->hidden_units[it_biases->key()-(imgsize+1)] = it_biases->value();
-					} else {
-						net->output_units[it_biases->key()-(hiddenn+1+imgsize+1)] = it_biases->value();
-					}
-				}
-
-				TypedTableIterator<int, double> *it_weights = nn_weights->get_typed_iterator(j,PREFETCH);
-				for(; !it_weights->done(); it_weights->Next()) {
-					if (it_weights->key() < (imgsize+1)*(hiddenn+1)) {		//Input -> Hidden weights
-						int row = it_weights->key()/(hiddenn+1);
-						int col = it_weights->key()%(hiddenn+1);
-						net->input_weights[row][col] = it_weights->value();
-					} else {												//Hidden -> Output weights
-						int row = (it_weights->key()-(imgsize+1)*(hiddenn+1))/(1+1);
-						int col = (it_weights->key()-(imgsize+1)*(hiddenn+1))%(1+1);
-						net->hidden_weights[row][col] = it_weights->value();
-					}
-				}
-			}
-
-			return 0;			//success
-		}
-
-		void UpdateBPNNWithDeltas(double *delta, int ndelta, double *ly, int nly, double **w,
-				double **oldw, double eta, double momentum,int idx_offset) {
-			double newval_dw;
-			int k, j;
-
-			double updates = 0;
-			ly[0] = 1.0;
-			for (j = 1; j <= ndelta; j++) {
-				for (k = 0; k <= nly; k++) {
-					newval_dw = ((eta * delta[j] * ly[k]) + (momentum * oldw[k][j]));
-					nn_weights->update(idx_offset+(k*(ndelta+1))+j,newval_dw);
-
-					updates+= newval_dw;
-
-				}
-			}
-
-			nn_weights->SendUpdates();
-
+		BPNN* TableToBPNN(int whichmodel) {
+			static BPNN thisnet_ = nn_prev_models->get(whichmodel);
+			return &thisnet_;
 		}
 
 
 };
+
 REGISTER_KERNEL(FCKernel);
 REGISTER_METHOD(FCKernel, InitKernel);
 REGISTER_METHOD(FCKernel, Initialize);
@@ -428,10 +420,11 @@ REGISTER_METHOD(FCKernel, DisplayPerformance);
 int Faceclass(ConfigData& conf) {
 	int i;
 
-	nn_weights  = CreateTable(0,conf.num_workers(),new Sharding::Mod,new Accumulators<double>::Sum);
-	nn_biases   = CreateTable(1,conf.num_workers(), new Sharding::Mod,new Accumulators<double>::Sum);
-	train_ims   = CreateTable(2,ceil(FLAGS_total_ims/FLAGS_sharding),new Sharding::Mod, new Accumulators<IMAGE>::Replace);
-	performance = CreateTable(3,1,new Sharding::Mod, new Accumulators<double>::Sum);
+	int imageshards = ceil(FLAGS_total_ims/FLAGS_sharding);
+	nn_models       = CreateTable(0,imageshards,new Sharding::Mod,new Accumulators<BPNN>::Replace);
+	nn_prev_models  = CreateTable(1,imageshards,new Sharding::Mod,new Accumulators<BPNN>::Replace);
+	train_ims       = CreateTable(2,imageshards,new Sharding::Mod, new Accumulators<IMAGE>::Replace);
+	performance     = CreateTable(3,imageshards,new Sharding::Mod, new Accumulators<double>::Sum);
 
 	StartWorker(conf);
 	Master m(conf);

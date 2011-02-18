@@ -43,7 +43,7 @@ struct TriggerBase {
 // initialization time.
 template <class K, class V>
 struct Trigger : public TriggerBase {
-  virtual void Fire(const K& k, const V& current, const V& update) = 0;
+  virtual bool Fire(const K& k, const V& current, const V& update) = 0;
 };
 
 // Each table is associated with a single accumulator.  Accumulators are
@@ -99,12 +99,19 @@ struct TableFactory {
 
 struct TableDescriptor {
 public:
+  TableDescriptor() { Reset(); }
+
   TableDescriptor(int id, int shards) {
+    Reset();
     table_id = id;
-    num_shards = shards;
+    num_shards = shards; 
+  }
+
+  void Reset() {
+    table_id = -1;
+    num_shards = -1;
     block_size = 500;
     max_stale_time = 0.;
-    helper_id = -1;
     helper = NULL;
     partition_factory = NULL;
     block_info = NULL;
@@ -141,7 +148,6 @@ public:
   // For global tables, reference to the local worker.  Used for passing
   // off remote access requests.
   TableHelper *helper;
-  int helper_id;
 };
 
 class TableIterator;
@@ -167,46 +173,50 @@ struct TableIterator {
 };
 
 // Methods common to both global and local table views.
-class TableBase : virtual public Table {
+class TableBase : public Table {
 public:
   typedef TableIterator Iterator;
   virtual void Init(const TableDescriptor* info) {
-    info_ = new TableDescriptor(*info);
+	info_ = *info;
+    CHECK(info_.key_marshal != NULL);
+    CHECK(info_.value_marshal != NULL);
 
-    CHECK(info_->key_marshal != NULL);
-    CHECK(info_->value_marshal != NULL);
+    LOG(INFO) << "Table " << this << " -- Init!";
   }
 
-  const TableDescriptor& info() const { return *info_; }
-  TableDescriptor& mutable_info() { return *info_; }
+  const TableDescriptor& info() const { return info_; }
+  TableDescriptor& mutable_info() { return info_; }
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
 
-  TableHelper *helper() { return info().helper; }
+  TableHelper *helper() { 
+	return info().helper;
+  }
   int helper_id() { return helper()->id(); }
 
-  int num_triggers() { return info_->triggers.size(); }
-  TriggerBase *trigger(int idx) { return info_->triggers[idx]; }
+  int num_triggers() { return info_.triggers.size(); }
+  TriggerBase *trigger(int idx) { return info_.triggers[idx]; }
 
   void register_trigger(TriggerBase *t) {
     if (helper()) {
       t->helper = helper();
     }
     t->table = this;
-    info_->triggers.push_back(t);
+    info_.triggers.push_back(t);
   }
 
   void set_helper(TableHelper *w) {
-    for (int i = 0; i < info_->triggers.size(); ++i) {
+    for (int i = 0; i < info_.triggers.size(); ++i) {
       trigger(i)->helper = w;
     }
 
-    info_->helper = w;
-    info_->helper_id = w->id();
+    info_.helper = w;
+
+    LOG(INFO) << "Table " << this << " -- helper is now " << w;
   }
 
 protected:
-  TableDescriptor *info_;
+  TableDescriptor info_;
 };
 
 // Key/value typed interface.

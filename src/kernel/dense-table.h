@@ -56,7 +56,7 @@ public:
 
     void Next() {
       ++idx_;
-      if (idx_ >= parent_.info_->block_size) {
+      if (idx_ >= parent_.info_.block_size) {
         ++it_;
         idx_ = 0;
       }
@@ -78,16 +78,16 @@ public:
   };
 
   BlockInfo<K>& block_info() {
-    return *(BlockInfo<K>*)info_->block_info;
+    return *(BlockInfo<K>*)info_.block_info;
   }
 
   // return the first key in a bucket
   K start_key(const K& k) {
-    return block_info().start(k, info_->block_size);
+    return block_info().start(k, info_.block_size);
   }
 
   int block_pos(const K& k) {
-    return block_info().offset(k, info_->block_size);
+    return block_info().offset(k, info_.block_size);
   }
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
@@ -116,8 +116,8 @@ public:
     }
 
     Bucket &vb = m_[start];
-    if (vb.entries.size() != info_->block_size) {
-      vb.entries.resize(info_->block_size);
+    if (vb.entries.size() != info_.block_size) {
+      vb.entries.resize(info_.block_size);
     }
 
     last_block_ = &vb.entries[0];
@@ -132,7 +132,7 @@ public:
 
   void update(const K& k, const V& v) {
     V* vb = get_block(k);
-    ((Accumulator<V>*)info_->accum)->Accumulate(&vb[block_pos(k)], v);
+    ((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
   }
 
   void put(const K& k, const V& v) {
@@ -149,7 +149,7 @@ public:
   }
 
   int64_t size() {
-    return m_.size() * info_->block_size;
+    return m_.size() * info_.block_size;
   }
 
   void clear() {
@@ -166,12 +166,12 @@ public:
 
       // For the purposes of serialization, all values in a bucket are assumed
       // to be the same number of bytes.
-      ((Marshal<K>*)info_->key_marshal)->marshal(i->first, &k);
+      ((Marshal<K>*)info_.key_marshal)->marshal(i->first, &k);
 
       string tmp;
       Bucket &b = i->second;
       for (int j = 0; j < b.entries.size(); ++j) {
-        ((Marshal<V>*)info_->value_marshal)->marshal(b.entries[j], &tmp);
+        ((Marshal<V>*)info_.value_marshal)->marshal(b.entries[j], &tmp);
         v += tmp;
       }
 
@@ -184,23 +184,23 @@ public:
 
     string kt, vt;
     while (in->ReadEntry(&kt, &vt)) {
-      ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
+      ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
 
       V* block = get_block(k);
-      const int value_size = vt.size() / info_->block_size;
+      const int value_size = vt.size() / info_.block_size;
 
       V tmp;
-      for (int j = 0; j < info_->block_size; ++j) {
-        ((Marshal<V>*)info_->value_marshal)->unmarshal(
+      for (int j = 0; j < info_.block_size; ++j) {
+        ((Marshal<V>*)info_.value_marshal)->unmarshal(
             StringPiece(vt.data() + (value_size * j), value_size),
             &tmp);
-        ((Accumulator<V>*)info_->accum)->Accumulate(&block[j], tmp);
+        ((Accumulator<V>*)info_.accum)->Accumulate(&block[j], tmp);
       }
     }
   }
 
-  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_->key_marshal); }
-  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_->value_marshal); }
+  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
+  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
 
 private:
   BucketMap m_;
