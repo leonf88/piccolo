@@ -40,7 +40,9 @@ Worker::Worker(const ConfigData &c) {
 
   // HACKHACKHACK - register ourselves with any existing tables
   TableRegistry::Map &t = TableRegistry::Get()->tables();
+  LOG(INFO) << "Registering with tables..." << t.size();
   for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
+	LOG(INFO) << "Table %p" << i->second;
     i->second->set_helper(this);
   }
 

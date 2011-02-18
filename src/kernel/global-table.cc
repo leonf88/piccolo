@@ -20,6 +20,8 @@ TableIterator* GlobalTableBase::get_iterator(int shard, unsigned int fetch_num) 
 }
 
 bool GlobalTableBase::is_local_shard(int shard) {
+  if (!helper()) 
+    return false;
   return owner(shard) == helper_id();
 }
 

@@ -27,7 +27,7 @@ public:
 
   virtual TableIterator* get_iterator() = 0;
 
-  int shard() { return info_->shard; }
+  int shard() { return info_.shard; }
 
 protected:
   friend class GlobalTable;

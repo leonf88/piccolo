@@ -98,16 +98,7 @@ void BackProp::bpnn_initialize(int seed)
 }
 
 
-BPNN *BackProp::bpnn_internal_create(int n_in, int n_hidden, int n_out)
-{
-  BPNN *newvalnet;
-
-  newvalnet = (BPNN *) malloc (sizeof (BPNN));
-  if (newvalnet == NULL) {
-    printf("BPNN_CREATE: Couldn't allocate neural network\n");
-    return (NULL);
-  }
-
+void BackProp::bpnn_internal_populate(BPNN* newvalnet, int n_in, int n_hidden, int n_out) {
   newvalnet->input_n = n_in;
   newvalnet->hidden_n = n_hidden;
   newvalnet->output_n = n_out;
@@ -124,41 +115,76 @@ BPNN *BackProp::bpnn_internal_create(int n_in, int n_hidden, int n_out)
 
   newvalnet->input_prev_weights = alloc_2d_dbl(n_in + 1, n_hidden + 1);
   newvalnet->hidden_prev_weights = alloc_2d_dbl(n_hidden + 1, n_out + 1);
+}
+
+BPNN *BackProp::bpnn_internal_create(int n_in, int n_hidden, int n_out)
+{
+  BPNN *newvalnet;
+
+  newvalnet = (BPNN *) malloc (sizeof (BPNN));
+  if (newvalnet == NULL) {
+    printf("BPNN_CREATE: Couldn't allocate neural network\n");
+    return (NULL);
+  }
+
+  bpnn_internal_populate(newvalnet, n_in, n_hidden, n_out);
 
   return (newvalnet);
 }
 
 
-void BackProp::bpnn_free(BPNN *net)
+void BackProp::bpnn_free(BPNN *net, bool delstructure)
 {
   int n1, n2, i;
+
+  if (!net)
+    return;
 
   n1 = net->input_n;
   n2 = net->hidden_n;
 
-  free((char *) net->input_units);
-  free((char *) net->hidden_units);
-  free((char *) net->output_units);
+  printf("%llx %llx %llx\n",net->input_units,net->hidden_units,net->output_units); 
+  if (net->input_units)
+    free((char *) net->input_units);
+  if (net->hidden_units)
+    free((char *) net->hidden_units);
+  if (net->output_units)
+    free((char *) net->output_units);
 
-  free((char *) net->hidden_delta);
-  free((char *) net->output_delta);
-  free((char *) net->target);
+  printf("%llx %llx %llx\n",net->hidden_delta,net->output_delta,net->target); 
+  if (net->hidden_delta)
+    free((char *) net->hidden_delta);
+  if (net->output_delta)
+    free((char *) net->output_delta);
+  if (net->target)
+    free((char *) net->target);
 
+  printf("%llx %llx\n",net->input_weights,net->input_prev_weights);
   for (i = 0; i <= n1; i++) {
-    free((char *) net->input_weights[i]);
-    free((char *) net->input_prev_weights[i]);
+    if (net->input_weights && net->input_weights[i])
+      free((char *) net->input_weights[i]);
+    if (net->input_prev_weights && net->input_prev_weights[i])
+      free((char *) net->input_prev_weights[i]);
   }
-  free((char *) net->input_weights);
-  free((char *) net->input_prev_weights);
+  if (net->input_weights)
+    free((char *) net->input_weights);
+  if (net->input_prev_weights)
+    free((char *) net->input_prev_weights);
 
+  printf("%llx %llx\n",net->hidden_weights,net->hidden_prev_weights);
   for (i = 0; i <= n2; i++) {
-    free((char *) net->hidden_weights[i]);
-    free((char *) net->hidden_prev_weights[i]);
+    if (net->hidden_weights && net->hidden_weights[i])
+      free((char *) net->hidden_weights[i]);
+    if (net->hidden_prev_weights && net->hidden_prev_weights[i])
+      free((char *) net->hidden_prev_weights[i]);
   }
-  free((char *) net->hidden_weights);
-  free((char *) net->hidden_prev_weights);
+  if (net->hidden_weights)
+    free((char *) net->hidden_weights);
+  if (net->hidden_prev_weights)
+    free((char *) net->hidden_prev_weights);
 
-  free((char *) net);
+  if (delstructure && net)
+    free((char *) net);
 }
 
 
@@ -170,6 +196,12 @@ void BackProp::bpnn_free(BPNN *net)
      Space is also allocated for temporary storage (momentum weights,
      error computations, etc).
 ***/
+
+void BackProp::bpnn_recreate(BPNN* net, int n_in, int n_hidden, int n_out, bool no_free) {
+  if (!no_free)
+    bpnn_free(net,false);
+  bpnn_internal_populate(net,n_in,n_hidden,n_out);
+}
 
 BPNN *BackProp::bpnn_create(int n_in, int n_hidden, int n_out)
 {
@@ -328,9 +360,12 @@ void BackProp::bpnn_save(BPNN *net, const char *filename)
   printf("Saving %dx%dx%d network to '%s'\n", n1, n2, n3, filename);
   fflush(stdout);
 
-  write(fd, (char *) &n1, sizeof(int));
-  write(fd, (char *) &n2, sizeof(int));
-  write(fd, (char *) &n3, sizeof(int));
+  if (0 > write(fd, (char *) &n1, sizeof(int)) || 
+      0 > write(fd, (char *) &n2, sizeof(int)) ||
+      0 > write(fd, (char *) &n3, sizeof(int))) {
+    fprintf(stderr,"Could not write network to file!\n");
+    exit(-1);
+  }
 
   memcnt = 0;
   w = net->input_weights;
@@ -355,7 +390,10 @@ void BackProp::bpnn_save(BPNN *net, const char *filename)
       memcnt += sizeof(double);
     }
   }
-  write(fd, mem, (n2+1) * (n3+1) * sizeof(double));
+  if (0 > write(fd, mem, (n2+1) * (n3+1) * sizeof(double))) {
+    fprintf(stderr,"Could not write network to file!\n");
+    exit(-1);
+  }
   free(mem);
 
   close(fd);
