@@ -189,13 +189,18 @@ public:
   TriggerBase *trigger(int idx) { return info_->triggers[idx]; }
 
   void register_trigger(TriggerBase *t) {
-    CHECK(helper() != NULL);
-    t->helper = helper();
+    if (helper()) {
+      t->helper = helper();
+    }
     t->table = this;
     info_->triggers.push_back(t);
   }
 
   void set_helper(TableHelper *w) {
+    for (int i = 0; i < info_->triggers.size(); ++i) {
+      trigger(i)->helper = w;
+    }
+
     info_->helper = w;
     info_->helper_id = w->id();
   }
