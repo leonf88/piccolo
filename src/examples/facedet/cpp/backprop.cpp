@@ -143,7 +143,7 @@ void BackProp::bpnn_free(BPNN *net, bool delstructure)
   n1 = net->input_n;
   n2 = net->hidden_n;
 
-  printf("%llx %llx %llx\n",net->input_units,net->hidden_units,net->output_units); 
+  printf("%p %p %p\n",net->input_units,net->hidden_units,net->output_units);
   if (net->input_units)
     free((char *) net->input_units);
   if (net->hidden_units)
@@ -151,7 +151,7 @@ void BackProp::bpnn_free(BPNN *net, bool delstructure)
   if (net->output_units)
     free((char *) net->output_units);
 
-  printf("%llx %llx %llx\n",net->hidden_delta,net->output_delta,net->target); 
+  printf("%p %p %p\n",net->hidden_delta,net->output_delta,net->target);
   if (net->hidden_delta)
     free((char *) net->hidden_delta);
   if (net->output_delta)
@@ -159,7 +159,7 @@ void BackProp::bpnn_free(BPNN *net, bool delstructure)
   if (net->target)
     free((char *) net->target);
 
-  printf("%llx %llx\n",net->input_weights,net->input_prev_weights);
+  printf("%p %p\n",net->input_weights,net->input_prev_weights);
   for (i = 0; i <= n1; i++) {
     if (net->input_weights && net->input_weights[i])
       free((char *) net->input_weights[i]);
@@ -171,7 +171,7 @@ void BackProp::bpnn_free(BPNN *net, bool delstructure)
   if (net->input_prev_weights)
     free((char *) net->input_prev_weights);
 
-  printf("%llx %llx\n",net->hidden_weights,net->hidden_prev_weights);
+  printf("%p %p\n",net->hidden_weights,net->hidden_prev_weights);
   for (i = 0; i <= n2; i++) {
     if (net->hidden_weights && net->hidden_weights[i])
       free((char *) net->hidden_weights[i]);
