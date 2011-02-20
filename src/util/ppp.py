@@ -265,7 +265,7 @@ def ProcessFile(f_in, f_out):
 
 if __name__ == '__main__':
   n_in = sys.argv[1]
-  n_out = f_in + '.cc' if len(sys.argv) < 3 else sys.argv[2]
+  n_out = n_in + '.cc' if len(sys.argv) < 3 else sys.argv[2]
   f_out = open(n_out, 'w')
   try:
     ProcessFile(n_in, f_out)
