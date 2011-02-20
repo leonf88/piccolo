@@ -6,27 +6,25 @@ MAKE := $(MAKE) --no-print-directory
 #OPROFILE = 1
 
 ifeq ($(shell which distcc > /dev/null; echo $$?), 0)
-CXX := distcc $(CXX)
-CC := distcc $(CC)
+	CXX := distcc $(CXX)
+	CC := distcc $(CC)
+	PARALLELISM := $(shell distcc -j)
+else
+	PARALLELISM = 4
 endif
 
 export CXX CC CFLAGS CPPFLAGS OPROFILE
 
 all: release debug
 
-bin/release/Makefile:
+release: 
 	@mkdir -p bin/release
 	@cd bin/release && $(CMAKE) -DCMAKE_BUILD_TYPE=Release $(TOP)/src
-	
-bin/debug/Makefile:
-	@mkdir -p bin/debug
-	@cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug $(TOP)/src
-
-
-release: bin/release/Makefile
 	@cd bin/release && $(MAKE) -j40
 
-debug: bin/debug/Makefile
+debug: 
+	@mkdir -p bin/debug
+	@cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug $(TOP)/src
 	@cd bin/debug  && $(MAKE) -j40
 
 docs:

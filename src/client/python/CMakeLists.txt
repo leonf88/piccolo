@@ -42,13 +42,16 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_BINARY_DIR}/worker/libworker.a
   ${CMAKE_BINARY_DIR}/kernel/libkernel.a
   ${CMAKE_BINARY_DIR}/master/libmaster.a
-  ${CMAKE_BINARY_DIR}/external/protobuf/libprotobuf.a
   ${CMAKE_BINARY_DIR}/external/google-flags/libgflags.a    
-  ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a
-  ${CMAKE_BINARY_DIR}/external/google-perftools/libprofiler.a
-  ${CMAKE_BINARY_DIR}/external/google-perftools/libgperfbase.a
+  ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a  
   ${MPI_LINK_FLAGS}
-  -lpthread -lutil -lnuma -llzo2 -lboost_python-mt-py26 -lboost_thread-mt -lblas 
+  -lblas
+  -lboost_python-mt-py26 
+  -lboost_thread-mt 
+  -llzo2
+  -lpthread 
+  -lnuma
+  -lutil
   DEPENDS ${swig_out} worker master common kernel example
 )
   
