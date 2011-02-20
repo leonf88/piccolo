@@ -1,8 +1,8 @@
 set(MPILIBS )
-set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal SDL)
+set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal SDL profiler unwind)
 set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
-protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
+protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR ${PICCOLO_SOURCE_DIR} examples.proto )
 piccolo_pp(k-means.pp 
 		   matmul.pp
 		   pagerank.pp
@@ -28,7 +28,7 @@ add_library(example
             faceclass.cc
             nas/isort.cc 
             nas/n-body.cc            
-			bipartmatch-trigger.cc
+	    #bipartmatch-trigger.cc
             ${EXAMPLE_PB_HDR} 
             ${EXAMPLE_PB_SRC})
             
@@ -38,7 +38,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/facedet/cpp)
 
 # we need to resolve static initializers, so glob all the symbols in
 target_link_libraries(example-dsm -Wl,-whole-archive common worker kernel master example -Wl,-no-whole-archive)
-target_link_libraries(example-dsm gflags glog gtest profiler gperfbase unwind webgraph)
+target_link_libraries(example-dsm gflags glog webgraph)
 
 # link statically if possible
 target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
