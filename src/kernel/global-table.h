@@ -106,7 +106,6 @@ protected:
   // Fetch key k from the node owning it.  Returns true if the key exists.
   bool get_remote(int shard, const StringPiece &k, string* v);
 
-  Worker *w_;
   int worker_id_;
 
   vector<LocalTable*> partitions_;

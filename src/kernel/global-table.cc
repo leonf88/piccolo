@@ -174,7 +174,7 @@ void GlobalTableBase::handle_get(const HashGet& get_req, TableData *get_resp) {
 }
 
 void MutableGlobalTableBase::HandlePutRequests() {
-  if (w_) {
+  if (helper()) {
     helper()->HandlePutRequest();
   }
 }

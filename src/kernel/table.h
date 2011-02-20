@@ -180,8 +180,6 @@ public:
 	info_ = *info;
     CHECK(info_.key_marshal != NULL);
     CHECK(info_.value_marshal != NULL);
-
-    LOG(INFO) << "Table " << this << " -- Init!";
   }
 
   const TableDescriptor& info() const { return info_; }
@@ -189,9 +187,7 @@ public:
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
 
-  TableHelper *helper() { 
-	return info().helper;
-  }
+  TableHelper *helper() { return info().helper; }
   int helper_id() { return helper()->id(); }
 
   int num_triggers() { return info_.triggers.size(); }
@@ -211,8 +207,6 @@ public:
     }
 
     info_.helper = w;
-
-    LOG(INFO) << "Table " << this << " -- helper is now " << w;
   }
 
 protected:
