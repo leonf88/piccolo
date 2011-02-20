@@ -24,7 +24,7 @@ GlobalTable* TableRegistry::table(int id) {
 
 MutableGlobalTable* TableRegistry::mutable_table(int id) {
   CHECK(tmap_.find(id) != tmap_.end());
-  return reinterpret_cast<MutableGlobalTable*>(tmap_[id]);
+  return dynamic_cast<MutableGlobalTable*>(tmap_[id]);
 }
 
 
