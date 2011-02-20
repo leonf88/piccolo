@@ -17,15 +17,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <google/profiler.h>
-#include <google/heap-profiler.h>
-#include <google/malloc_extension.h>
-
 #include <lzo/lzo1x.h>
 #include <mpi.h>
 
 #ifdef CPUPROF
+#include <google/profiler.h>
 DEFINE_bool(cpu_profile, false, "");
+#endif
+
+#ifdef HEAPPROF
+#include <google/heap-profiler.h>
+#include <google/malloc_extension.h>
 #endif
 
 DEFINE_bool(dump_stacktrace, true, "");
