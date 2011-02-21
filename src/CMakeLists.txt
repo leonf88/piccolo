@@ -10,10 +10,12 @@ include(../cmake/FindProtobuf.cmake)
 include(CheckIncludeFile)
 include(CheckIncludeFileCXX)
 include(CheckLibraryExists)
+include(CheckFunctionExists)
 
 find_package(PythonLibs)
 find_package(SWIG)
 find_package(Boost REQUIRED)
+find_package(SDL)
 
 check_include_file_cxx("google/profiler.h" HAVE_GOOGLE_PROF)
 check_include_file_cxx("google/tcmalloc.h" HAVE_GOOGLE_TCMALLOC)
@@ -22,10 +24,9 @@ check_include_file_cxx("google/protobuf/descriptor.h" HAVE_PROTOBUF)
 check_include_file("lzo/lzo1x.h" HAVE_LZO1X_H)
 check_include_file("libunwind.h"  HAVE_LIBUNWIND_H)
 
-check_library_exists(unwind get_static_proc_name "" HAVE_LIB_UNWIND)
-
 find_program(HAVE_PROTOC "protoc")
 find_program(HAVE_MPICC "mpic++")
+find_library(HAVE_LIBUNWIND unwind)
 
 if (NOT HAVE_LZO1X_H)
   message(FATAL_ERROR "Required lzo header file not found.")
@@ -43,7 +44,7 @@ set(CXX_DEFAULT "${CMAKE_CXX_FLAGS}")
 set(CXX_DEFINE "-DHAVE_LIB_GFLAGS ")
 set(CXX_WARN "-Wall -Wno-sign-compare -Wno-unused-function -Wno-unused-result")
  
-if (HAVE_LIBUNWIND)
+if (HAVE_LIBUNWIND AND HAVE_LIBUNWIND_H)
   set(CXX_DEFINE "${CXX_DEFINE} -DHAVE_LIBUNWIND_H")
 endif()
 

@@ -1,17 +1,27 @@
 set(MPILIBS )
-set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal SDL profiler unwind)
+set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal)
 set(DYNAMICLIBS lzo2 pthread rt dl numa)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR ${PICCOLO_SOURCE_DIR} examples.proto )
 piccolo_pp(k-means.pp 
-		   matmul.pp
-		   pagerank.pp
-		   raytrace.pp
-		   shortest-path.pp
-		   wordcount.pp)
+           matmul.pp 
+           pagerank.pp
+           raytrace.pp
+           shortest-path.pp
+           wordcount.pp)
 		    
 
-add_custom_target(example_proto DEPENDS ${EXAMLE_PB_HDR})
+add_custom_target(example_proto DEPENDS ${EXAMPLE_PB_HDR})
+
+set (EXTRA_SRC "")
+if (SDL_FOUND)
+  set (EXTRA_SRC raytrace.pp.cc)
+  set (STATICLIBS ${STATICLIBS} SDL)
+endif()
+
+if (HAVE_GOOGLE_PROF) 
+  set (DYNAMICLIBS ${DYNAMICLIBS} profiler)
+endif()
 
 add_library(example 
             matmul.pp.cc             
@@ -21,14 +31,14 @@ add_library(example
             test-tables.cc
             test-tables2.cc
             wordcount.pp.cc
-            raytrace.pp.cc
             facedet/cpp/pgmimage.c
             facedet/cpp/imagenet.cpp
             facedet/cpp/backprop.cpp
             faceclass.cc
             nas/isort.cc 
-            nas/n-body.cc            
-	    #bipartmatch-trigger.cc
+            nas/n-body.cc
+            #bipartmatch-trigger.cc
+            ${EXTRA_SRC}
             ${EXAMPLE_PB_HDR} 
             ${EXAMPLE_PB_SRC})
             

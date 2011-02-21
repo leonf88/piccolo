@@ -76,6 +76,8 @@ int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
+  Matrix_A = Matrix_B = Matrix_C = NULL;
+  MatC_array = NULL;
 
   NoofCols_A = NoofCols_B = NoofRows_A = NoofRows_B = FLAGS_edge_size;
 
