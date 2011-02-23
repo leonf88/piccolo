@@ -685,6 +685,18 @@ void Master::cp_barrier() {
   barrier();
 }
 
+void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
+  EnableTrigger trigreq;
+  for (int i = 0; i < workers_.size(); ++i) {
+    WorkerState& w = *workers_[i];
+    trigreq.set_trigger_id(triggerid);
+    trigreq.set_table(table);
+	trigreq.set_enable(enable);
+    network_->Send(w.id + 1, MTYPE_ENABLE_TRIGGER, trigreq);
+  }
+
+}
+
 void Master::barrier() {
   MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
 

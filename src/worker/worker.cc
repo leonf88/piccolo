@@ -73,6 +73,10 @@ Worker::Worker(const ConfigData &c) {
                    new EmptyMessage, new EmptyMessage,
                    &Worker::HandleApply, this);
 
+  RegisterCallback(MTYPE_ENABLE_TRIGGER,
+                   new EnableTrigger, new EmptyMessage,
+                   &Worker::HandleEnableTrigger, this);
+
   NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_FLUSH);
 }
 
@@ -473,6 +477,13 @@ void Worker::HandleFlush(const EmptyMessage& req, EmptyMessage *resp, const RPCI
 
 void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
   HandlePutRequest();
+}
+
+void Worker::HandleEnableTrigger(const EnableTrigger& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  
+  TableRegistry::Get()->tables()[req.table()]
+	->trigger(req.trigger_id())
+    ->enable(req.enable());
 }
 
 void Worker::CheckForMasterUpdates() {

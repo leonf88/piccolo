@@ -29,9 +29,20 @@ struct AccumulatorBase {};
 struct BlockInfoBase {};
 
 
+typedef int TriggerID;
 struct TriggerBase {
   Table *table;
   TableHelper *helper;
+  TriggerID triggerid;
+
+  TriggerBase() {
+    enabled_ = true;
+  }
+  virtual void enable(bool enabled__) { enabled_ = enabled__; }
+  virtual bool enabled() { return enabled_; }
+
+private:
+  bool enabled_;
 };
 
 #ifndef SWIG
@@ -193,12 +204,15 @@ public:
   int num_triggers() { return info_.triggers.size(); }
   TriggerBase *trigger(int idx) { return info_.triggers[idx]; }
 
-  void register_trigger(TriggerBase *t) {
+  TriggerID register_trigger(TriggerBase *t) {
     if (helper()) {
       t->helper = helper();
     }
     t->table = this;
+	t->triggerid = info_.triggers.size();
+
     info_.triggers.push_back(t);
+    return t->triggerid;
   }
 
   void set_helper(TableHelper *w) {

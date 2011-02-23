@@ -351,7 +351,9 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   // invoke any registered triggers.
   bool doUpdate = true;
   for (int i = 0; i < num_triggers(); ++i) {
-    doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+    if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
+      doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+    }
     //for now, let NACKS disallow chained triggers (?)
     if (!doUpdate) break;
   }
