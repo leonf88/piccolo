@@ -10,7 +10,7 @@ ifeq ($(shell which distcc > /dev/null; echo $$?), 0)
 	CC := distcc $(CC)
 	PARALLELISM := $(shell distcc -j)
 else
-	PARALLELISM = 4
+	PARALLELISM = 1
 endif
 
 export CXX CC CFLAGS CPPFLAGS OPROFILE
@@ -20,12 +20,12 @@ all: release debug
 release: 
 	@mkdir -p bin/release
 	@cd bin/release && $(CMAKE) -DCMAKE_BUILD_TYPE=Release $(TOP)/src
-	@cd bin/release && $(MAKE) -j40
+	@cd bin/release && $(MAKE) -j${PARALLELISM}
 
 debug: 
 	@mkdir -p bin/debug
 	@cd bin/debug && $(CMAKE) -DCMAKE_BUILD_TYPE=Debug $(TOP)/src
-	@cd bin/debug  && $(MAKE) -j40
+	@cd bin/debug  && $(MAKE) -j${PARALLELISM}
 
 docs:
 	@cd docs/ && $(MAKE)
