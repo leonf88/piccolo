@@ -86,6 +86,8 @@ public:
     run_range(RunDescriptor(kernel, method, locality), shards);
   }
 
+  void enable_trigger(const TriggerID triggerid, int table,  bool enable);
+
   void run(RunDescriptor r);
 
   template <class T>

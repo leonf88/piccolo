@@ -33,6 +33,8 @@ enum MessageTypes {
 
   MTYPE_SWAP_TABLE = 35;  
   MTYPE_CLEAR_TABLE = 37;
+
+  MTYPE_ENABLE_TRIGGER = 38;
 };
 
 message EmptyMessage {}
