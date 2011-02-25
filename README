@@ -25,7 +25,19 @@ compiled as part of the build process; these are:
 
 On debian/ubuntu, the required libraries can be acquired by running:
 
-sudo apt-get install build-essential g++ libopenmpi-dev openmpi-bin libprotobuf-dev protobuf-compiler
+sudo apt-get install\
+ build-essential\
+ cmake\
+ g++\
+ libboost-dev\
+ libboost-python-dev\
+ libboost-thread-dev\
+ liblzo2-dev\
+ libnuma-dev\
+ libopenmpi-dev\ 
+ libprotobuf-dev \
+ openmpi-bin\ 
+ protobuf-compiler
 
 the optional libraries can be install via:
 
