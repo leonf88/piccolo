@@ -34,9 +34,9 @@ sudo apt-get install\
  libboost-thread-dev\
  liblzo2-dev\
  libnuma-dev\
- libopenmpi-dev\ 
+ libopenmpi-dev\
  libprotobuf-dev \
- openmpi-bin\ 
+ openmpi-bin\
  protobuf-compiler
 
 the optional libraries can be install via:
