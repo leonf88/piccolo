@@ -9,6 +9,8 @@
 
 #include <queue>
 
+//#define GLOBAL_TABLE_USE_SCOPEDLOCK
+
 namespace dsm {
 
 class Worker;
@@ -113,6 +115,8 @@ protected:
 
   boost::recursive_mutex& mutex() { return m_; }
   boost::recursive_mutex m_;
+  boost::mutex& trigger_mutex() { return m_trig_; }
+  boost::mutex m_trig_;
 
   vector<PartitionInfo> partinfo_;
 
@@ -159,12 +163,16 @@ class TypedGlobalTable :
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
+  typedef pair<K, V> KVPair;
   typedef TypedTableIterator<K, V> Iterator;
   virtual void Init(const TableDescriptor *tinfo) {
     GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
       partitions_[i] = create_local(i);
     }
+    
+    //Clear the update queue, just in case
+    update_queue.clear();
   }
 
   int get_shard(const K& k);
@@ -175,6 +183,7 @@ public:
   // and the update is queued for transmission to the owner.
   void put(const K &k, const V &v);
   void update(const K &k, const V &v);
+  void enqueue_update(K k, V v);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -195,6 +204,8 @@ public:
 protected:
   int shard_for_key_str(const StringPiece& k);
   virtual LocalTable* create_local(int shard);
+  deque<KVPair> update_queue;
+
 };
 
 static const int kWriteFlushCount = 1000000;
@@ -328,7 +339,9 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   LOG(FATAL) << "Need to implement.";
   int shard = this->get_shard(k);
 
-  //  boost::recursive_mutex::scoped_lock sl(mutex());
+#ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
+    boost::recursive_mutex::scoped_lock sl(mutex());
+#endif
   partition(shard)->put(k, v);
 
   if (!is_local_shard(shard)) {
@@ -346,20 +359,24 @@ template<class K, class V>
 void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
-  //  boost::recursive_mutex::scoped_lock sl(mutex());
+#ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
+    boost::mutex::scoped_lock sl(trigger_mutex());
+    boost::recursive_mutex::scoped_lock sl(mutex());
+#endif
 
   // invoke any registered triggers.
   bool doUpdate = true;
+  V v2 = v;
   for (int i = 0; i < num_triggers(); ++i) {
     if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
-      doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v);
+      doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v2);
     }
     //for now, let NACKS disallow chained triggers (?)
     if (!doUpdate) break;
   }
 
   if (doUpdate)
-    partition(shard)->update(k, v);
+    partition(shard)->update(k, v2);
 
   //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   if (!is_local_shard(shard)) {
@@ -371,6 +388,19 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   }
 
   PERIODIC(0.1, {this->HandlePutRequests();});
+
+  //Deal with updates enqueued inside triggers
+  while(!update_queue.empty()) {
+    KVPair thispair(update_queue.front());
+    update_queue.pop_front();
+    update(thispair.first,thispair.second);
+  }
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
+  const KVPair thispair(k,v);
+  update_queue.push_back(thispair);
 }
 
 // Return the value associated with 'k', possibly blocking for a remote fetch.
@@ -388,7 +418,9 @@ V TypedGlobalTable<K, V>::get(const K &k) {
   PERIODIC(0.1, this->HandlePutRequests());
 
   if (is_local_shard(shard)) {
-    //    boost::recursive_mutex::scoped_lock sl(mutex());
+#ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
+        boost::recursive_mutex::scoped_lock sl(mutex());
+#endif
     return partition(shard)->get(k);
   }
 
@@ -411,7 +443,9 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
   }
 
   if (is_local_shard(shard)) {
-    //    boost::recursive_mutex::scoped_lock sl(mutex());
+#ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
+        boost::recursive_mutex::scoped_lock sl(mutex());
+#endif
     return partition(shard)->contains(k);
   }
 

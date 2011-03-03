@@ -37,7 +37,7 @@ add_library(example
             faceclass.cc
             nas/isort.cc 
             nas/n-body.cc
-            #bipartmatch-trigger.cc
+            bipartmatch-trigger.cc
             ${EXTRA_SRC}
             ${EXAMPLE_PB_HDR} 
             ${EXAMPLE_PB_SRC})

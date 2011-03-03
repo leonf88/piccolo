@@ -17,8 +17,8 @@ find_package(SWIG)
 find_package(Boost REQUIRED)
 find_package(SDL)
 
-check_include_file_cxx("google/profiler.h" HAVE_GOOGLE_PROF)
-check_include_file_cxx("google/tcmalloc.h" HAVE_GOOGLE_TCMALLOC)
+#check_include_file_cxx("google/profiler.h" HAVE_GOOGLE_PROF)
+#check_include_file_cxx("google/tcmalloc.h" HAVE_GOOGLE_TCMALLOC)
 check_include_file_cxx("google/protobuf/descriptor.h" HAVE_PROTOBUF)
 
 check_include_file("lzo/lzo1x.h" HAVE_LZO1X_H)
