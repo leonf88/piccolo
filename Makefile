@@ -15,7 +15,7 @@ endif
 
 export CXX CC CFLAGS CPPFLAGS OPROFILE
 
-all: release debug
+all: release 
 
 release: 
 	@mkdir -p bin/release

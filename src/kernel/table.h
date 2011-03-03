@@ -54,7 +54,7 @@ private:
 // initialization time.
 template <class K, class V>
 struct Trigger : public TriggerBase {
-  virtual bool Fire(const K& k, const V& current, const V& update) = 0;
+  virtual bool Fire(const K& k, const V& current, V& update) = 0;
 };
 
 // Each table is associated with a single accumulator.  Accumulators are
