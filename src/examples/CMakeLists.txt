@@ -20,7 +20,7 @@ if (SDL_FOUND)
 endif()
 
 if (HAVE_GOOGLE_PROF) 
-  set (DYNAMICLIBS ${DYNAMICLIBS} profiler)
+  set (DYNAMICLIBS ${DYNAMICLIBS} profiler unwind)
 endif()
 
 add_library(example 
