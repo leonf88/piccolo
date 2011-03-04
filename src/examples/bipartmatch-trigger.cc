@@ -11,8 +11,8 @@ using namespace std;
 
 static int NUM_WORKERS = 2;
 
-DEFINE_int32(left_vertices, 1000, "Number of left-side vertices");
-DEFINE_int32(right_vertices, 1000, "Number of right-side vertices");
+DEFINE_int32(left_vertices, 2000, "Number of left-side vertices");
+DEFINE_int32(right_vertices, 2000, "Number of right-side vertices");
 DEFINE_double(edge_probability, 0.5, "Probability of edge between vertices");
 
 static TypedGlobalTable<int, vector<int> >*  leftoutedges = NULL;
@@ -56,15 +56,35 @@ class BPMTKernel : public DSMKernel {
 		void InitTables() {
 			vector<int> v;
 			v.clear();
+			leftmatches->resize(FLAGS_left_vertices);
+			rightmatches->resize(FLAGS_right_vertices);
+			leftoutedges->resize(FLAGS_left_vertices);
 			for(int i=0; i<FLAGS_left_vertices; i++) {
 				leftmatches->update(i,-1);
 				leftoutedges->update(i,v);
 			}
 			leftmatches->SendUpdates();
+			leftoutedges->SendUpdates();
 			for(int i=0; i<FLAGS_right_vertices; i++) {
 				rightmatches->update(i,-1);
 			}
 			rightmatches->SendUpdates();
+			
+			//Verify keys
+			sleep(1);
+			for(int i=0; i<FLAGS_right_vertices; i++) {
+				if (!rightmatches->contains(i)) {
+					printf("WARNING: rightmatch key %d not found (val %d)\n",i,rightmatches->get(i));
+				}
+			}
+			for(int i=0; i<FLAGS_left_vertices; i++) {
+				if (!leftmatches->contains(i)) {
+					printf("warning: leftmatch key %d not found (val %d)\n",i,leftmatches->get(i));
+				}
+				if (!leftoutedges->contains(i)) {
+					printf("warning: leftoutedges key %d not found\n",i);
+				}
+			}
 		}
 
 		void PopulateLeft() {
@@ -95,6 +115,9 @@ class BPMTKernel : public DSMKernel {
 				if (v.size() <= 0) continue;
 				int j = v.size()*((float)rand()/(float)RAND_MAX);
 				j = (j>=v.size())?v.size()-1:j;
+#ifdef debugoutput
+				printf("left: %d %d\n",v[j],it->key());
+#endif
 				rightmatches->update(v[j],it->key());
 				leftmatches->update(it->key(),v[j]);
 				rightmatches->SendUpdates();
@@ -115,6 +138,7 @@ class BPMTKernel : public DSMKernel {
 class MatchRequestTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
+
 			if (value != -1) {
 //				printf("request: updating %d to %d\n",newvalue,-1);
 				leftmatches->enqueue_update(newvalue,-1);
@@ -129,6 +153,7 @@ class MatchRequestTrigger : public Trigger<int, int> {
 class MatchDenyTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
+
 			if (newvalue == -1) {
 				vector<int> v = leftoutedges->get(key);
 				vector<int>::iterator it = find(v.begin(), v.end(), value);
@@ -139,11 +164,17 @@ class MatchDenyTrigger : public Trigger<int, int> {
 					return true;
 				int j = v.size()*((float)rand()/(float)RAND_MAX);
 				j = (j>=v.size())?v.size()-1:j;
+#ifdef debugoutput
 				printf("deny a: updating %d to %d\n",v[j],key);
+#endif
 				rightmatches->enqueue_update(v[j],key);
+#ifdef debugoutput
 				printf("deny b: updating %d to %d\n",v[j],key);
+#endif
 				newvalue = v[j];
+#ifdef debugoutput
 				printf("deny c: updating %d to %d\n",v[j],key);
+#endif
 				return false;
 			}
 			return true;
