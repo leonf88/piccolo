@@ -92,7 +92,8 @@ struct Sharding {
   struct Mod;
 };
 \end{lstlisting}
-\caption{\sffamily Sharding Functions \label{fig:shardingapi}}
+\caption{\sffamily Sharding Functions}
+\label{fig:shardingapi}
 \end{figure}
 
 To enable proper behavior in the face of concurrent update() calls, tables rely
@@ -121,7 +122,8 @@ struct Accumulators {
 };
 
 \end{lstlisting}
-\caption{\sffamily Accumulator API \label{fig:accumapi}}
+\caption{\sffamily Accumulator API}
+\label{fig:accumapi}
 \end{figure}
 
 \section{Kernels}
@@ -131,7 +133,7 @@ we actually make use of this?  {\em Kernels} are \p's mechanism for working with
 tables in parallel.  As a user, you can specify kernel code in 2 ways; either by
 defining a kernel class to be instantiated and run, or by using the PMap, PRun,
 and PRunOne convenience methods.  This document will focus on the convenience
-methods - their interface is given in~\ref{fig:pmethodapi}.
+methods - their interface is given in~\ref{fig:methodapi}.
 
  \begin{figure}[h!]
 \begin{lstlisting}
@@ -146,7 +148,51 @@ PRunOne(table, code);
 // value will be bound to the specified name
 PMap({ v : table }, code);
 \end{lstlisting}
-\caption{\sffamily Parallel Run Methods \label{fig:methodapi}}
+\caption{\sffamily Parallel Run Methods}
+\label{fig:methodapi}
+\end{figure}
+
+\section{Triggers}
+Some applications benefit greatly from the locality and partitioning features of
+\p, but either require a small number of data pairs to be modified and/or
+examined on each iteration, or cannot be cleanly divided into iterations. To meet
+the needs on these applications, \p now has a developing trigger system.  Triggers
+can be set on any table, and include sections of code that are executed whenever
+a key, value pair is updated.  Triggers can allow the update to occur as-is,
+intervene to prevent the update, or even modify the update value.  To avoid
+unexpected behaviors, a mechanism is in place to enable and disable Piccolo
+triggers.  The current trigger interface is given below in~\ref{fig:trigapi}, but
+for the near future is subject to minor change and major additions.
+
+ \begin{figure}[h!]
+\begin{lstlisting}
+// Define trigger class
+class MyTrigger : public Trigger<K, V> {
+  public:
+    // Return true to allow update to occur, or false to
+    // prevent update.  value will contain the current value
+    // for key, and newvalue is the new value to be set.
+    // newvalue may be modified in the Fire method, in which
+    // case Fire should return true.
+    bool Fire(const K& key, const V& value, V& newvalue) {
+
+    }
+};
+
+// Register trigger on table
+// Must be performed before workers are started
+TriggerID trigid = table->register_trigger(new MyTrigger);
+
+// Disable specified trigger
+// Must be performed after workers are started
+m.enable_trigger(trigid,tablenumber,false);
+
+// Enable specified trigger
+m.enable_trigger(trigid,tablenumber,true);
+
+\end{lstlisting}
+\caption{\sffamily Trigger API}
+\label{fig:trigapi}
 \end{figure}
 
 \section{Example Program}
