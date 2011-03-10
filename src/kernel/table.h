@@ -285,6 +285,64 @@ protected:
   }
 };
 
+template <class K, class V> struct TypedTableIterator;
+
+
+struct DecodeIteratorBase {
+};
+
+// Added for the sake of triggering on remote updates/puts <CRM>
+template <typename K, typename V>
+struct DecodeIterator : public TypedTableIterator<K, V>, public DecodeIteratorBase {
+
+  Marshal<K>* kmarshal() { return NULL; }
+  Marshal<V>* vmarshal() { return NULL; }
+
+  DecodeIterator() {
+    clear();
+    rewind();
+  }
+  void append(K k, V v) {
+    kvpair thispair(k, v);
+    decodedeque.push_back(thispair);
+//    LOG(ERROR) << "APPEND";
+  }
+  void clear() {
+    decodedeque.clear();
+//    LOG(ERROR) << "CLEAR";
+  }
+  void rewind() {
+    intit = decodedeque.begin();
+//    LOG(ERROR) << "REWIND: empty? " << (intit == decodedeque.end());
+  }
+  bool done() {
+    return intit == decodedeque.end();
+  }
+  void Next() {
+    intit++;
+  }
+  const K& key() {
+    static K k2;
+    if (intit != decodedeque.end()) {
+      k2 = intit->first;
+    }
+    return k2;
+  }
+  V& value() {
+    static V v2;
+    if (intit != decodedeque.end()) {
+      v2 = intit->second;
+    }
+    return v2;
+  }
+    
+private:
+  typedef std::pair<K, V> kvpair;
+  std::vector<kvpair> decodedeque;
+  typename std::vector<kvpair>::iterator intit;
+  
+};
+
 // Checkpoint and restoration.
 class Checkpointable {
 public:
@@ -304,7 +362,7 @@ struct TableCoder {
 
 class Serializable {
 public:
-  virtual void ApplyUpdates(TableCoder *in) = 0;
+  virtual void DecodeUpdates(TableCoder *in, DecodeIteratorBase *it) = 0;
   virtual void Serialize(TableCoder* out) = 0;
 };
 }

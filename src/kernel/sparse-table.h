@@ -26,6 +26,8 @@ private:
 #pragma pack(pop)
 
 public:
+  typedef DecodeIterator<K, V> Decoder;
+
   struct Iterator : public TypedTableIterator<K, V> {
     Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) {
       Next();
@@ -86,7 +88,7 @@ public:
   }
 
   void Serialize(TableCoder *out);
-  void ApplyUpdates(TableCoder *in);
+  void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
 
   Marshal<K>* kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
   Marshal<V>* vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
@@ -146,15 +148,20 @@ void SparseTable<K, V>::Serialize(TableCoder *out) {
 }
 
 template <class K, class V>
-void SparseTable<K, V>::ApplyUpdates(TableCoder *in) {
+void SparseTable<K, V>::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
+  Decoder* it = static_cast<Decoder*>(itbase);
   K k;
   V v;
   string kt, vt;
+
+  it->clear();
   while (in->ReadEntry(&kt, &vt)) {
     ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
     ((Marshal<V>*)info_.value_marshal)->unmarshal(vt, &v);
-    update(k, v);
+    it->append(k, v);
   }
+  it->rewind();
+  return;
 }
 
 template <class K, class V>
@@ -189,7 +196,9 @@ bool SparseTable<K, V>::contains(const K& k) {
 template <class K, class V>
 V SparseTable<K, V>::get(const K& k) {
   int b = bucket_for_key(k);
-  CHECK_NE(b, -1) << "No entry for requested key";
+  //The following key display is a hack hack hack and only yields valid
+  //results for ints.  It will display nonsense for other types.
+  CHECK_NE(b, -1) << "No entry for requested key <" << *((int*)&k) << ">";
 
   return buckets_[b].v;
 }
