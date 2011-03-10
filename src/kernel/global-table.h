@@ -136,7 +136,6 @@ public:
   MutableGlobalTableBase() : pending_writes_(0) {}
 
   void SendUpdates();
-  void ApplyUpdates(const TableData& req);
   void HandlePutRequests();
 
   int pending_write_bytes();
@@ -163,8 +162,10 @@ class TypedGlobalTable :
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
+  //void ApplyUpdates(const TableData& req);
   typedef pair<K, V> KVPair;
   typedef TypedTableIterator<K, V> Iterator;
+  typedef DecodeIterator<K, V> Decoder;
   virtual void Init(const TableDescriptor *tinfo) {
     GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
@@ -196,6 +197,24 @@ public:
 
   virtual TypedTableIterator<K, V>* get_typed_iterator(int shard,unsigned int fetch_num = FETCH_NUM) {
     return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard,fetch_num));
+  }
+
+  void ApplyUpdates(const dsm::TableData& req) {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+
+    if (!is_local_shard(req.shard())) {
+      LOG_EVERY_N(INFO, 1000)
+          << "Forwarding push request from: " << MP(id(), req.shard())
+          << " to " << owner(req.shard());
+    }
+
+    // Changes to support centralized of triggers <CRM>
+    ProtoTableCoder c(&req);
+    Decoder it;
+    partitions_[req.shard()]->DecodeUpdates(&c,static_cast<DecodeIteratorBase*>(&it));
+    for(;!it.done(); it.Next()) {
+      update(it.key(),it.value());
+    }
   }
 
   Marshal<K> *kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
@@ -364,30 +383,40 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
     boost::recursive_mutex::scoped_lock sl(mutex());
 #endif
 
-  // invoke any registered triggers.
-  bool doUpdate = true;
-  V v2 = v;
-  for (int i = 0; i < num_triggers(); ++i) {
-    if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
-      doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, partition(shard)->get(k), v2);
+  if (is_local_shard(shard)) {
+
+    // invoke any registered triggers.
+    bool doUpdate = true;
+    V v2 = v;
+    V v1;
+
+    if (partition(shard)->contains(k))
+      v1 = partition(shard)->get(k);
+
+    for (int i = 0; i < num_triggers(); ++i) {
+      if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
+        doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, v1, v2);
+      }
+      //for now, let NACKS disallow chained triggers (?)
+      if (!doUpdate) break;
     }
-    //for now, let NACKS disallow chained triggers (?)
-    if (!doUpdate) break;
-  }
 
-  if (doUpdate)
-    partition(shard)->update(k, v2);
+    // Only update if no triggers NACKed
+    if (doUpdate) {
+      partition(shard)->update(k, v2);
+    }
 
-  //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
-  if (!is_local_shard(shard)) {
+    //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
+  } else {
+
+    partition(shard)->update(k, v);
     ++pending_writes_;
-  }
+    if (pending_writes_ > kWriteFlushCount) {
+      SendUpdates();
+    }
 
-  if (pending_writes_ > kWriteFlushCount) {
-    SendUpdates();
+    PERIODIC(0.1, {this->HandlePutRequests();});
   }
-
-  PERIODIC(0.1, {this->HandlePutRequests();});
 
   //Deal with updates enqueued inside triggers
   while(!update_queue.empty()) {

@@ -244,19 +244,6 @@ int MutableGlobalTableBase::pending_write_bytes() {
   return s;
 }
 
-void MutableGlobalTableBase::ApplyUpdates(const dsm::TableData& req) {
-  boost::recursive_mutex::scoped_lock sl(mutex());
-
-  if (!is_local_shard(req.shard())) {
-    LOG_EVERY_N(INFO, 1000)
-        << "Forwarding push request from: " << MP(id(), req.shard())
-        << " to " << owner(req.shard());
-  }
-
-  ProtoTableCoder c(&req);
-  partitions_[req.shard()]->ApplyUpdates(&c);
-}
-
 void GlobalTableBase::get_local(const StringPiece &k, string* v) {
   int shard = shard_for_key_str(k);
   CHECK(is_local_shard(shard));

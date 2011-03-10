@@ -122,7 +122,14 @@ static void TestSerialize() {
 
   ProtoTableCoder c(&tdata);
   t->Serialize(&c);
-  t2->ApplyUpdates(&c);
+
+  //The following replaces the old t2->ApplyUpdate() <CRM>
+/*
+  DecodeIterator* it = t2->partitions_[t2->req.shard()]->DecodeUpdates(&c);
+  for(;!it->done(); it->Next()) {
+    t2->update(it->key(),it->value());
+  }
+*/
 
   LOG(INFO) << "Serialized table to: " << tdata.ByteSize() << " bytes.";
 

@@ -47,6 +47,7 @@ public:
   };
 
   typedef typename std::tr1::unordered_map<K, Bucket> BucketMap;
+  typedef DecodeIterator<K, V> Decoder;
 
   struct Iterator : public TypedTableIterator<K, V> {
     Iterator(DenseTable<K, V> &parent) : parent_(parent), it_(parent_.m_.begin()), idx_(0) {}
@@ -131,8 +132,10 @@ public:
   }
 
   void update(const K& k, const V& v) {
-    V* vb = get_block(k);
-    ((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
+    //V* vb = get_block(k);
+    //((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
+    K k2(k);
+    ((Accumulator<V>*)info_.accum)->Accumulate(&k2, v);
   }
 
   void put(const K& k, const V& v) {
@@ -179,10 +182,12 @@ public:
     }
   }
 
-  void ApplyUpdates(TableCoder *in) {
+void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
+    Decoder *it = static_cast<Decoder*>(itbase);
     K k;
-
     string kt, vt;
+
+    it->clear();
     while (in->ReadEntry(&kt, &vt)) {
       ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
 
@@ -194,9 +199,12 @@ public:
         ((Marshal<V>*)info_.value_marshal)->unmarshal(
             StringPiece(vt.data() + (value_size * j), value_size),
             &tmp);
-        ((Accumulator<V>*)info_.accum)->Accumulate(&block[j], tmp);
+        it->append(block[j],tmp);
+        //((Accumulator<V>*)info_.accum)->Accumulate(&block[j], tmp);
       }
     }
+    it->rewind();
+    return;
   }
 
   Marshal<K>* kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
