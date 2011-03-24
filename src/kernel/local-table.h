@@ -29,8 +29,6 @@ public:
 
   int shard() { return info_.shard; }
 
-  void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
-
 protected:
   friend class GlobalTable;
   TableCoder *delta_file_;

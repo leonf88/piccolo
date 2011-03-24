@@ -47,7 +47,7 @@ public:
   };
 
   typedef typename std::tr1::unordered_map<K, Bucket> BucketMap;
-  typedef DecodeIterator<K, V> Decoder;
+  typedef DecodeIterator<K, V> UpdateDecoder;
 
   struct Iterator : public TypedTableIterator<K, V> {
     Iterator(DenseTable<K, V> &parent) : parent_(parent), it_(parent_.m_.begin()), idx_(0) {}
@@ -183,7 +183,7 @@ public:
   }
 
 void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
-    Decoder *it = static_cast<Decoder*>(itbase);
+    UpdateDecoder *it = static_cast<UpdateDecoder*>(itbase);
     K k;
     string kt, vt;
 

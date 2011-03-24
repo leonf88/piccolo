@@ -3,7 +3,6 @@
 
 namespace dsm {
 
-
 // Encodes or decodes table entries, reading and writing from the
 // specified file.
 struct LocalTableCoder : public TableCoder {
@@ -15,7 +14,6 @@ struct LocalTableCoder : public TableCoder {
 
   RecordFile *f_;
 };
-
 
 void LocalTable::start_checkpoint(const string& f) {
   VLOG(1) << "Start checkpoint " << f;
@@ -46,27 +44,23 @@ void LocalTable::restore(const string& f) {
 
   TableData p;
 
-  LocalTableCoder rf(f, "r");
 /*
-  //ApplyUpdates(&rf);
-  //The following replaces the old ApplyUpdate() <CRM>
-  DecodeIterator* it = this->DecodeUpdates(&rf);
-  for(;!it->done(); it->Next()) {
-    update(it->key(),it->value());
+  LocalTableCoder rf(f, "r");
+  string k, v;
+  while (rf.ReadEntry(&k, &v)) {
+   update_str(k, v);
   }
 
   // Replay delta log.
   LocalTableCoder df(f + ".delta", "r");
-  //ApplyUpdates(&df);
-  DecodeIterator* it = this->DecodeUpdates(&df);
-  for(;!it->done(); it->Next()) {
-    update(it->key(),it->value());
-  }
+  while (df.ReadEntry(&k, &v)) {
+    update_str(k, v);
+  } 
 */
 }
 
-//Dummy stubs
-void LocalTable::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) { return; }
+//Dummy stub
+//void LocalTable::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) { return; }
 
 void LocalTable::write_delta(const TableData& put) {
   for (int i = 0; i < put.kv_data_size(); ++i) {

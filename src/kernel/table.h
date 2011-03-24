@@ -289,6 +289,13 @@ template <class K, class V> struct TypedTableIterator;
 
 
 struct DecodeIteratorBase {
+/*
+  virtual bool done();
+  virtual void Next();
+
+  virtual void key_str(string *k);
+  virtual void value_str(string *k);
+*/
 };
 
 // Added for the sake of triggering on remote updates/puts <CRM>
