@@ -26,7 +26,7 @@ private:
 #pragma pack(pop)
 
 public:
-  typedef DecodeIterator<K, V> Decoder;
+  typedef DecodeIterator<K, V> UpdateDecoder;
 
   struct Iterator : public TypedTableIterator<K, V> {
     Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) {
@@ -149,7 +149,7 @@ void SparseTable<K, V>::Serialize(TableCoder *out) {
 
 template <class K, class V>
 void SparseTable<K, V>::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
-  Decoder* it = static_cast<Decoder*>(itbase);
+  UpdateDecoder* it = static_cast<UpdateDecoder*>(itbase);
   K k;
   V v;
   string kt, vt;

@@ -136,6 +136,7 @@ public:
   MutableGlobalTableBase() : pending_writes_(0) {}
 
   void SendUpdates();
+  virtual void ApplyUpdates(const TableData& req) = 0;
   void HandlePutRequests();
 
   int pending_write_bytes();
@@ -162,10 +163,9 @@ class TypedGlobalTable :
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
-  //void ApplyUpdates(const TableData& req);
   typedef pair<K, V> KVPair;
   typedef TypedTableIterator<K, V> Iterator;
-  typedef DecodeIterator<K, V> Decoder;
+  typedef DecodeIterator<K, V> UpdateDecoder;
   virtual void Init(const TableDescriptor *tinfo) {
     GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
@@ -210,7 +210,7 @@ public:
 
     // Changes to support centralized of triggers <CRM>
     ProtoTableCoder c(&req);
-    Decoder it;
+    UpdateDecoder it;
     partitions_[req.shard()]->DecodeUpdates(&c,static_cast<DecodeIteratorBase*>(&it));
     for(;!it.done(); it.Next()) {
       update(it.key(),it.value());
