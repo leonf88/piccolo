@@ -44,7 +44,6 @@ void LocalTable::restore(const string& f) {
 
   TableData p;
 
-/*
   LocalTableCoder rf(f, "r");
   string k, v;
   while (rf.ReadEntry(&k, &v)) {
@@ -56,7 +55,6 @@ void LocalTable::restore(const string& f) {
   while (df.ReadEntry(&k, &v)) {
     update_str(k, v);
   } 
-*/
 }
 
 //Dummy stub
