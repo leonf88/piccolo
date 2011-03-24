@@ -10,6 +10,7 @@ namespace dsm {
 // Represents a single shard of a partitioned global table.
 class LocalTable :
   public TableBase,
+  virtual public UntypedTable,
   public Checkpointable,
   public Serializable {
 public:
