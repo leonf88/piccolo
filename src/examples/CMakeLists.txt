@@ -38,6 +38,7 @@ add_library(example
             nas/isort.cc 
             nas/n-body.cc
             bipartmatch-trigger.cc
+            bipartmatch.cc
             ${EXTRA_SRC}
             ${EXAMPLE_PB_HDR} 
             ${EXAMPLE_PB_SRC})

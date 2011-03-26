@@ -72,6 +72,8 @@ bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   req.set_table(info().table_id);
   req.set_shard(shard);
 
+  if (!helper())
+	LOG(FATAL) << "get_remote() failed: helper() undefined." << endl;
   int peer = helper()->peer_for_shard(info().table_id, shard);
 
   DCHECK_GE(peer, 0);

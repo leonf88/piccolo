@@ -61,10 +61,19 @@ struct RunDescriptor {
    }
  };
 
-class Master {
+
+class Master : public TableHelper {
 public:
   Master(const ConfigData &conf);
   ~Master();
+
+  //TableHelper methods
+  int id() const { return -1; }
+  int epoch() const { return kernel_epoch_; }
+  int peer_for_shard(int table, int shard) const {
+    return tables_[table]->owner(shard);
+  }
+  void HandlePutRequest() { return; }
 
   void run_all(RunDescriptor r);
   void run_one(RunDescriptor r);

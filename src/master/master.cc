@@ -637,6 +637,11 @@ void Master::run(RunDescriptor r) {
     r.checkpoint_type = CP_NONE;
   }
 
+  // HACKHACKHACK - register ourselves with any existing tables
+  for (TableRegistry::Map::iterator i = tables_.begin(); i != tables_.end(); ++i) {
+    i->second->set_helper(this);
+  }
+
   CHECK_EQ(current_run_.shards.size(), finished_) << " Cannot start kernel before previous one is finished ";
   finished_ = dispatched_ = 0;
 
