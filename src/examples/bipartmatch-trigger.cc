@@ -12,10 +12,10 @@ using namespace std;
 static int NUM_WORKERS = 2;
 #define MAXCOST RAND_MAX
 
-DEFINE_int32(left_vertices, 200, "Number of left-side vertices");
-DEFINE_int32(right_vertices, 200, "Number of right-side vertices");
-DEFINE_double(edge_probability, 0.5, "Probability of edge between vertices");
-DEFINE_bool(edge_costs, false, "Set to true to have edges have costs");
+DEFINE_int32(tleft_vertices, 100, "Number of left-side vertices");
+DEFINE_int32(tright_vertices, 100, "Number of right-side vertices");
+DEFINE_double(tedge_probability, 0.5, "Probability of edge between vertices");
+DEFINE_bool(tedge_costs, false, "Set to true to have edges have costs");
 
 static TypedGlobalTable<int, vector<int> >*   leftoutedges = NULL;
 static TypedGlobalTable<int, vector<int> >* leftoutcosts = NULL;
@@ -60,14 +60,16 @@ class BPMTKernel : public DSMKernel {
 			v.clear();
 			v2.clear();
 
-			leftmatches->resize(FLAGS_left_vertices);
-			rightmatches->resize(FLAGS_right_vertices);
-			leftoutedges->resize(FLAGS_left_vertices);
-			for(int i=0; i<FLAGS_left_vertices; i++) {
+			leftmatches->resize(FLAGS_tleft_vertices);
+			rightmatches->resize(FLAGS_tright_vertices);
+			leftoutedges->resize(FLAGS_tleft_vertices);
+			leftoutcosts->resize(FLAGS_tleft_vertices);
+			for(int i=0; i<FLAGS_tleft_vertices; i++) {
 				leftmatches->update(i,-1);
 				leftoutedges->update(i,v);
+				leftoutcosts->update(i,v2);
 			}
-			for(int i=0; i<FLAGS_right_vertices; i++) {
+			for(int i=0; i<FLAGS_tright_vertices; i++) {
 				rightmatches->update(i,-1);
 				rightcosts->update(i,MAXCOST);
 			}
@@ -85,11 +87,11 @@ class BPMTKernel : public DSMKernel {
 			for(; !it->done() && !it2->done(); it->Next(),it2->Next()) {
 				vector<int> v  =  it->value();
 				vector<int> v2 = it2->value();
-				for(int i=0; i<FLAGS_right_vertices; i++) {
+				for(int i=0; i<FLAGS_tright_vertices; i++) {
 					if ((float)rand()/(float)RAND_MAX < 
-							FLAGS_edge_probability) {
+							FLAGS_tedge_probability) {
 						v.push_back(i);					//add neighbor
-						cost = ((FLAGS_edge_costs)?rand():(RAND_MAX));
+						cost = ((FLAGS_tedge_costs)?rand():(RAND_MAX));
 						v2.push_back(cost);
 					}
 				}
@@ -107,16 +109,16 @@ class BPMTKernel : public DSMKernel {
 			TypedTableIterator<int, vector<int> > *it2 = 
 				leftoutcosts->get_typed_iterator(current_shard());
 			for(; !it->done() && !it2->done(); it->Next(),it2->Next()) {
-				vector<int>   v  = it->value();
+				vector<int>  v =  it->value();
 				vector<int> v2 = it2->value();
 				if (v.size() <= 0)
 					continue;
 
 				//try to find a random or best match
 				int j;
-				if (FLAGS_edge_costs) {
+				if (FLAGS_tedge_costs) {
 					//edges have associated costs
-					vector<int>::iterator   inner_it  = v.begin();
+					vector<int>::iterator  inner_it =  v.begin();
 					vector<int>::iterator inner_it2 = v2.begin();
 					j = -1;
 					float mincost = MAXCOST;
@@ -130,47 +132,48 @@ class BPMTKernel : public DSMKernel {
 					//all edges equal; pick one at random
 					j = v.size()*((float)rand()/(float)RAND_MAX);
 					j = (j>=v.size())?v.size()-1:j;
+					j = v[j];
 				}
-				rightmatches->update(v[j],it->key());
-				leftmatches->update(it->key(),v[j]);
+				printf("Attempted match: left %d <--> right %d\n",it->key(),j);
+				rightmatches->update(j,it->key());
+				leftmatches->update(it->key(),j);
 			}
 		}
 
 		void EvalPerformance() {
 			int left_matched=0, right_matched=0;
-			int rightset[FLAGS_right_vertices];
+			int rightset[FLAGS_tright_vertices];
 
 			//float edgecost = 0.f;
 			//float worstedgecost = 0.f;
 
-			for(int i=0; i<FLAGS_right_vertices; i++) {
+			for(int i=0; i<FLAGS_tright_vertices; i++) {
 				rightset[i] = 0;
 				right_matched += (-1 < rightmatches->get(i));
 
 				//TODO calculate how the costs worked out
 			}
 
-			for(int i=0; i<FLAGS_left_vertices; i++) {
+			for(int i=0; i<FLAGS_tleft_vertices; i++) {
 				int rightmatch = leftmatches->get(i);
 				if (-1 < rightmatch) {
 					left_matched++;
 					rightset[rightmatch]++;
 					if (rightset[rightmatch] > 1)
 						cout << rightset[rightmatch] << " left vertices have right vertex " <<
-							rightmatch << " as a match" << endl;
+							rightmatch << " as a match: one is " << i << endl;
 				}
 			}
-			printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_left_vertices);
-			printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_right_vertices);
+			printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_tleft_vertices);
+			printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_tright_vertices);
 		}
 };
 
 class MatchRequestTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
-			if (value != -1) {
-
-				//TODO ADD COST CHECK
+			int newcost = MAXCOST;
+			if (newvalue != -1) {
 				vector<int> v  = leftoutedges->get(newvalue);	//get the vector for this left key
 				vector<int> v2 = leftoutcosts->get(newvalue);
 				vector<int>::iterator it = find(v.begin(), v.end(), key);
@@ -179,20 +182,26 @@ class MatchRequestTrigger : public Trigger<int, int> {
 				//Grab cost from left node
 				if (it != v.end()) {
 					it2 = v2.begin() + (it - v.begin());
-					if (*it2 < rightcosts->get(key)) {
-						//found better match!
-						rightcosts->enqueue_update(key,*it2);
-						return true;
-					}
+					newcost = *it2;
+				}
+			}
+			if (value != -1) {
+
+				//cost check
+				if (newcost < rightcosts->get(key)) {
+					//found better match!
+					leftmatches->enqueue_update(value,-1);	//remove old match
+					rightcosts->enqueue_update(key,newcost);
+					return true;
 				}
 
 				printf("Denying match on %d from %d\n",key,newvalue);
 				leftmatches->enqueue_update(newvalue,-1);
 				return false;
 			} else {
-				//Else this match is acceptable.
-				//TODO set new cost??
-				//note to self: move code above for cost checking
+				//Else this match is acceptable.  Set new cost.
+				printf("Accepting match on %d from %d\n",key,newvalue);
+				rightcosts->enqueue_update(key,newcost);
 			}
 			return true;
 		}
@@ -204,6 +213,8 @@ class MatchDenyTrigger : public Trigger<int, int> {
 
 			//Don't store the denial!
 			if (newvalue == -1) {
+
+				printf("Match from %d denied from %d\n",key,value);
 
 				//Denied: remove possible right match
 				vector<int> v  = leftoutedges->get(key);
@@ -219,15 +230,17 @@ class MatchDenyTrigger : public Trigger<int, int> {
 				}
 
 				//Enqueue the removal
-				leftoutcosts->enqueue_update((int)key,v2);
 				leftoutedges->enqueue_update((int)key,v);
+				leftoutcosts->enqueue_update((int)key,v2);
 
-				if (v.size() == 0)		//forget it if no more candidates
+				if (v.size() == 0) {		//forget it if no more candidates
+					printf("Ran out of right candidates for %d\n",key);
 					return true;
+				}
 
 				//Pick a new right match
 				int j;
-				if (FLAGS_edge_costs) {
+				if (FLAGS_tedge_costs) {
 					//edges have associated costs
 					vector<int>::iterator   inner_it  = v.begin();
 					vector<int>::iterator inner_it2 = v2.begin();
@@ -245,10 +258,12 @@ class MatchDenyTrigger : public Trigger<int, int> {
 					//all edges equal; pick one at random
 					j = v.size()*((float)rand()/(float)RAND_MAX);
 					j = (j>=v.size())?v.size()-1:j;
+					j = v[j];
 				}
-				rightmatches->enqueue_update(v[j],key);
-				newvalue = v[j];
-				return false;
+				rightmatches->enqueue_update(j,key);
+				newvalue = j;
+				printf("Re-attempting from %d to %d\n",key,j);
+				return true;
 			}
 			return true;
 		}

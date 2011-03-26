@@ -9,6 +9,8 @@
 #include "kernel/sparse-table.h"
 #include "kernel/dense-table.h"
 
+static const int kStatsTableId = 1000000;
+
 namespace dsm {
 
 class GlobalTable;
@@ -75,6 +77,12 @@ static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info) {
   t->Init(info);
   TableRegistry::Get()->tables().insert(make_pair(info->table_id, t));
   return t;
+}
+
+//StatsTable Stuff
+static TypedGlobalTable<string, string>* CreateStatsTable() {
+ return CreateTable(
+      kStatsTableId, 1, new Sharding::String, new Accumulators<string>::Replace);
 }
 
 } // end namespace
