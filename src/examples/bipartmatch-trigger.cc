@@ -18,11 +18,10 @@ DEFINE_double(tedge_probability, 0.5, "Probability of edge between vertices");
 DEFINE_bool(tedge_costs, false, "Set to true to have edges have costs");
 
 static TypedGlobalTable<int, vector<int> >*   leftoutedges = NULL;
-static TypedGlobalTable<int, vector<int> >*   leftoutcosts = NULL;
+static TypedGlobalTable<int, vector<int> >* leftoutcosts = NULL;
 static TypedGlobalTable<int, int>*             leftmatches = NULL;
 static TypedGlobalTable<int, int>*            rightmatches = NULL;
-static TypedGlobalTable<int, int>*		        rightcosts = NULL;
-static TypedGlobalTable<string, string>*        StatsTable = NULL;
+static TypedGlobalTable<int, int>*		    rightcosts = NULL;
 
 //-----------------------------------------------
 namespace dsm{
@@ -74,8 +73,7 @@ class BPMTKernel : public DSMKernel {
 				rightmatches->update(i,-1);
 				rightcosts->update(i,MAXCOST);
 			}
-			StatsTable->update("quiescent","t");
-			StatsTable->SendUpdates();
+			
 		}
 
 		void PopulateLeft() {
@@ -105,17 +103,15 @@ class BPMTKernel : public DSMKernel {
 		//Set a random right neighbor of each left vertex to be
 		//matched.  If multiple lefts set the same right, the triggers
 		//will sort it out.
-		void LeftBPMT() {
+		void BeginBPMT() {
 			TypedTableIterator<int, vector<int> > *it = 
 				leftoutedges->get_typed_iterator(current_shard());
 			TypedTableIterator<int, vector<int> > *it2 = 
 				leftoutcosts->get_typed_iterator(current_shard());
-			TypedTableIterator<int, int> *it3 =
-				leftmatches->get_typed_iterator(current_shard());
-			for(; !it->done() && !it2->done() && !it3->done(); it->Next(),it2->Next(),it3->Next()) {
+			for(; !it->done() && !it2->done(); it->Next(),it2->Next()) {
 				vector<int>  v =  it->value();
 				vector<int> v2 = it2->value();
-				if (v.size() <= 0 || it3->value() != -1)
+				if (v.size() <= 0)
 					continue;
 
 				//try to find a random or best match
@@ -138,41 +134,10 @@ class BPMTKernel : public DSMKernel {
 					j = (j>=v.size())?v.size()-1:j;
 					j = v[j];
 				}
-				VLOG(2) << "Attempted match: left " << it->key() << " <--> right " << j << endl;
+				printf("Attempted match: left %d <--> right %d\n",it->key(),j);
 				rightmatches->update(j,it->key());
 				leftmatches->update(it->key(),j);
 			}
-		}
-
-		void RightBPMT() {
-			int rightset[FLAGS_tright_vertices];
-			bool quiescent = true;
-
-			for(int i=0; i<FLAGS_tright_vertices; i++)
-				rightset[i] = 0;
-
-			//Check if parallelization set multiple lefts matching the same right
-			int i=0;
-			for(int j=0; j<leftoutedges->num_shards(); j++) {
-				TypedTableIterator<int, int> *it =
-					 leftmatches->get_typed_iterator(j);
-				for(; !it->done(); it->Next()) {
-					int rightmatch = it->value();
-					if (-1 < rightmatch) {
-						rightset[rightmatch]++;
-						if (rightset[rightmatch] > 1) {
-							VLOG(2) << "Denying match on " << rightmatch << "from " << it->key() << endl;
-							leftmatches->update(it->key(),-1);
-
-							//state
-							quiescent = false;
-							i++;
-						}
-					}
-				}
-			}
-			VLOG(0) << "Total of " << i << " left nodes were overlapped and fixed." << endl;
-			StatsTable->update("quiescent",(quiescent?"t":"f"));
 		}
 
 		void EvalPerformance() {
@@ -230,12 +195,12 @@ class MatchRequestTrigger : public Trigger<int, int> {
 					return true;
 				}
 
-				VLOG(2) << "Denying match on " << key << " from " << newvalue << endl;
+				printf("Denying match on %d from %d\n",key,newvalue);
 				leftmatches->enqueue_update(newvalue,-1);
 				return false;
 			} else {
 				//Else this match is acceptable.  Set new cost.
-				VLOG(2) << "Accepting match on " << key << " from " << newvalue << endl;
+				printf("Accepting match on %d from %d\n",key,newvalue);
 				rightcosts->enqueue_update(key,newcost);
 			}
 			return true;
@@ -249,7 +214,7 @@ class MatchDenyTrigger : public Trigger<int, int> {
 			//Don't store the denial!
 			if (newvalue == -1) {
 
-				VLOG(2) << "Match from " << key << " denied from " << value << endl;
+				printf("Match from %d denied from %d\n",key,value);
 
 				//Denied: remove possible right match
 				vector<int> v  = leftoutedges->get(key);
@@ -269,7 +234,7 @@ class MatchDenyTrigger : public Trigger<int, int> {
 				leftoutcosts->enqueue_update((int)key,v2);
 
 				if (v.size() == 0) {		//forget it if no more candidates
-					VLOG(2) << "Ran out of right candidates for " << key << endl;
+					printf("Ran out of right candidates for %d\n",key);
 					return true;
 				}
 
@@ -297,7 +262,7 @@ class MatchDenyTrigger : public Trigger<int, int> {
 				}
 				rightmatches->enqueue_update(j,key);
 				newvalue = j;
-				VLOG(2) << "Re-attempting from " << key << " to " << j << endl;
+				printf("Re-attempting from %d to %d\n",key,j);
 				return true;
 			}
 			return true;
@@ -311,8 +276,7 @@ class MatchDenyTrigger : public Trigger<int, int> {
 REGISTER_KERNEL(BPMTKernel);
 REGISTER_METHOD(BPMTKernel, InitTables);
 REGISTER_METHOD(BPMTKernel, PopulateLeft);
-REGISTER_METHOD(BPMTKernel, LeftBPMT);
-REGISTER_METHOD(BPMTKernel, RightBPMT);
+REGISTER_METHOD(BPMTKernel, BeginBPMT);
 REGISTER_METHOD(BPMTKernel, EvalPerformance);
 
 int Bipartmatch_trigger(ConfigData& conf) {
@@ -327,7 +291,6 @@ int Bipartmatch_trigger(ConfigData& conf) {
 		new Accumulators<vector<int> >::Replace);
 	rightcosts    = CreateTable(4,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<int>::Replace);
-	StatsTable    = CreateTable(10000,1,new Sharding::String, new Accumulators<string>::Replace);//CreateStatsTable();
 
 	TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
 	TriggerID matchdenyid = leftmatches->register_trigger(new MatchDenyTrigger);
@@ -352,12 +315,7 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	m.enable_trigger(matchreqid,2,true);
 	m.enable_trigger(matchdenyid,1,true);
 
-	bool unstable;
-	do {
-		unstable = false;
-		m.run_all("BPMTKernel","LeftBPMT", leftoutedges);
-		m.run_one("BPMTKernel","RightBPMT", leftmatches);
-	} while (0 == strcmp(StatsTable->get("quiescent").c_str(),"f"));
+	m.run_all("BPMTKernel","BeginBPMT", leftoutedges);
 
 	//Disable triggers
 	m.enable_trigger(matchreqid,2,false);
