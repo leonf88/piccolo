@@ -211,7 +211,7 @@ public:
     // Changes to support centralized of triggers <CRM>
     ProtoTableCoder c(&req);
     UpdateDecoder it;
-    partitions_[req.shard()]->DecodeUpdates(&c,static_cast<DecodeIteratorBase*>(&it));
+    partitions_[req.shard()]->DecodeUpdates(&c, &it);
     for(;!it.done(); it.Next()) {
       update(it.key(),it.value());
     }
