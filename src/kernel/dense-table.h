@@ -132,10 +132,10 @@ public:
   }
 
   void update(const K& k, const V& v) {
-    //V* vb = get_block(k);
-    //((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
-    K k2(k);
-    ((Accumulator<V>*)info_.accum)->Accumulate(&k2, v);
+    V* vb = get_block(k);
+    ((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
+//    K k2(k);
+//    ((Accumulator<V>*)info_.accum)->Accumulate(&k2, v);
   }
 
   void put(const K& k, const V& v) {
@@ -190,8 +190,6 @@ void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
     it->clear();
     while (in->ReadEntry(&kt, &vt)) {
       ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
-
-      V* block = get_block(k);
       const int value_size = vt.size() / info_.block_size;
 
       V tmp;
@@ -199,8 +197,7 @@ void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
         ((Marshal<V>*)info_.value_marshal)->unmarshal(
             StringPiece(vt.data() + (value_size * j), value_size),
             &tmp);
-        it->append(block[j],tmp);
-        //((Accumulator<V>*)info_.accum)->Accumulate(&block[j], tmp);
+        it->append(k + j, tmp);
       }
     }
     it->rewind();
