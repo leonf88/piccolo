@@ -36,9 +36,11 @@ sudo apt-get install\
  libnuma-dev\
  libopenmpi-dev\
  libprotobuf-dev \
+ libcr-dev\
+ libibverbs-dev\
  openmpi-bin\
- protobuf-compiler
-
+ protobuf-compiler\
+ 
 the optional libraries can be install via:
 
 sudo apt-get install libgoogle-perftools-dev python-dev swig

@@ -1,6 +1,9 @@
-set(MPILIBS )
-set(STATICLIBS protobuf boost_thread-mt util z mpi_cxx mpi open-rte open-pal)
-set(DYNAMICLIBS lzo2 pthread rt dl numa)
+set(EXAMPLE_LIBS 
+	${EXAMPLE_LIBS} 
+	${MPI_LIBS}
+	${BLAS_LIBS}
+  	${PROTOBUF_LIBS})  	  	
+set(EXAMPLE_LIBS ${EXAMPLE_LIBS} boost_thread-mt util z lzo2 pthread rt)
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR ${PICCOLO_SOURCE_DIR} examples.proto )
 piccolo_pp(k-means.pp 
@@ -9,18 +12,13 @@ piccolo_pp(k-means.pp
            raytrace.pp
            shortest-path.pp
            wordcount.pp)
-		    
 
 add_custom_target(example_proto DEPENDS ${EXAMPLE_PB_HDR})
 
 set (EXTRA_SRC "")
 if (SDL_FOUND)
   set (EXTRA_SRC raytrace.pp.cc)
-  set (STATICLIBS ${STATICLIBS} SDL)
-endif()
-
-if (HAVE_GOOGLE_PROF) 
-  set (DYNAMICLIBS ${DYNAMICLIBS} profiler unwind)
+  set (EXAMPLE_LIBS ${EXAMPLE_LIBS} SDL)
 endif()
 
 add_library(example 
@@ -47,13 +45,11 @@ add_dependencies(example worker_proto common_proto)
 add_executable(example-dsm main.cc)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/facedet/cpp)
 
-# we need to resolve static initializers, so glob all the symbols in
+# we need to resolve static initializers, so glob all the symbols together with -whole-archive
 target_link_libraries(example-dsm -Wl,-whole-archive common worker kernel master example -Wl,-no-whole-archive)
 target_link_libraries(example-dsm gflags glog webgraph)
 
-# link statically if possible
-target_link_libraries(example-dsm -Wl,-Bstatic ${STATICLIBS} blas -Wl,-Bdynamic )
-target_link_libraries(example-dsm ${DYNAMICLIBS} ${MPI_LINK_FLAGS})    
+target_link_libraries(example-dsm ${EXAMPLE_LIBS})
 
 add_executable(matmul-mpi matmul-mpi.cc)
 target_link_libraries(matmul-mpi glog gflags blas rt ${MPI_LINK_FLAGS})
