@@ -17,12 +17,16 @@ from Queue import PriorityQueue, Queue, Empty, Full
 
 from tlds import domain_from_site
 
+sys.path += ['bin/release/client/python']
+
 try:
   from piccolo import *
 except:
   print 'Failed to import crawler support module!'
   traceback.print_exc()
   sys.exit(1)
+
+Init(sys.argv)
 
 num_crawlers = NetworkThread.Get().size() - 1
 crawler_id = NetworkThread.Get().id()
@@ -32,8 +36,7 @@ import logging
 os.system('mkdir -p logs.%d' % num_crawlers)
 logging.basicConfig(level=logging.WARN)
                     #filename='logs.%d/crawl.log.%s.%d' % (num_crawlers, socket.gethostname(), os.getpid()),
-                    
-               
+                                   
 def now(): return time.time()
 
 def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args, **kwargs)
