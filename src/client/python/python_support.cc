@@ -6,8 +6,8 @@ using namespace google::protobuf;
 using namespace std;
 
 DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
+DEFINE_bool(crawler_triggers, false, "Use trigger-based crawler (t/f).");
 static DSMKernel *the_kernel;
-
 
 namespace dsm {
 
@@ -17,6 +17,10 @@ DSMKernel* kernel() {
 
 double crawler_runtime() {
   return FLAGS_crawler_runtime;
+}
+
+bool crawler_triggers() {
+  return FLAGS_crawler_triggers;
 }
 
 int PythonSharder::operator()(const string& k, int shards) {
@@ -77,6 +81,7 @@ private:
   object crawl_module_;
   object crawl_ns_;
 };
+
 REGISTER_KERNEL(PythonKernel);
 REGISTER_METHOD(PythonKernel, run_python_code);
 
