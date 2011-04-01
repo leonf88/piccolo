@@ -10,14 +10,10 @@ FOREACH(it ${cmake_link_directories})
   SET(link_flag ${link_flag} "-L${it}")
 ENDFOREACH(it)
 
-SET(SWIG_LIBS ${PROTOBUF_LIBS}
-               boost_python-py26 boost_thread-mt util z lzo2 pthread rt)
-FOREACH(lib ${SWIG_LIBS})
-  SET(link_flag ${link_flag} "-l${lib}")
-ENDFOREACH(lib)
-
 SET(swig_out ${CMAKE_CURRENT_BINARY_DIR}/piccolo_wrap.cc)
 SET(swig_shim ${CMAKE_CURRENT_SOURCE_DIR}/python_support.cc)
+
+SET(STATICLIBSa -lprotobuf)
 
 ADD_CUSTOM_COMMAND(
  OUTPUT ${swig_out}
@@ -37,22 +33,29 @@ ADD_CUSTOM_COMMAND(
   COMMAND g++
   ARGS
   -ggdb2
-  -fPIC
   -shared
+  -fPIC
   ${include_flag}
-  -Wl,--start-group
+  ${link_flag}
+  -o ${CMAKE_CURRENT_BINARY_DIR}/_piccolo.so
+  ${swig_out} ${swig_shim} ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC}
+  ${MPI_LINK_FLAGS}
   ${CMAKE_BINARY_DIR}/util/libcommon.a
   ${CMAKE_BINARY_DIR}/worker/libworker.a
   ${CMAKE_BINARY_DIR}/kernel/libkernel.a
   ${CMAKE_BINARY_DIR}/master/libmaster.a
   ${CMAKE_BINARY_DIR}/external/google-flags/libgflags.a    
-  ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a
-  ${swig_out} ${swig_shim} 
-  ${MPI_LINK_FLAGS}  
-  ${link_flag}
-  -Wl,--end-group
-  -o ${CMAKE_CURRENT_BINARY_DIR}/_piccolo.so
-  ${EXAMPLE_PB_HDR} ${EXAMPLE_PB_SRC}
+  ${CMAKE_BINARY_DIR}/external/google-logging/libglog.a  
+  ${MPI_LINK_FLAGS}
+  -lblas
+  -lboost_python
+  -lboost_python-mt-py26 
+  -lboost_thread-mt 
+  -llzo2
+  -lpthread 
+  -lnuma
+  -lprotobuf
+  -lutil
   DEPENDS ${swig_out} worker master common kernel example
 )
   

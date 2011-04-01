@@ -195,6 +195,14 @@ public:
   V& value();
 }; 
 
+template <class K, class V>
+struct TriggerDescriptor<K, V> {
+public:
+  TriggerDescriptor(GlobalTable* thistable);
+  Init(GlobalTable* thistable);
+  bool Fire(const K& k, const V& current, V& update);
+};
+
 template <class K, class V> 
 struct TypedGlobalTable<K, V>  {
 private:
@@ -204,12 +212,22 @@ public:
   V get(const K& k);
   bool contains(const K& k);
   void update (const K& k, const V&);
+  void enqueue_update(const K& k, const V&);
   void put(const K& k, const V&);
   
   TypedTableIterator<K, V>* get_iterator(int shard);
   
   void SendUpdates();
   void HandlePutRequests();
+
+  %extend {
+    // Register a trigger
+    int py_register_trigger(const string& code) {
+      TriggerDescriptor<K, V> t((GlobalTable*)$self);
+      t.params.put<string>("python_code", code);
+      return t.trigid;
+    }
+}
 };
 
 %template(IntTable) TypedGlobalTable<string, int64_t>;
@@ -241,5 +259,7 @@ public:
     r.shards = range(1);
     $self->run(r);
   }
+
 }
+
 }

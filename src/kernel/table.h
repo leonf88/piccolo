@@ -45,7 +45,6 @@ private:
   bool enabled_;
 };
 
-#ifndef SWIG
 
 // Triggers are registered at table initialization time, and
 // are executed in response to changes to a table.s
@@ -56,6 +55,12 @@ template <class K, class V>
 struct Trigger : public TriggerBase {
   virtual bool Fire(const K& k, const V& current, V& update) = 0;
 };
+
+//#ifdef SWIGPYTHON
+//template <class K, class V> class TriggerDescriptor : public Trigger;
+//#endif
+
+#ifndef SWIG
 
 // Each table is associated with a single accumulator.  Accumulators are
 // applied whenever an update is supplied for an existing key-value cell.
@@ -102,7 +107,7 @@ struct Sharding {
     int operator()(const uint32_t& key, int shards) { return key % shards; }
   };
 };
-#endif
+#endif		//#ifdef SWIG / #else
 
 struct TableFactory {
   virtual TableBase* New() = 0;
