@@ -26,7 +26,9 @@ except:
   traceback.print_exc()
   sys.exit(1)
 
-Init(sys.argv)
+if __name__ == '__main__':
+	if not hasattr(NetworkThread.Get(),'size()'):
+		Init(sys.argv)
 
 num_crawlers = NetworkThread.Get().size() - 1
 crawler_id = NetworkThread.Get().id()
