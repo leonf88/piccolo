@@ -1,3 +1,4 @@
+#include "glog/logging.h"
 #include "python_support.h"
 #include <boost/python.hpp>
 
@@ -47,7 +48,55 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
 //  Py_DecRef(const_cast<PyObjectPtr>(b));
 }
 
-class PythonKernel : public DSMKernel {
+class PythonTrigger : public Trigger<string, PyObjectPtr> {
+public:
+  PythonTrigger(GlobalTable* thistable, const string& code);
+  void Init(GlobalTable* thistable);
+  bool Fire(const string& k, const PyObjectPtr& current, PyObjectPtr& update);
+
+  TriggerID trigid;
+private:
+  MarshalledMap params_;
+  boost::python::object crawl_module_;
+  boost::python::object crawl_ns_;
+};
+
+PythonTrigger::PythonTrigger(GlobalTable* thistable, const string& code) {
+  Init(thistable);
+  params_.put("python_code", code);
+}
+
+void PythonTrigger::Init(GlobalTable* thistable) {
+  try {
+    object sys_module = import("sys");
+    object sys_ns = sys_module.attr("__dict__");
+    crawl_module_ = import("crawler");
+    crawl_ns_ = crawl_module_.attr("__dict__");
+  } catch (error_already_set& e) {
+    PyErr_Print();
+    exit(1);
+  }
+}
+
+bool PythonTrigger::Fire(const string& k, const PyObjectPtr& current, PyObjectPtr& update) {
+  string python_code = params_.get<string> ("python_code");
+  LOG(INFO) << "Executing Python trigger: " << python_code;
+  try {
+    exec(python_code.c_str(), crawl_ns_, crawl_ns_);
+  } catch (error_already_set& e) {
+    PyErr_Print();
+    exit(1);
+  }
+
+  return true;
+}
+
+int CreatePythonTrigger(GlobalTable* t, const string& code) {
+  PythonTrigger *trigger = new PythonTrigger(t, code);
+  return t->register_trigger(trigger);
+}
+
+class PythonKernel: public DSMKernel {
 public:
   PythonKernel() {
     try {
@@ -67,7 +116,7 @@ public:
 
   void run_python_code() {
     the_kernel = this;
-    string python_code = get_arg<string>("python_code");
+    string python_code = get_arg<string> ("python_code");
     LOG(INFO) << "Executing python code: " << python_code;
     try {
       exec(StringPrintf("%s\n", python_code.c_str()).c_str(), crawl_ns_, crawl_ns_);
@@ -81,8 +130,9 @@ private:
   object crawl_module_;
   object crawl_ns_;
 };
-
-REGISTER_KERNEL(PythonKernel);
-REGISTER_METHOD(PythonKernel, run_python_code);
+REGISTER_KERNEL(PythonKernel)
+;
+REGISTER_METHOD(PythonKernel, run_python_code)
+;
 
 }

@@ -223,9 +223,7 @@ public:
   %extend {
     // Register a trigger
     int py_register_trigger(const string& code) {
-      TriggerDescriptor<K, V> t((GlobalTable*)$self);
-      t.params.put<string>("python_code", code);
-      return t.trigid;
+      return CreatePythonTrigger($self, code);
     }
 }
 };
