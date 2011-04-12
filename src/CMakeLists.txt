@@ -7,6 +7,8 @@ set(ENV{LANG} "C")
 
 include(../cmake/PiccoloPP.cmake)
 include(../cmake/FindProtobuf.cmake)
+include(../cmake/PcFromUcontext.cmake)
+
 include(CheckIncludeFile)
 include(CheckIncludeFileCXX)
 include(CheckLibraryExists)
@@ -81,7 +83,7 @@ string(REPLACE " " ";" MPI_LIBDIRS "${MPI_LIBDIRS}")
 string(REPLACE " " ";" MPI_LIBS "${MPI_LIBS}")
 
 set(CMAKE_CXX_FLAGS "${CXX_DEFAULT} -fPIC -fno-omit-frame-pointer -g0 ${CXX_WARN} ${CXX_DEFINE}")
-
+		    		     
 add_subdirectory (external/google-flags)
 add_subdirectory (external/google-logging)
 add_subdirectory (external/webgraph)
@@ -91,9 +93,10 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${PROTOBUF_INCLUDE_DIRS}
                      ${PYTHON_INCLUDE_PATH}
                      ${MPI_INCDIRS}
-                     external/google-flags
+		     external/google-flags
 		     external/google-logging
-		     external/webgraph)
+	             external/webgraph )
+		     
 
 link_directories(${MPI_LIBDIRS})
 include_directories(${MPI_INCDIRS})
