@@ -18,6 +18,6 @@ for n in [2]:#runutil.parallelism:
                   'python src/examples/crawler/crawler.py',
                   '--log_prefix=false',
                   '--crawler_triggers=%s' % usetriggers,
-                  '--crawler_runtime=300'])
+                  '--crawler_runtime=30'])
   
   runutil.run_command(cmd, n, logfile_name='Crawler')

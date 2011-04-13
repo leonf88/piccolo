@@ -35,6 +35,8 @@ enum MessageTypes {
   MTYPE_CLEAR_TABLE = 37;
 
   MTYPE_ENABLE_TRIGGER = 38;
+
+  MTYPE_FLUSH_RESPONSE = 39;
 };
 
 message EmptyMessage {}

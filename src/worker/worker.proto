@@ -120,3 +120,8 @@ message EnableTrigger {
   required int32 table = 2;
   required bool enable = 3;
 }
+
+message FlushResponse {
+  required int32 updatesdone = 1;
+}
+

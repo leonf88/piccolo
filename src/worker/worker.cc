@@ -66,7 +66,7 @@ Worker::Worker(const ConfigData &c) {
                    &Worker::HandleSwapRequest, this);
 
   RegisterCallback(MTYPE_WORKER_FLUSH,
-                   new EmptyMessage, new EmptyMessage,
+                   new EmptyMessage, new FlushResponse,
                    &Worker::HandleFlush, this);
 
   RegisterCallback(MTYPE_WORKER_APPLY,
@@ -459,16 +459,22 @@ void Worker::HandleShardAssignment(const ShardAssignmentRequest& shard_req, Empt
 }
 
 
-void Worker::HandleFlush(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc) {
   Timer net;
 
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  int updatesdone = 0;
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
     if (t) {
+      updatesdone += t->clearUpdateQueue();
       t->SendUpdates();
+      updatesdone += t->clearUpdateQueue();
     }
   }
+  VLOG(3) << "Telling master: " << updatesdone << " updates done." << endl;
+  resp->set_updatesdone(updatesdone);
+  network_->Send(config_.master_id(), MTYPE_FLUSH_RESPONSE, *resp);
 
   network_->Flush();
   stats_["network_time"] += net.elapsed();

@@ -760,13 +760,32 @@ void Master::barrier() {
 
   }
 
-  EmptyMessage empty;
-  //1st round-trip to make sure all workers have flushed everything
-  network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
+  bool quiescent;
+  do {
+    quiescent = true;
+    EmptyMessage empty;
+    //1st round-trip to make sure all workers have flushed everything
+    network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
 
-  //2nd round-trip to make sure all workers have applied all updates
-  //XXX: incorrect if MPI does not guarantee remote delivery
-  network_->SyncBroadcast(MTYPE_WORKER_APPLY, empty);
+    //2nd round-trip to make sure all workers have applied all updates
+    //XXX: incorrect if MPI does not guarantee remote delivery
+    network_->SyncBroadcast(MTYPE_WORKER_APPLY, empty);
+
+    int i=0;
+    FlushResponse done_msg;
+    int w_id = 0;
+    while (i < workers_.size()) {
+	  VLOG(3) << "Waiting for flush responses (" << i << " received)" << endl;
+      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_FLUSH_RESPONSE, &done_msg, &w_id)) {
+        i++;
+        if (done_msg.updatesdone() > 0)
+          quiescent = false;
+        VLOG(3) << "Received flush response " << i << " of " << workers_.size() << " with " << done_msg.updatesdone() << " updates done." << endl;
+      } else {
+        Sleep(FLAGS_sleep_time);
+      }
+    }
+  } while (!quiescent);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
     if (!checkpointing_) {

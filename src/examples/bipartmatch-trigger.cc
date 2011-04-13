@@ -95,6 +95,41 @@ class BPMTKernel : public DSMKernel {
 						v2.push_back(cost);
 					}
 				}
+
+				//try to find a random or best match
+				int j;
+				if (FLAGS_tedge_costs) {
+					//edges have associated costs
+					vector<int>::iterator  inner_it =  v.begin();
+					vector<int>::iterator inner_it2 = v2.begin();
+					j = -1;
+					float mincost = MAXCOST;
+					int offset = -1;
+					for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
+						if ((*inner_it2) < mincost) {
+							mincost = *inner_it2;
+							j = *inner_it;
+							offset = inner_it-v.begin();
+						}
+					}
+					v.erase(v.begin()+offset);
+					v2.erase(v2.begin()+offset);
+					v.push_back(j);
+					v2.push_back(mincost);
+				} else {
+					//all edges equal; pick one at random
+					j = v.size()*((float)rand()/(float)RAND_MAX);
+					j = (j>=v.size())?v.size()-1:j;
+					int j2 = v[j];
+					v.erase(v.begin()+j);
+					v.push_back(j2);
+					j = j2;
+				}
+				//Note: the above code used to be in BeginBPMT.  It got
+				//moved so that the trigger on leftoutedges wouldn't get
+				//triggered when the best match was put at the end of each
+				//vector.  CRM 4/12/2011
+
 				leftoutedges->update(it->key(),v);		//store list of neighboring edges
 				leftoutcosts->update(it2->key(),v2);	//store list of neighbor edge costs
 			}
@@ -114,29 +149,10 @@ class BPMTKernel : public DSMKernel {
 				if (v.size() <= 0)
 					continue;
 
-				//try to find a random or best match
-				int j;
-				if (FLAGS_tedge_costs) {
-					//edges have associated costs
-					vector<int>::iterator  inner_it =  v.begin();
-					vector<int>::iterator inner_it2 = v2.begin();
-					j = -1;
-					float mincost = MAXCOST;
-					for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
-						if ((*inner_it2) < mincost) {
-							mincost = *inner_it2;
-							j = *inner_it;
-						}
-					}
-				} else {
-					//all edges equal; pick one at random
-					j = v.size()*((float)rand()/(float)RAND_MAX);
-					j = (j>=v.size())?v.size()-1:j;
-					j = v[j];
-				}
+				int j = *(v.end()-1);
 				printf("Attempted match: left %d <--> right %d\n",it->key(),j);
 				rightmatches->update(j,it->key());
-				leftmatches->update(it->key(),j);
+				//leftmatches->update(it->key(),j);
 			}
 		}
 
@@ -202,31 +218,61 @@ class MatchRequestTrigger : public Trigger<int, int> {
 				//Else this match is acceptable.  Set new cost.
 				printf("Accepting match on %d from %d\n",key,newvalue);
 				rightcosts->enqueue_update(key,newcost);
+				leftmatches->enqueue_update(newvalue,key);
 			}
 			return true;
 		}
 };
 
-class MatchDenyTrigger : public Trigger<int, int> {
+class LeftTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
 
 			//Don't store the denial!
 			if (newvalue == -1) {
 
-				printf("Match from %d denied from %d\n",key,value);
+				printf("Match on %d denied from ??\n",key);
 
 				//Denied: remove possible right match
 				vector<int> v  = leftoutedges->get(key);
 				vector<int> v2 = leftoutcosts->get(key);
 
-				vector<int>::iterator it = find(v.begin(), v.end(), value);
-				vector<int>::iterator it2;
+				vector<int>::iterator it = v.begin();
+				vector<int>::iterator it2 = v2.begin();
 
-				if (it != v.end()) {		//remove possible match
-					it2 = v2.begin() + (it-v.begin()); //index into cost list
-					v.erase(it);
-					v2.erase(it2);
+				v.erase(v.end()-1);
+				v2.erase(v2.end()-1);
+
+				int j;
+				if (v.size() != 0) {
+					//try to find a random or best match
+					if (FLAGS_tedge_costs) {
+						//edges have associated costs
+						vector<int>::iterator  inner_it =  v.begin();
+						vector<int>::iterator inner_it2 = v2.begin();
+						j = -1;
+						float mincost = MAXCOST;
+						int offset = -1;
+						for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
+							if ((*inner_it2) < mincost) {
+								mincost = *inner_it2;
+								j = *inner_it;
+								offset = inner_it-v.begin();
+							}
+						}
+						v.erase(v.begin()+offset);
+						v2.erase(v2.begin()+offset);
+						v.push_back(j);
+						v2.push_back(mincost);
+					} else {
+						//all edges equal; pick one at random
+						j = v.size()*((float)rand()/(float)RAND_MAX);
+						j = (j>=v.size())?v.size()-1:j;
+						int j2 = v[j];
+						v.erase(v.begin()+j);
+						v.push_back(j2);
+						j = j2;
+					}
 				}
 
 				//Enqueue the removal
@@ -238,38 +284,16 @@ class MatchDenyTrigger : public Trigger<int, int> {
 					return true;
 				}
 
-				//Pick a new right match
-				int j;
-				if (FLAGS_tedge_costs) {
-					//edges have associated costs
-					vector<int>::iterator   inner_it  = v.begin();
-					vector<int>::iterator inner_it2 = v2.begin();
-					j = -1;
-					float mincost = MAXCOST;
-					for(; inner_it != v.end() && inner_it2 != v2.end();
-							inner_it++, inner_it2++)
-					{
-						if ((*inner_it2) < mincost) {
-							mincost = *inner_it2;
-							j = *inner_it;
-						}
-					}
-				} else {
-					//all edges equal; pick one at random
-					j = v.size()*((float)rand()/(float)RAND_MAX);
-					j = (j>=v.size())?v.size()-1:j;
-					j = v[j];
-				}
 				rightmatches->enqueue_update(j,key);
 				newvalue = j;
 				printf("Re-attempting from %d to %d\n",key,j);
-				return true;
+				return false;
 			}
+
+			//It was not a denial; store it.
 			return true;
 		}
 };
-
-
 
 //-----------------------------------------------
 
@@ -293,7 +317,7 @@ int Bipartmatch_trigger(ConfigData& conf) {
 		new Accumulators<int>::Replace);
 
 	TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
-	TriggerID matchdenyid = leftmatches->register_trigger(new MatchDenyTrigger);
+	TriggerID lefttriggerid = leftmatches->register_trigger(new LeftTrigger);
 
 	StartWorker(conf);
 	Master m(conf);
@@ -303,7 +327,7 @@ int Bipartmatch_trigger(ConfigData& conf) {
 
 	//Disable triggers
 	m.enable_trigger(matchreqid,2,false);
-	m.enable_trigger(matchdenyid,1,false);
+	m.enable_trigger(lefttriggerid,1,false);
 
 	//Fill in all necessary keys
 	m.run_one("BPMTKernel","InitTables",  leftoutedges);
@@ -313,13 +337,13 @@ int Bipartmatch_trigger(ConfigData& conf) {
 
 	//Enable triggers
 	m.enable_trigger(matchreqid,2,true);
-	m.enable_trigger(matchdenyid,1,true);
-
+	m.enable_trigger(lefttriggerid,1,true);
+	m.barrier();
 	m.run_all("BPMTKernel","BeginBPMT", leftoutedges);
 
 	//Disable triggers
 	m.enable_trigger(matchreqid,2,false);
-	m.enable_trigger(matchdenyid,1,false);
+	m.enable_trigger(lefttriggerid,1,false);
 
 	m.run_one("BPMTKernel","EvalPerformance",leftmatches);
 

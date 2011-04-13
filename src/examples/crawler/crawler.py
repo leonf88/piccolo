@@ -333,8 +333,9 @@ class StatusThread(Thread):
     self.end_time = time.time() + RUNTIME
   
   def print_status(self):
-      console('Crawler status [running for: %.1f, remaining: %.1f]',
-          time.time() - self.start_time, self.end_time - time.time())
+      global running
+      console('Crawler status [running for: %.1f, remaining: %.1f, running: %d]',
+          time.time() - self.start_time, self.end_time - time.time(), running)
       
       console('Page queue: %d; robot queue %d',
           crawl_queue.qsize(), robots_queue.qsize())
@@ -380,6 +381,7 @@ class StatusThread(Thread):
 
 def crawl():  
   global RUNTIME
+  global running
   RUNTIME = crawler_runtime()
   
   threads = [CrawlThread(i) for i in range(CRAWLER_THREADS)]
@@ -410,6 +412,7 @@ def crawl():
     
 def blocking_crawl():
   global RUNTIME
+  global running
   RUNTIME = crawler_runtime()
   
   threads = [CrawlThread(i) for i in range(CRAWLER_THREADS)]
@@ -429,7 +432,7 @@ def blocking_crawl():
     it.Next()
     
   done = False  
-  while not done:
+  while not done and running:
     done = True
     
     for url in local:   

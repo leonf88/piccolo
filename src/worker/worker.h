@@ -47,7 +47,7 @@ public:
   void HandlePutRequest();
 
   // Barrier: wait until all table data is transmitted.
-  void HandleFlush(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc);
   void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
 
   // Enable or disable triggers

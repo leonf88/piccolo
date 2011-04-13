@@ -65,6 +65,7 @@ public:
   virtual void HandlePutRequests() = 0;
 
   virtual int pending_write_bytes() = 0;
+  virtual int clearUpdateQueue() = 0;
 
   virtual void clear() = 0;
   virtual void resize(int64_t new_size) = 0;
@@ -164,6 +165,7 @@ class TypedGlobalTable :
   private boost::noncopyable {
 public:
   typedef pair<K, V> KVPair;
+  deque<KVPair> update_queue;
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
   virtual void Init(const TableDescriptor *tinfo) {
@@ -185,6 +187,7 @@ public:
   void put(const K &k, const V &v);
   void update(const K &k, const V &v);
   void enqueue_update(K k, V v);
+  int clearUpdateQueue();
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -223,7 +226,6 @@ public:
 protected:
   int shard_for_key_str(const StringPiece& k);
   virtual LocalTable* create_local(int shard);
-  deque<KVPair> update_queue;
 
 };
 
@@ -419,11 +421,19 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   }
 
   //Deal with updates enqueued inside triggers
+  clearUpdateQueue();
+}
+
+template<class K, class V>
+int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
+  int i=0;
   while(!update_queue.empty()) {
     KVPair thispair(update_queue.front());
     update_queue.pop_front();
     update(thispair.first,thispair.second);
+    i++;
   }
+  return i;
 }
 
 template<class K, class V>
