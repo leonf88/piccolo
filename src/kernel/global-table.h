@@ -11,6 +11,10 @@
 
 //#define GLOBAL_TABLE_USE_SCOPEDLOCK
 
+#define RETRIGGER_MODE_EXPLICIT 0
+#define RETRIGGER_MODE_IMPLICIT 1
+#define RETRIGGER_SCAN_INTERVAL 0.2
+
 namespace dsm {
 
 class Worker;
@@ -118,6 +122,8 @@ protected:
   boost::recursive_mutex m_;
   boost::mutex& trigger_mutex() { return m_trig_; }
   boost::mutex m_trig_;
+  boost::mutex& retrigger_mutex() { return m_retrig_; }
+  boost::mutex m_retrig_;
 
   vector<PartitionInfo> partinfo_;
 
@@ -164,8 +170,17 @@ class TypedGlobalTable :
   public TypedTable<K, V>,
   private boost::noncopyable {
 public:
+  //update queuing support
   typedef pair<K, V> KVPair;
   deque<KVPair> update_queue;
+
+  //long trigger support
+  typedef pair<bool,TriggerID> RetriggerPair;
+  map<K, RetriggerPair> retrigger_map;	// which keys still
+										// request long triggers
+  int retrigger_mode;		// 0 = scan retrigger_map for flags
+							// 1 = scan table for flags
+
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
   virtual void Init(const TableDescriptor *tinfo) {
@@ -176,6 +191,12 @@ public:
     
     //Clear the update queue, just in case
     update_queue.clear();
+
+	//Clear the long/retrigger map, just in case, and
+    //then start up the retrigger thread
+    retrigger_map.clear();
+	retrigger_mode = RETRIGGER_MODE_EXPLICIT; //separate map to start
+    boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this));
   }
 
   int get_shard(const K& k);
@@ -188,6 +209,11 @@ public:
   void update(const K &k, const V &v);
   void enqueue_update(K k, V v);
   int clearUpdateQueue();
+
+  // Provide a mechanism to enable a long trigger / retrigger, as well as
+  // a function from which to create a retrigger thread
+  void enable_retrigger(K k, TriggerID id);
+  void retrigger_thread(void);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -211,7 +237,7 @@ public:
           << " to " << owner(req.shard());
     }
 
-    // Changes to support centralized of triggers <CRM>
+    // Changes to support locality of triggers <CRM>
     ProtoTableCoder c(&req);
     UpdateDecoder it;
     partitions_[req.shard()]->DecodeUpdates(&c, &it);
@@ -392,6 +418,8 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
     V v2 = v;
     V v1;
 
+    boost::mutex::scoped_lock sl(trigger_mutex());
+
     if (partition(shard)->contains(k))
       v1 = partition(shard)->get(k);
 
@@ -402,6 +430,8 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
       //for now, let NACKS disallow chained triggers (?)
       if (!doUpdate) break;
     }
+
+    sl.unlock();
 
     // Only update if no triggers NACKed
     if (doUpdate) {
@@ -434,6 +464,54 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     i++;
   }
   return i;
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::enable_retrigger(K k, TriggerID id) {
+  boost::mutex::scoped_lock sl(retrigger_mutex());
+  if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
+    //insert or update item in retrigger map
+    RetriggerPair rtpair(true,id);
+
+    //Remove any existing item
+    if (retrigger_map.end() != retrigger_map.find(k))
+      retrigger_map.erase(k);
+    //Set new one
+    retrigger_map[k] = rtpair;
+  } else { //RETRIGGER_MODE_IMPLICIT
+    //Set bit in table instead of in retrigger map
+    LOG(FATAL) << "Retrigger mode 1 not yet implemented." << endl;
+  }
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::retrigger_thread(void) {
+  while(1) {
+    {
+      boost::mutex::scoped_lock sl(retrigger_mutex());
+      if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
+        typename map<K, RetriggerPair>::iterator it = retrigger_map.begin();
+        typename map<K, RetriggerPair>::iterator oldit;
+        for(; it != retrigger_map.end();) {
+          if (it->second.first == true) {
+            V v = get(it->first);
+            it->second.first = 
+				reinterpret_cast<Trigger<K, V>*>(trigger(it->second.second))->
+				Fire(it->first, v, v);
+          }
+          if (it->second.first == false) {
+            oldit = it;
+            it++;
+            retrigger_map.erase(oldit);
+          } else
+            it++;
+        }
+      } else { //RETRIGGER_MODE_IMPLICIT
+        LOG(FATAL) << "Retrigger mode 1 not yet implemented!" << endl;
+      }
+    }
+    Sleep(RETRIGGER_SCAN_INTERVAL);
+  }
 }
 
 template<class K, class V>

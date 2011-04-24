@@ -75,6 +75,7 @@ private:
 
   int num_peers_;
   bool running_;
+  bool krunning_;
   CheckpointType active_checkpoint_;
 
   typedef unordered_map<int, bool> CheckpointMap;

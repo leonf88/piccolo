@@ -410,6 +410,9 @@ def crawl():
     
     time.sleep(0.1)
     
+def RobotFetchTrigger(key, value, newvalue):
+  print "Trigger: %s %d %d" % (key,value,newvalue)
+
 def blocking_crawl():
   global RUNTIME
   global running
@@ -506,7 +509,7 @@ def initialize():
   return 0
 
 def main():
-  global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts
+  global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts, robotfetchtrigid;
   num_workers = NetworkThread.Get().size() - 1
 
   fetch_table = CreateIntTable(0,  num_workers, DomainSharding(), IntAccum.Max())
@@ -514,11 +517,18 @@ def main():
   robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
   domain_counts = CreateIntTable(3,  num_workers, DomainSharding(), IntAccum.Sum())
   fetch_counts = CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
+  crawl_table = CreateIntTable(5,  num_workers, DomainSharding(), IntAccum.Max())
+
+  robotfetchtrigid = fetch_table.py_register_trigger('RobotFetchTrigger(key,value,newvalue)')
 
   conf = ConfigData()
   conf.set_num_workers(num_workers)
+  print "starting workers..."
   if not StartWorker(conf):
+    print "started workers..."
     m = Master(conf)
+
+    m.enable_trigger(robotfetchtrigid,0,false)
     m.py_run_all('initialize()', fetch_table)
     #m.py_run_all('crawl()', fetch_table)
     for i in range(100):
