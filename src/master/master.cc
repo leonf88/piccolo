@@ -705,6 +705,7 @@ void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
 void Master::barrier() {
   MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
 
+  VLOG(3) << "Starting barrier() with finished_=" << finished_ << endl;
   while (finished_ < current_run_.shards.size()) {
     PERIODIC(10, {
           DumpProfile();
@@ -760,31 +761,52 @@ void Master::barrier() {
 
   }
 
+  VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_ << endl;
+
   bool quiescent;
   do {
     quiescent = true;
     EmptyMessage empty;
+
     //1st round-trip to make sure all workers have flushed everything
-    network_->SyncBroadcast(MTYPE_WORKER_FLUSH, empty);
+    network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
+	VLOG(3) << "Sent flush broadcast to workers" << endl;
 
-    //2nd round-trip to make sure all workers have applied all updates
-    //XXX: incorrect if MPI does not guarantee remote delivery
-    network_->SyncBroadcast(MTYPE_WORKER_APPLY, empty);
-
-    int i=0;
+    int flushed=0,applied=0;
     FlushResponse done_msg;
     int w_id = 0;
-    while (i < workers_.size()) {
-	  VLOG(3) << "Waiting for flush responses (" << i << " received)" << endl;
+    while (flushed < workers_.size()) {
+	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
       if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_FLUSH_RESPONSE, &done_msg, &w_id)) {
-        i++;
+        flushed++;
         if (done_msg.updatesdone() > 0)
           quiescent = false;
-        VLOG(3) << "Received flush response " << i << " of " << workers_.size() << " with " << done_msg.updatesdone() << " updates done." << endl;
+        VLOG(3) << "Received flush response " << flushed << " of " << workers_.size() << " with " << done_msg.updatesdone() << " updates done." << endl;
       } else {
         Sleep(FLAGS_sleep_time);
       }
     }
+
+    //2nd round-trip to make sure all workers have applied all updates
+    //XXX: incorrect if MPI does not guarantee remote delivery
+    network_->Broadcast(MTYPE_WORKER_APPLY, empty);
+	VLOG(3) << "Sent apply broadcast to workers" << endl;
+
+	//If we don't wait for Apply responses, then we will send more FLUSH messages
+	//potentially even out of other with APPLY, which can easily cause deadlocks
+	//on the sl mutex because of multiple simultaneous attempted HandlePutRequest()s
+
+    EmptyMessage apply_msg;
+    while (applied < workers_.size()) {
+	  //VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
+      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &w_id)) {
+        applied++;
+        VLOG(3) << "Received apply done " << applied << " of " << workers_.size() << endl;
+      } else {
+        Sleep(FLAGS_sleep_time);
+      }
+    }
+
   } while (!quiescent);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {

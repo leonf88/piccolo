@@ -53,7 +53,9 @@ void MutableGlobalTableBase::resize(int64_t new_size) {
 
 bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   {
+	VLOG(3) << "Entering get_remote" << endl;
     boost::recursive_mutex::scoped_lock sl(mutex());
+	VLOG(3) << "Entering get_remote and locked" << endl;
     if (remote_cache_.find(k) != remote_cache_.end()) {
       CacheEntry& c = remote_cache_[k];
       if ((Now() - c.last_read_time) < info().max_stale_time) {

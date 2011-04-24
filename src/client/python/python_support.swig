@@ -215,6 +215,8 @@ public:
   void enqueue_update(const K& k, const V&);
   void put(const K& k, const V&);
   
+  void enable_retrigger(K k, TriggerID id);
+
   TypedTableIterator<K, V>* get_iterator(int shard);
   
   void SendUpdates();
@@ -225,7 +227,7 @@ public:
     int py_register_trigger(const string& code) {
       return CreatePythonTrigger($self, code);
     }
-}
+  }
 };
 
 %template(IntTable) TypedGlobalTable<string, int64_t>;

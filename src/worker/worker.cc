@@ -35,7 +35,8 @@ Worker::Worker(const ConfigData &c) {
     peers_[i] = new Stub(i + 1);
   }
 
-  running_ = true;
+  running_ = true;		//this is WORKER running, not KERNEL running!
+  krunning_ = false;	//and this is for KERNEL running
   iterator_id_ = 0;
 
   // HACKHACKHACK - register ourselves with any existing tables
@@ -78,6 +79,7 @@ Worker::Worker(const ConfigData &c) {
                    &Worker::HandleEnableTrigger, this);
 
   NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_FLUSH);
+  NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_APPLY);
 }
 
 int Worker::peer_for_shard(int table, int shard) const {
@@ -116,6 +118,7 @@ void Worker::KernelLoop() {
         return;
       }
     }
+    krunning_ = true;	//a kernel is running
     stats_["idle_time"] += idle.elapsed();
 
     VLOG(1) << "Received run request for " << kreq;
@@ -162,6 +165,7 @@ void Worker::KernelLoop() {
         }
       }
     }
+    krunning_ = false;
     network_->Send(config_.master_id(), MTYPE_KERNEL_DONE, kd);
 
     VLOG(1) << "Kernel finished: " << kreq;
@@ -482,7 +486,13 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPC
 
 
 void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  if (krunning_) {
+    LOG(FATAL) << "Received APPLY message while still running!?!" << endl;
+    return;
+  }
+
   HandlePutRequest();
+  network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
 }
 
 void Worker::HandleEnableTrigger(const EnableTrigger& req, EmptyMessage *resp, const RPCInfo& rpc) {

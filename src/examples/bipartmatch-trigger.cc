@@ -12,8 +12,8 @@ using namespace std;
 static int NUM_WORKERS = 2;
 #define MAXCOST RAND_MAX
 
-DEFINE_int32(tleft_vertices, 100, "Number of left-side vertices");
-DEFINE_int32(tright_vertices, 100, "Number of right-side vertices");
+DEFINE_int32(tleft_vertices, 400, "Number of left-side vertices");
+DEFINE_int32(tright_vertices, 400, "Number of right-side vertices");
 DEFINE_double(tedge_probability, 0.5, "Probability of edge between vertices");
 DEFINE_bool(tedge_costs, false, "Set to true to have edges have costs");
 
@@ -39,6 +39,8 @@ namespace dsm{
 			int i,j;
 			int len;
 			memcpy(&len,s.data,sizeof(int));
+			if (len < 0)
+				LOG(FATAL) << "Unmarshalled vector of size < 0" << endl;
 			t->clear();
 			for(i = 0; i < len; i++) {
 				memcpy(&j,s.data+(i+1)*sizeof(int),sizeof(int));
@@ -85,6 +87,11 @@ class BPMTKernel : public DSMKernel {
             CHECK(it2 != NULL);
 			int cost = 0;
 			for(; !it->done() && !it2->done(); it->Next(),it2->Next()) {
+
+				if (leftmatches->get(it->key()) != -1) {
+					LOG(FATAL) << "Uninitialized left match found!" << endl;
+				}
+
 				vector<int> v  =  it->value();
 				vector<int> v2 = it2->value();
 				for(int i=0; i<FLAGS_tright_vertices; i++) {
@@ -103,27 +110,33 @@ class BPMTKernel : public DSMKernel {
 					vector<int>::iterator  inner_it =  v.begin();
 					vector<int>::iterator inner_it2 = v2.begin();
 					j = -1;
-					float mincost = MAXCOST;
-					int offset = -1;
-					for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
-						if ((*inner_it2) < mincost) {
-							mincost = *inner_it2;
-							j = *inner_it;
-							offset = inner_it-v.begin();
+					if (inner_it == v.end() || inner_it2 == v2.end()) {
+						float mincost = MAXCOST;
+						int offset = -1;
+						for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
+							if ((*inner_it2) < mincost) {
+								mincost = *inner_it2;
+								j = *inner_it;
+								offset = inner_it-v.begin();
+							}
 						}
+						v.erase(v.begin()+offset);
+						v2.erase(v2.begin()+offset);
+						v.push_back(j);
+						v2.push_back(mincost);
 					}
-					v.erase(v.begin()+offset);
-					v2.erase(v2.begin()+offset);
-					v.push_back(j);
-					v2.push_back(mincost);
 				} else {
 					//all edges equal; pick one at random
-					j = v.size()*((float)rand()/(float)RAND_MAX);
-					j = (j>=v.size())?v.size()-1:j;
-					int j2 = v[j];
-					v.erase(v.begin()+j);
-					v.push_back(j2);
-					j = j2;
+					if (v.size() != 0) {
+						j = v.size()*((float)rand()/(float)RAND_MAX);
+						j = (j>=v.size())?v.size()-1:j;
+						int j2 = v[j];
+						v.erase(v.begin()+j);
+						v.push_back(j2);
+						j = j2;
+					} else {
+						j = -1;
+					}
 				}
 				//Note: the above code used to be in BeginBPMT.  It got
 				//moved so that the trigger on leftoutedges wouldn't get
@@ -132,6 +145,7 @@ class BPMTKernel : public DSMKernel {
 
 				leftoutedges->update(it->key(),v);		//store list of neighboring edges
 				leftoutcosts->update(it2->key(),v2);	//store list of neighbor edge costs
+				VLOG(2) << "Populated left vertex " << it->key();
 			}
 		}
 
@@ -150,7 +164,7 @@ class BPMTKernel : public DSMKernel {
 					continue;
 
 				int j = *(v.end()-1);
-				printf("Attempted match: left %d <--> right %d\n",it->key(),j);
+				VLOG(1) << "Attempted match: left " << it->key() << " <--> right " << j;
 				rightmatches->update(j,it->key());
 				//leftmatches->update(it->key(),j);
 			}
@@ -176,7 +190,7 @@ class BPMTKernel : public DSMKernel {
 					left_matched++;
 					rightset[rightmatch]++;
 					if (rightset[rightmatch] > 1)
-						cout << rightset[rightmatch] << " left vertices have right vertex " <<
+						LOG(ERROR) << rightset[rightmatch] << " left vertices have right vertex " <<
 							rightmatch << " as a match: one is " << i << endl;
 				}
 			}
@@ -189,7 +203,16 @@ class MatchRequestTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
 			int newcost = MAXCOST;
+
+			if (rightmatches->get(key) != value) {
+				cout << "KEY MISMATCH RIGHT IN TRIGGER: [" <<
+					key << ",({" << value << " vs " << rightmatches->get(key)
+					<< "}, " << newvalue << ")]" <<  endl;
+				exit(-1);
+			}
+
 			if (newvalue != -1) {
+/*
 				vector<int> v  = leftoutedges->get(newvalue);	//get the vector for this left key
 				vector<int> v2 = leftoutcosts->get(newvalue);
 				vector<int>::iterator it = find(v.begin(), v.end(), key);
@@ -200,23 +223,39 @@ class MatchRequestTrigger : public Trigger<int, int> {
 					it2 = v2.begin() + (it - v.begin());
 					newcost = *it2;
 				}
+*/
 			}
 			if (value != -1) {
 
 				//cost check
+/*
 				if (newcost < rightcosts->get(key)) {
+					vector<int> v2 = leftoutcosts->get(newvalue);
+					cout << "cost thing shouldn't happen: " << 
+						newcost << " vs " << rightcosts->get(key) <<
+						" on right vertex " << key << endl;
+					vector<int> v  = leftoutedges->get(newvalue);	//get the vector for this left key
+					vector<int>::iterator it = find(v.begin(), v.end(), key);
+					cout << "Matched right was in left's edges index " <<
+						(it-v.begin()) << endl;
+					cout << "{";
+					for(int i=0; i<v2.size(); i++)
+						cout << v2[i] << ",";
+					cout << "}" << endl;
+					exit(-1);
 					//found better match!
 					leftmatches->enqueue_update(value,-1);	//remove old match
 					rightcosts->enqueue_update(key,newcost);
 					return true;
 				}
+*/
 
-				printf("Denying match on %d from %d\n",key,newvalue);
+				cout << "Denying match on " << key << " from " << newvalue << endl;
 				leftmatches->enqueue_update(newvalue,-1);
 				return false;
 			} else {
 				//Else this match is acceptable.  Set new cost.
-				printf("Accepting match on %d from %d\n",key,newvalue);
+				cout << "Accepting match on " << key << " from " << newvalue << endl;
 				rightcosts->enqueue_update(key,newcost);
 				leftmatches->enqueue_update(newvalue,key);
 			}
@@ -228,24 +267,35 @@ class LeftTrigger : public Trigger<int, int> {
 	public:
 		bool Fire(const int& key, const int& value, int& newvalue ) {
 
+			//Sanity check: make sure the right side isn't trying to
+            //break an already-agreed match or re-assign a left vertex
+            //that's already linked.
+			if (leftmatches->get(key) != value || value != -1) {
+				cout << "KEY MISMATCH LEFT IN TRIGGER: [" <<
+					key << ",(" << value << ", " << newvalue << ")]" <<  endl;
+				exit(-1);
+			}
+
 			//Don't store the denial!
 			if (newvalue == -1) {
 
-				printf("Match on %d denied from ??\n",key);
 
 				//Denied: remove possible right match
 				vector<int> v  = leftoutedges->get(key);
-				vector<int> v2 = leftoutcosts->get(key);
+//				vector<int> v2 = leftoutcosts->get(key);
 
 				vector<int>::iterator it = v.begin();
-				vector<int>::iterator it2 = v2.begin();
+//				vector<int>::iterator it2 = v2.begin();
+
+				cout << "Match on " << key << " denied from " << *(v.end()-1) << endl;
 
 				v.erase(v.end()-1);
-				v2.erase(v2.end()-1);
+//				v2.erase(v2.end()-1);
 
 				int j;
 				if (v.size() != 0) {
 					//try to find a random or best match
+/*
 					if (FLAGS_tedge_costs) {
 						//edges have associated costs
 						vector<int>::iterator  inner_it =  v.begin();
@@ -265,6 +315,7 @@ class LeftTrigger : public Trigger<int, int> {
 						v.push_back(j);
 						v2.push_back(mincost);
 					} else {
+*/
 						//all edges equal; pick one at random
 						j = v.size()*((float)rand()/(float)RAND_MAX);
 						j = (j>=v.size())?v.size()-1:j;
@@ -273,20 +324,20 @@ class LeftTrigger : public Trigger<int, int> {
 						v.push_back(j2);
 						j = j2;
 					}
-				}
+//				}
 
 				//Enqueue the removal
 				leftoutedges->enqueue_update((int)key,v);
-				leftoutcosts->enqueue_update((int)key,v2);
+//				leftoutcosts->enqueue_update((int)key,v2);
 
 				if (v.size() == 0) {		//forget it if no more candidates
-					printf("Ran out of right candidates for %d\n",key);
+					cout << "Ran out of right candidates for " << key << endl;
 					return true;
 				}
 
 				rightmatches->enqueue_update(j,key);
 				newvalue = j;
-				printf("Re-attempting from %d to %d\n",key,j);
+				cout << "Re-attempting from " << key << " to " << j << endl;
 				return false;
 			}
 
