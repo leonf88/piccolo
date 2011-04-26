@@ -48,25 +48,15 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
 //  Py_DecRef(const_cast<PyObjectPtr>(b));
 }
 
-class PythonTrigger : public Trigger<string, PyObjectPtr> {
-public:
-  PythonTrigger(GlobalTable* thistable, const string& code);
-  void Init(GlobalTable* thistable);
-  bool Fire(const string& k, const PyObjectPtr& current, PyObjectPtr& update);
-
-  TriggerID trigid;
-private:
-  MarshalledMap params_;
-  boost::python::object crawl_module_;
-  boost::python::object crawl_ns_;
-};
-
-PythonTrigger::PythonTrigger(GlobalTable* thistable, const string& code) {
+template<class K, class V>
+PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& code) {
   Init(thistable);
   params_.put("python_code", code);
+  trigid = thistable->register_trigger(this);
 }
 
-void PythonTrigger::Init(GlobalTable* thistable) {
+template<class K, class V>
+void PythonTrigger<K, V>::Init(dsm::GlobalTable* thistable) {
   try {
     object sys_module = import("sys");
     object sys_ns = sys_module.attr("__dict__");
@@ -78,22 +68,80 @@ void PythonTrigger::Init(GlobalTable* thistable) {
   }
 }
 
-bool PythonTrigger::Fire(const string& k, const PyObjectPtr& current, PyObjectPtr& update) {
+template<class K, class V>
+bool PythonTrigger<K, V>::Fire(const K& k, const V& current, V& update) {
   string python_code = params_.get<string> ("python_code");
-  LOG(INFO) << "Executing Python trigger: " << python_code;
+  PyObject *key, *callable;
+  callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
+  key = PyString_FromString(k.c_str());
+
+  // Make sure all the callfunctionobjarg arguments are fine
+  if (key == NULL || callable == NULL) {
+    LOG(ERROR) << "Failed to launch trigger " << python_code << "!";
+    if (key == NULL) LOG(ERROR) << "[FAIL] key was null";
+    if (callable == NULL) LOG(ERROR) << "[FAIL] callable was null";
+    return true;
+  }
+
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, update);
+  printf("returning %s from trigger\n",rv?"TRUE":"FALSE");
+  return rv;
+}
+
+template<class K, class V>
+bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update) {
+  LOG(FATAL) << "No such CallPythonTrigger for this key/value pair type!";
+  exit(1);
+}
+
+template<>
+bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const int64_t& current, int64_t& update) {
+  PyObjectPtr retval;
+
+  PyObject* cur_obj = PyLong_FromLongLong(current);
+  PyObject* upd_obj = PyLong_FromLongLong(update);
+
+  if (cur_obj == NULL || upd_obj == NULL) {
+    LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
+    return true;
+  }
   try {
-    exec(python_code.c_str(), crawl_ns_, crawl_ns_);
+    retval = PyObject_CallFunctionObjArgs(
+		callable, key, cur_obj, upd_obj, NULL);
+    Py_DECREF(callable);
   } catch (error_already_set& e) {
     PyErr_Print();
     exit(1);
   }
 
-  return true;
+  update = PyLong_AsLongLong(upd_obj);
+
+  return (retval == Py_True);
 }
 
-int CreatePythonTrigger(GlobalTable* t, const string& code) {
-  PythonTrigger *trigger = new PythonTrigger(t, code);
-  return t->register_trigger(trigger);
+template<>
+bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const string& current, string& update) {
+  PyObjectPtr retval;
+ 
+  PyObject* cur_obj = PyString_FromString(current.c_str());
+  PyObject* upd_obj = PyString_FromString(update.c_str());
+
+  if (cur_obj == NULL || upd_obj == NULL) {
+    LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
+    return true;
+  }
+  try {
+    retval = PyObject_CallFunctionObjArgs(
+		callable, key, cur_obj, upd_obj, NULL);
+    Py_DECREF(callable);
+  } catch (error_already_set& e) {
+    PyErr_Print();
+    exit(1);
+  }
+
+  update = PyString_AsString(upd_obj);
+
+  return (retval == Py_True);
 }
 
 class PythonKernel: public DSMKernel {
@@ -134,5 +182,8 @@ REGISTER_KERNEL(PythonKernel)
 ;
 REGISTER_METHOD(PythonKernel, run_python_code)
 ;
+
+template class PythonTrigger<string, string>;
+template class PythonTrigger<string, int64_t>;
 
 }

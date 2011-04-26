@@ -1,11 +1,1 @@
-localhost slots=1
-beaker-19 slots=8
-beaker-11 slots=4
-beaker-12 slots=4
-beaker-13 slots=4
-beaker-14 slots=8
-beaker-16 slots=8
-beaker-17 slots=8
-beaker-18 slots=8
-beaker-2 slots=4
-beaker-3 slots=4
+../hosts

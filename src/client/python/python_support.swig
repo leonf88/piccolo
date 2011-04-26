@@ -95,6 +95,12 @@ typedef TypedGlobalTable<string, string> StringTable;
 typedef TypedTableIterator<string, int64_t> IntIterator;
 typedef TypedTableIterator<string, string> StringIterator;
 
+typedef Trigger<string, int64_t> IntTrigger;
+typedef Trigger<string, string> StringTrigger;
+
+typedef PythonTrigger<string, int64_t> IntPythonTrigger;
+typedef PythonTrigger<string, string> StringPythonTrigger;
+
 }%}
 
 #define GOOGLE_PROTOBUF_VERSION 2003000
@@ -109,6 +115,8 @@ typedef long int64_t;
 
 %include "master/master.h"
 %include "client/python/python_support.h"
+
+typedef int TriggerID;
 
 void Init(int argc, char** argv);
 
@@ -196,11 +204,22 @@ public:
 }; 
 
 template <class K, class V>
-struct TriggerDescriptor<K, V> {
+struct Trigger<K, V> {
+private:
+  Trigger();
 public:
-  TriggerDescriptor(GlobalTable* thistable);
+  Trigger(GlobalTable* thistable);
   Init(GlobalTable* thistable);
   bool Fire(const K& k, const V& current, V& update);
+};
+
+template <class K, class V>
+struct PythonTrigger<K, V> {
+public:
+  PythonTrigger(GlobalTable* thistable, const string& code);
+  void Init(GlobalTable* thistable);
+  bool Fire(const K& k, const V& current, V& update);
+  bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update);
 };
 
 template <class K, class V> 
@@ -225,7 +244,8 @@ public:
   %extend {
     // Register a trigger
     int py_register_trigger(const string& code) {
-      return CreatePythonTrigger($self, code);
+      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, code);
+      return trigger->trigid;
     }
   }
 };
@@ -233,12 +253,26 @@ public:
 %template(IntTable) TypedGlobalTable<string, int64_t>;
 %template(StringTable) TypedGlobalTable<string, string>;
 
+/*
+%template(IntTrigger) Trigger<string, int64_t>;
+%template(StringTrigger) Trigger<string, string>;
+%template(IntPythonTrigger) PythonTrigger<string, int64_t>;
+%template(StringPythonTrigger) PythonTrigger<string, string>;
+*/
+
 %template(IntIterator) TypedTableIterator<string, int64_t>;
 %template(StringIterator) TypedTableIterator<string, string>;
 
 %extend DSMKernel {
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
+
+  PythonTrigger<string, string>* GetStringPythonTrigger(int tidx, int idx) {
+    return (PythonTrigger<string, string>*)($self->get_table<string, string>(tidx)->trigger(idx));
+  }
+  PythonTrigger<string, int64_t>* GetIntPythonTrigger(int tidx, int idx) {
+    return (PythonTrigger<string, int64_t>*)($self->get_table<string, int64_t>(tidx)->trigger(idx));
+  }
 }
 
 %template(CreateStringTable) CreateTable<string, string>;

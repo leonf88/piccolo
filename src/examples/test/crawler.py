@@ -15,6 +15,7 @@ for n in [2]:#runutil.parallelism:
                   '-hostfile conf/mpi-cluster',
 #                  '-nooversubscribe',
                   '-n %d' % (1 + n),
+#                  'xterm -display beaker-2:1 -hold -e gdb -ex run --args python src/examples/crawler/crawler.py',
                   'python src/examples/crawler/crawler.py',
                   '--log_prefix=false',
                   '--crawler_triggers=%s' % usetriggers,
