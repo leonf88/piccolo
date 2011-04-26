@@ -496,10 +496,11 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCI
 }
 
 void Worker::HandleEnableTrigger(const EnableTrigger& req, EmptyMessage *resp, const RPCInfo& rpc) {
-  
-  TableRegistry::Get()->tables()[req.table()]
-	->trigger(req.trigger_id())
-    ->enable(req.enable());
+  GlobalTable *t = TableRegistry::Get()->tables()[req.table()];
+  CHECK(t != NULL);
+  TriggerBase *trigger = t->trigger(req.trigger_id());
+  CHECK(trigger != NULL);
+  trigger->enable(req.enable());
 }
 
 void Worker::CheckForMasterUpdates() {

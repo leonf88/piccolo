@@ -1,4 +1,5 @@
 #include <python2.6/Python.h>
+#include <boost/python.hpp>
 
 #include <gflags/gflags.h>
 #include "client/client.h"
@@ -64,7 +65,21 @@ struct PythonMarshal : public Marshal<PyObjectPtr> {
   PyObjectPtr unpickler_;
 };
 
-int CreatePythonTrigger(GlobalTable* t, const string& code);
+template<class K, class V>
+class PythonTrigger : public Trigger<K, V> {
+public:
+  PythonTrigger(dsm::GlobalTable* thistable, const string& code);
+  void Init(dsm::GlobalTable* thistable);
+  bool Fire(const K& k, const V& current, V& update);
+  bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update);
+
+  TriggerID trigid;
+private:
+  MarshalledMap params_;
+  boost::python::object crawl_module_;
+  boost::python::object crawl_ns_;
+};
+
 
 #endif
 }

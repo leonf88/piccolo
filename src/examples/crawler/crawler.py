@@ -18,6 +18,7 @@ from Queue import PriorityQueue, Queue, Empty, Full
 from tlds import domain_from_site
 
 sys.path += ['bin/release/client/python']
+sys.path += ['bin/debug/client/python']
 
 try:
   from piccolo import *
@@ -410,8 +411,17 @@ def crawl():
     
     time.sleep(0.1)
     
-def RobotFetchTrigger(key, value, newvalue):
-  print "Trigger: %s %d %d" % (key,value,newvalue)
+def RobotFetchTrigger(k,current,update):
+  print "Trigger: %s %d %d" % (k, current, update)
+  it = fetch_table.get_iterator(kernel().current_shard())
+  while not it.done():
+    print "%s -> %d" % (it.key(), it.value())
+    it.Next()
+  return True
+
+def RobotRetrigger(k, current, update):
+  print "Re-Trigger: %s %d %d" % (k, current, update)
+  return True
 
 def blocking_crawl():
   global RUNTIME
@@ -519,16 +529,21 @@ def main():
   fetch_counts = CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
   crawl_table = CreateIntTable(5,  num_workers, DomainSharding(), IntAccum.Max())
 
-  robotfetchtrigid = fetch_table.py_register_trigger('RobotFetchTrigger(key,value,newvalue)')
+  robotfetchtrigid = fetch_table.py_register_trigger('RobotFetchTrigger')
+  robotretrigid = fetch_table.py_register_trigger('RobotRetrigger')
+  print "robotfetchtrigid = %d" % (robotfetchtrigid)
+  print "robotretrigid = %d" % (robotretrigid)
 
   conf = ConfigData()
   conf.set_num_workers(num_workers)
-  print "starting workers..."
   if not StartWorker(conf):
-    print "started workers..."
     m = Master(conf)
 
-    m.enable_trigger(robotfetchtrigid,0,false)
+    if crawler_triggers() != 1:
+      m.enable_trigger(robotfetchtrigid,0,False)
+
+    m.enable_trigger(robotretrigid,0,False)
+
     m.py_run_all('initialize()', fetch_table)
     #m.py_run_all('crawl()', fetch_table)
     for i in range(100):

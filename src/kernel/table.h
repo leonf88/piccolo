@@ -134,6 +134,7 @@ public:
     key_marshal = value_marshal = NULL;
     accum = NULL;
     sharder = NULL;
+    triggers.clear();
   }
 
   int table_id;
@@ -291,16 +292,10 @@ protected:
 };
 
 template <class K, class V> struct TypedTableIterator;
-
+template <class K, class V> struct Trigger;
+template <class K, class V> struct PythonTrigger;
 
 struct DecodeIteratorBase {
-/*
-  virtual bool done();
-  virtual void Next();
-
-  virtual void key_str(string *k);
-  virtual void value_str(string *k);
-*/
 };
 
 // Added for the sake of triggering on remote updates/puts <CRM>
@@ -317,15 +312,12 @@ struct DecodeIterator : public TypedTableIterator<K, V>, public DecodeIteratorBa
   void append(K k, V v) {
     kvpair thispair(k, v);
     decodedeque.push_back(thispair);
-//    LOG(ERROR) << "APPEND";
   }
   void clear() {
     decodedeque.clear();
-//    LOG(ERROR) << "CLEAR";
   }
   void rewind() {
     intit = decodedeque.begin();
-//    LOG(ERROR) << "REWIND: empty? " << (intit == decodedeque.end());
   }
   bool done() {
     return intit == decodedeque.end();
