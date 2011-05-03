@@ -167,7 +167,7 @@ void NetworkThread::Run() {
 
           RPCInfo rpc = { source, id(), tag };
           if (ci->spawn_thread) {
-            new boost::thread(boost::bind(&NetworkThread::InvokeCallback, this, ci, rpc));
+            boost::thread(boost::bind(&NetworkThread::InvokeCallback, this, ci, rpc));
           } else {
             ci->call(rpc);
             Header reply_header;
