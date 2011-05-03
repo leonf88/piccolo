@@ -60,7 +60,8 @@ static TextTable* CreateTextTable(int id, StringPiece file_pattern, bool split_l
 template<class K, class V>
 static TypedGlobalTable<K, V>* CreateTable(int id, int shards,
                                            Sharder<K>* sharding,
-                                           Accumulator<V>* accum) {
+                                           Accumulator<V>* accum,
+                                           int retrigt_count = 0) {
   TableDescriptor *info = new TableDescriptor(id, shards);
   info->key_marshal = new Marshal<K>;
   info->value_marshal = new Marshal<V>;
@@ -68,13 +69,14 @@ static TypedGlobalTable<K, V>* CreateTable(int id, int shards,
   info->partition_factory = new typename SparseTable<K, V>::Factory;
   info->accum = accum;
 
-  return CreateTable<K, V>(info);
+  return CreateTable<K, V>(info, retrigt_count);
 }
 
 template<class K, class V>
-static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info) {
+static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info,
+                                           int retrigt_count = 0) {
   TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>();
-  t->Init(info);
+  t->Init(info, retrigt_count);
   TableRegistry::Get()->tables().insert(make_pair(info->table_id, t));
   return t;
 }

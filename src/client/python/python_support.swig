@@ -243,8 +243,8 @@ public:
 
   %extend {
     // Register a trigger
-    int py_register_trigger(const string& code) {
-      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, code);
+    int py_register_trigger(const string& codeshort, const string& codelong) {
+      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, codeshort, codelong);
       return trigger->trigid;
     }
   }

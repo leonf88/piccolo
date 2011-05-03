@@ -49,9 +49,10 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
 }
 
 template<class K, class V>
-PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& code) {
+PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& codeshort, const string& codelong) {
   Init(thistable);
-  params_.put("python_code", code);
+  params_.put("python_code_short", codeshort);
+  params_.put("python_code_long", codelong);
   trigid = thistable->register_trigger(this);
 }
 
@@ -69,8 +70,8 @@ void PythonTrigger<K, V>::Init(dsm::GlobalTable* thistable) {
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::Fire(const K& k, const V& current, V& update) {
-  string python_code = params_.get<string> ("python_code");
+bool PythonTrigger<K, V>::LongFire(const K& k) {
+  string python_code = params_.get<string> ("python_code_long");
   PyObject *key, *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
   key = PyString_FromString(k.c_str());
@@ -83,21 +84,54 @@ bool PythonTrigger<K, V>::Fire(const K& k, const V& current, V& update) {
     return true;
   }
 
-  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, update);
-  printf("returning %s from trigger\n",rv?"TRUE":"FALSE");
+  V dummyv;
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, dummyv, dummyv, true);
+  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << "from long trigger";
   return rv;
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update) {
+bool PythonTrigger<K, V>::Fire(const K& k, const V& current, V& update) {
+  string python_code = params_.get<string> ("python_code_short");
+  PyObject *key, *callable;
+  callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
+  key = PyString_FromString(k.c_str());
+
+  // Make sure all the callfunctionobjarg arguments are fine
+  if (key == NULL || callable == NULL) {
+    LOG(ERROR) << "Failed to launch trigger " << python_code << "!";
+    if (key == NULL) LOG(ERROR) << "[FAIL] key was null";
+    if (callable == NULL) LOG(ERROR) << "[FAIL] callable was null";
+    return true;
+  }
+
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, update, false);
+  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << "from long trigger";
+  return rv;
+}
+
+template<class K, class V>
+bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update, bool isLongTrigger) {
   LOG(FATAL) << "No such CallPythonTrigger for this key/value pair type!";
   exit(1);
 }
 
 template<>
-bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const int64_t& current, int64_t& update) {
+bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const int64_t& current, int64_t& update, bool isLongTrigger) {
   PyObjectPtr retval;
 
+  //Handle LongTriggers
+  if (isLongTrigger) {
+    try {
+      retval = PyObject_CallFunctionObjArgs(callable, key, NULL);
+      Py_DECREF(callable);
+    } catch (error_already_set& e) {
+      PyErr_Print();
+      exit(1);
+    }
+    return (retval == Py_True);
+  }
+ 
   PyObject* cur_obj = PyLong_FromLongLong(current);
   PyObject* upd_obj = PyLong_FromLongLong(update);
 
@@ -120,8 +154,20 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
 }
 
 template<>
-bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const string& current, string& update) {
+bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const string& current, string& update, bool isLongTrigger) {
   PyObjectPtr retval;
+
+  //Handle LongTriggers
+  if (isLongTrigger) {
+    try {
+      retval = PyObject_CallFunctionObjArgs(callable, key, NULL);
+      Py_DECREF(callable);
+    } catch (error_already_set& e) {
+      PyErr_Print();
+      exit(1);
+    }
+    return (retval == Py_True);
+  }
  
   PyObject* cur_obj = PyString_FromString(current.c_str());
   PyObject* upd_obj = PyString_FromString(update.c_str());

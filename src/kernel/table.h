@@ -54,6 +54,7 @@ private:
 template <class K, class V>
 struct Trigger : public TriggerBase {
   virtual bool Fire(const K& k, const V& current, V& update) = 0;
+  virtual bool LongFire(const K& k) = 0;
 };
 
 //#ifdef SWIGPYTHON

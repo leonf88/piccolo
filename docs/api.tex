@@ -164,8 +164,17 @@ unexpected behaviors, a mechanism is in place to enable and disable Piccolo
 triggers.  The current trigger interface is given below in~\ref{fig:trigapi}, but
 for the near future is subject to minor change and major additions.
 
+As of late April, 2011, \p contains two types of trigger, low- and short-running
+triggers.  The specific mechanics and interface for these triggers are still being
+designed.
+
  \begin{figure}[h!]
 \begin{lstlisting}
+
+// Create a new table with the given integer id and thread(s) to
+// execute long-running triggers
+CreateTable(table_id, num_shards, sharding_policy, accumulator, num_longtrigger_threads);
+
 // Define trigger class
 class MyTrigger : public Trigger<K, V> {
   public:
@@ -176,6 +185,19 @@ class MyTrigger : public Trigger<K, V> {
     // case Fire should return true.
     bool Fire(const K& key, const V& value, V& newvalue) {
 
+      //triggers should not call update()
+      sometable->enqueue_update(otherkey, othervalue);
+
+      //short/normal triggers can set 
+
+      return true/false;
+    }
+    // Return true to make the LongFire be rescheduled, or
+    // false to make this the last scheduled execution.  The
+    // long trigger will be occasionally fired until it returns
+    // false.
+    bool LongFire(const K& key) {
+      return true/false;
     }
 };
 
