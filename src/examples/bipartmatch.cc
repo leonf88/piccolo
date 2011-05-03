@@ -248,6 +248,7 @@ int Bipartmatch(ConfigData& conf) {
 	m.barrier();
 
 	bool unstable;
+	int invocations = 0;
 	do {
 		unstable = false;
 		m.run_all("BPMKernel","BPMRoundLeft",leftoutedges);
@@ -259,9 +260,11 @@ int Bipartmatch(ConfigData& conf) {
 			if (0 == strcmp(StatsTable->get(qkey).c_str(),"f"))
 				unstable = true;
 		}
+		invocations++;
 	} while(unstable);
+	printf("---- Completed in %d triples of kernel invocations ----",invocations);
 
-	m.run_one("BPMKernel","EvalPerformance",leftmatches);
+//	m.run_one("BPMKernel","EvalPerformance",leftmatches);
 
 	return 0;
 }
