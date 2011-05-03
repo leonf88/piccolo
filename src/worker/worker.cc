@@ -472,11 +472,15 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPC
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
     if (t) {
       updatesdone += t->clearUpdateQueue();
-      t->SendUpdates();
-      updatesdone += t->clearUpdateQueue();
+      int sentupdates = 0;
+      t->SendUpdates(&sentupdates);
+      updatesdone += sentupdates;
+      //updatesdone += t->clearUpdateQueue();
     }
   }
-  VLOG(3) << "Telling master: " << updatesdone << " updates done." << endl;
+  network_->Flush();
+
+  VLOG(2) << "Telling master: " << updatesdone << " updates done." << endl;
   resp->set_updatesdone(updatesdone);
   network_->Send(config_.master_id(), MTYPE_FLUSH_RESPONSE, *resp);
 

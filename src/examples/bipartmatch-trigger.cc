@@ -11,6 +11,7 @@ using namespace std;
 
 static int NUM_WORKERS = 2;
 #define MAXCOST RAND_MAX
+#define DEBUGOUT
 
 DEFINE_int32(tleft_vertices, 400, "Number of left-side vertices");
 DEFINE_int32(tright_vertices, 400, "Number of right-side vertices");
@@ -164,7 +165,9 @@ class BPMTKernel : public DSMKernel {
 					continue;
 
 				int j = *(v.end()-1);
-				VLOG(1) << "Attempted match: left " << it->key() << " <--> right " << j;
+#ifdef DEBUGOUT
+				cout << "Attempted match: left " << it->key() << " <--> right " << j << endl;
+#endif
 				rightmatches->update(j,it->key());
 				//leftmatches->update(it->key(),j);
 			}
@@ -204,62 +207,40 @@ class MatchRequestTrigger : public Trigger<int, int> {
 		bool Fire(const int& key, const int& value, int& newvalue ) {
 			int newcost = MAXCOST;
 
+#ifdef DEBUGOUT
+/*
 			if (rightmatches->get(key) != value) {
 				cout << "KEY MISMATCH RIGHT IN TRIGGER: [" <<
 					key << ",({" << value << " vs " << rightmatches->get(key)
 					<< "}, " << newvalue << ")]" <<  endl;
 				exit(-1);
 			}
+*/
+#endif
 
 			if (newvalue != -1) {
-/*
-				vector<int> v  = leftoutedges->get(newvalue);	//get the vector for this left key
-				vector<int> v2 = leftoutcosts->get(newvalue);
-				vector<int>::iterator it = find(v.begin(), v.end(), key);
-				vector<int>::iterator it2;
-				
-				//Grab cost from left node
-				if (it != v.end()) {
-					it2 = v2.begin() + (it - v.begin());
-					newcost = *it2;
-				}
-*/
 			}
 			if (value != -1) {
-
-				//cost check
-/*
-				if (newcost < rightcosts->get(key)) {
-					vector<int> v2 = leftoutcosts->get(newvalue);
-					cout << "cost thing shouldn't happen: " << 
-						newcost << " vs " << rightcosts->get(key) <<
-						" on right vertex " << key << endl;
-					vector<int> v  = leftoutedges->get(newvalue);	//get the vector for this left key
-					vector<int>::iterator it = find(v.begin(), v.end(), key);
-					cout << "Matched right was in left's edges index " <<
-						(it-v.begin()) << endl;
-					cout << "{";
-					for(int i=0; i<v2.size(); i++)
-						cout << v2[i] << ",";
-					cout << "}" << endl;
-					exit(-1);
-					//found better match!
-					leftmatches->enqueue_update(value,-1);	//remove old match
-					rightcosts->enqueue_update(key,newcost);
-					return true;
-				}
-*/
-
+#ifdef DEBUGOUT
 				cout << "Denying match on " << key << " from " << newvalue << endl;
+#endif
 				leftmatches->enqueue_update(newvalue,-1);
 				return false;
 			} else {
 				//Else this match is acceptable.  Set new cost.
+#ifdef DEBUGOUT
 				cout << "Accepting match on " << key << " from " << newvalue << endl;
+#endif
 				rightcosts->enqueue_update(key,newcost);
 				leftmatches->enqueue_update(newvalue,key);
 			}
 			return true;
+		}
+
+		//No longfire
+		bool LongFire(const int& key) {
+			volatile bool rv = false;
+			return rv;
 		}
 };
 
@@ -270,79 +251,73 @@ class LeftTrigger : public Trigger<int, int> {
 			//Sanity check: make sure the right side isn't trying to
             //break an already-agreed match or re-assign a left vertex
             //that's already linked.
+#ifdef DEBUGOUT
+/*
 			if (leftmatches->get(key) != value || value != -1) {
 				cout << "KEY MISMATCH LEFT IN TRIGGER: [" <<
 					key << ",(" << value << ", " << newvalue << ")]" <<  endl;
 				exit(-1);
 			}
+*/
+#endif
 
 			//Don't store the denial!
 			if (newvalue == -1) {
 
 
 				//Denied: remove possible right match
+				//Also, this is always a local get(), so no possible consistency issues
 				vector<int> v  = leftoutedges->get(key);
-//				vector<int> v2 = leftoutcosts->get(key);
 
 				vector<int>::iterator it = v.begin();
-//				vector<int>::iterator it2 = v2.begin();
 
+#ifdef DEBUGOUT
 				cout << "Match on " << key << " denied from " << *(v.end()-1) << endl;
+#endif
 
 				v.erase(v.end()-1);
-//				v2.erase(v2.end()-1);
 
-				int j;
+				int j=-1;
 				if (v.size() != 0) {
-					//try to find a random or best match
-/*
-					if (FLAGS_tedge_costs) {
-						//edges have associated costs
-						vector<int>::iterator  inner_it =  v.begin();
-						vector<int>::iterator inner_it2 = v2.begin();
-						j = -1;
-						float mincost = MAXCOST;
-						int offset = -1;
-						for(; inner_it != v.end() && inner_it2 != v2.end(); inner_it++, inner_it2++) {
-							if ((*inner_it2) < mincost) {
-								mincost = *inner_it2;
-								j = *inner_it;
-								offset = inner_it-v.begin();
-							}
-						}
-						v.erase(v.begin()+offset);
-						v2.erase(v2.begin()+offset);
-						v.push_back(j);
-						v2.push_back(mincost);
-					} else {
-*/
-						//all edges equal; pick one at random
-						j = v.size()*((float)rand()/(float)RAND_MAX);
-						j = (j>=v.size())?v.size()-1:j;
-						int j2 = v[j];
-						v.erase(v.begin()+j);
-						v.push_back(j2);
-						j = j2;
-					}
-//				}
+				//try to find a random or best match
+					//all edges equal; pick one at random
+					j = v.size()*((float)rand()/(float)RAND_MAX);
+					j = (j>=v.size())?v.size()-1:j;
+					int j2 = v[j];
+					v.erase(v.begin()+j);
+					v.push_back(j2);
+					j = j2;
+				}
 
 				//Enqueue the removal
 				leftoutedges->enqueue_update((int)key,v);
-//				leftoutcosts->enqueue_update((int)key,v2);
 
 				if (v.size() == 0) {		//forget it if no more candidates
+#ifdef DEBUGOUT
 					cout << "Ran out of right candidates for " << key << endl;
+#endif
 					return true;
 				}
 
 				rightmatches->enqueue_update(j,key);
 				newvalue = j;
+#ifdef DEBUGOUT
 				cout << "Re-attempting from " << key << " to " << j << endl;
+#endif
 				return false;
 			}
 
 			//It was not a denial; store it.
+#ifdef DEBUGOUT
+			cout << "Storing accepting match on left " << key << " from right " << value << endl;
+#endif
 			return true;
+		}
+
+		//No longfire
+		bool LongFire(const int& key) {
+			volatile bool rv = false;
+			return rv;
 		}
 };
 
@@ -360,10 +335,10 @@ int Bipartmatch_trigger(ConfigData& conf) {
 		new Accumulators<vector<int> >::Replace);
 	leftmatches   = CreateTable(1,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<int>::Replace);
-	rightmatches  = CreateTable(2,conf.num_workers(),new Sharding::Mod,
-		new Accumulators<int>::Replace);
 	leftoutcosts  = CreateTable(3,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<vector<int> >::Replace);
+	rightmatches  = CreateTable(2,conf.num_workers(),new Sharding::Mod,
+		new Accumulators<int>::Replace);
 	rightcosts    = CreateTable(4,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<int>::Replace);
 
@@ -390,7 +365,16 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	m.enable_trigger(matchreqid,2,true);
 	m.enable_trigger(lefttriggerid,1,true);
 	m.barrier();
+
+struct timeval start_time, end_time;
+
+	gettimeofday(&start_time, NULL);
+
 	m.run_all("BPMTKernel","BeginBPMT", leftoutedges);
+
+	gettimeofday(&end_time, NULL);
+	long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+	cout << "Total matching time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
 
 	//Disable triggers
 	m.enable_trigger(matchreqid,2,false);

@@ -178,9 +178,8 @@ void GlobalTableBase::handle_get(const HashGet& get_req, TableData *get_resp) {
 }
 
 void MutableGlobalTableBase::HandlePutRequests() {
-  if (helper()) {
+
     helper()->HandlePutRequest();
-  }
 }
 
 ProtoTableCoder::ProtoTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
@@ -203,6 +202,12 @@ void ProtoTableCoder::WriteEntry(StringPiece k, StringPiece v) {
 }
 
 void MutableGlobalTableBase::SendUpdates() {
+  int i;
+  MutableGlobalTableBase::SendUpdates(&i);
+  return;
+}
+
+void MutableGlobalTableBase::SendUpdates(int* count) {
   TableData put;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
@@ -225,6 +230,7 @@ void MutableGlobalTableBase::SendUpdates() {
 
         VLOG(3) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i) << " size " << put.kv_data_size();
 
+        *count += put.kv_data_size();
         NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
       } while(!t->empty());
 

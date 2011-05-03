@@ -63,8 +63,11 @@ protected:
 
 class MutableGlobalTable : virtual public GlobalTable {
 public:
+  MutableGlobalTable(): applyingupdates(false) {}
+
   // Handle updates from the master or other workers.
   virtual void SendUpdates() = 0;
+  virtual void SendUpdates(int* count) = 0;
   virtual void ApplyUpdates(const TableData& req) = 0;
   virtual void HandlePutRequests() = 0;
 
@@ -79,6 +82,8 @@ public:
 protected:
   friend class Worker;
   virtual void local_swap(GlobalTable *b) = 0;
+
+  bool applyingupdates;
 };
 
 class GlobalTableBase : virtual public GlobalTable {
@@ -120,8 +125,10 @@ protected:
 
   boost::recursive_mutex& mutex() { return m_; }
   boost::recursive_mutex m_;
+
   boost::mutex& trigger_mutex() { return m_trig_; }
   boost::mutex m_trig_;
+
   boost::mutex& retrigger_mutex() { return m_retrig_; }
   boost::mutex m_retrig_;
 
@@ -143,6 +150,7 @@ public:
   MutableGlobalTableBase() : pending_writes_(0) {}
 
   void SendUpdates();
+  void SendUpdates(int* count);
   virtual void ApplyUpdates(const TableData& req) = 0;
   void HandlePutRequests();
 
@@ -175,15 +183,15 @@ public:
   deque<KVPair> update_queue;
 
   //long trigger support
-  typedef pair<bool,TriggerID> RetriggerPair;
-  map<K, RetriggerPair> retrigger_map;	// which keys still
+  typedef pair<K,TriggerID> RetriggerPair;
+  queue<RetriggerPair> retrigger_map;	// which keys still
 										// request long triggers
   int retrigger_mode;		// 0 = scan retrigger_map for flags
 							// 1 = scan table for flags
 
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
-  virtual void Init(const TableDescriptor *tinfo) {
+  virtual void Init(const TableDescriptor *tinfo, int retrigt_count) {
     GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
       partitions_[i] = create_local(i);
@@ -194,9 +202,12 @@ public:
 
 	//Clear the long/retrigger map, just in case, and
     //then start up the retrigger thread
-    retrigger_map.clear();
-	retrigger_mode = RETRIGGER_MODE_EXPLICIT; //separate map to start
-    boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this));
+    if (retrigt_count != 0) {
+      while (!retrigger_map.empty()) retrigger_map.pop();
+	  retrigger_mode = RETRIGGER_MODE_EXPLICIT; //separate map to start
+      for (int i=0; i<retrigt_count; i++)
+        boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this));
+    }
   }
 
   int get_shard(const K& k);
@@ -230,7 +241,10 @@ public:
 
   void ApplyUpdates(const dsm::TableData& req) {
     boost::recursive_mutex::scoped_lock sl(mutex());
+    if (applyingupdates == true)
+      return;						//prevent recursive applyupdates
 
+    applyingupdates = true;
     if (!is_local_shard(req.shard())) {
       LOG_EVERY_N(INFO, 1000)
           << "Forwarding push request from: " << MP(id(), req.shard())
@@ -244,6 +258,7 @@ public:
     for(;!it.done(); it.Next()) {
       update(it.key(),it.value());
     }
+    applyingupdates = false;
   }
 
   Marshal<K> *kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
@@ -456,10 +471,14 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
-  int i=0;
-  while(!update_queue.empty()) {
-    KVPair thispair(update_queue.front());
-    update_queue.pop_front();
+  int i=update_queue.size();
+  deque<KVPair> removed_items;
+  removed_items.clear();
+  update_queue.swap(removed_items);
+  VLOG(3) << "clearing update queue of " << i << " items" << endl;
+  while(!removed_items.empty()) {
+    KVPair thispair(removed_items.front());
+    removed_items.pop_front();
     update(thispair.first,thispair.second);
     i++;
   }
@@ -471,13 +490,10 @@ void TypedGlobalTable<K, V>::enable_retrigger(K k, TriggerID id) {
   boost::mutex::scoped_lock sl(retrigger_mutex());
   if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
     //insert or update item in retrigger map
-    RetriggerPair rtpair(true,id);
+    RetriggerPair rtpair(k,id);
 
-    //Remove any existing item
-    if (retrigger_map.end() != retrigger_map.find(k))
-      retrigger_map.erase(k);
     //Set new one
-    retrigger_map[k] = rtpair;
+    retrigger_map.push(rtpair);
   } else { //RETRIGGER_MODE_IMPLICIT
     //Set bit in table instead of in retrigger map
     LOG(FATAL) << "Retrigger mode 1 not yet implemented." << endl;
@@ -488,8 +504,9 @@ template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_thread(void) {
   while(1) {
     {
-      boost::mutex::scoped_lock sl(retrigger_mutex());
+ //     boost::mutex::scoped_lock sl(retrigger_mutex());
       if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
+/*
         typename map<K, RetriggerPair>::iterator it = retrigger_map.begin();
         typename map<K, RetriggerPair>::iterator oldit;
         for(; it != retrigger_map.end();) {
@@ -506,6 +523,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(void) {
           } else
             it++;
         }
+*/
       } else { //RETRIGGER_MODE_IMPLICIT
         LOG(FATAL) << "Retrigger mode 1 not yet implemented!" << endl;
       }
@@ -516,6 +534,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(void) {
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
+  VLOG(2) << "Enqueing update." << endl;
   const KVPair thispair(k,v);
   update_queue.push_back(thispair);
 }
@@ -525,11 +544,19 @@ template<class K, class V>
 V TypedGlobalTable<K, V>::get(const K &k) {
   int shard = this->get_shard(k);
 
-  // If we received a get for this shard; but we haven't received all of the
+  // If we received a request for this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
-  while (tainted(shard)) {
-    this->HandlePutRequests();
-    sched_yield();
+  // New for triggers: be sure to not recursively apply updates.
+  if (tainted(shard)) {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+    if (applyingupdates == false) {
+      applyingupdates = true;
+      while (tainted(shard)) {
+        this->HandlePutRequests();
+        sched_yield();
+      }
+      applyingupdates = false;
+    }
   }
 
   PERIODIC(0.1, this->HandlePutRequests());
@@ -554,9 +581,17 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
 
   // If we received a request for this shard; but we haven't received all of the
   // data for it yet. Continue reading from other workers until we do.
-  while (tainted(shard)) {
-    this->HandlePutRequests();
-    sched_yield();
+  // New for triggers: be sure to not recursively apply updates.
+  if (tainted(shard)) {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+    if (applyingupdates == false) {
+      applyingupdates = true;
+      while (tainted(shard)) {
+        this->HandlePutRequests();
+        sched_yield();
+      }
+      applyingupdates = false;
+    }
   }
 
   if (is_local_shard(shard)) {
