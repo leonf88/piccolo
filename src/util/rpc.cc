@@ -188,7 +188,7 @@ void NetworkThread::Run() {
       RPCRequest* s = pending_sends_.back();
       pending_sends_.pop_back();
       s->start_time = Now();
-      s->mpi_req = world_->Isend(
+      s->mpi_req = world_->Issend(
           s->payload.data(), s->payload.size(), MPI::BYTE, s->target, s->rpc_type);
       active_sends_.insert(s);
     }

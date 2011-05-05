@@ -11,7 +11,7 @@ using namespace std;
 
 static int NUM_WORKERS = 2;
 #define MAXCOST RAND_MAX
-#define DEBUGOUT
+//#define DEBUGOUT
 
 DEFINE_int32(tleft_vertices, 400, "Number of left-side vertices");
 DEFINE_int32(tright_vertices, 400, "Number of right-side vertices");
@@ -80,6 +80,7 @@ class BPMTKernel : public DSMKernel {
 		}
 
 		void PopulateLeft() {
+			srand(current_shard());
 			TypedTableIterator<int, vector<int> > *it = 
 				leftoutedges->get_typed_iterator(current_shard());
             CHECK(it != NULL);
@@ -366,8 +367,7 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	m.enable_trigger(lefttriggerid,1,true);
 	m.barrier();
 
-struct timeval start_time, end_time;
-
+	struct timeval start_time, end_time;
 	gettimeofday(&start_time, NULL);
 
 	m.run_all("BPMTKernel","BeginBPMT", leftoutedges);

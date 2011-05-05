@@ -37,6 +37,7 @@ Worker::Worker(const ConfigData &c) {
 
   running_ = true;		//this is WORKER running, not KERNEL running!
   krunning_ = false;	//and this is for KERNEL running
+  handling_putreqs_ = false;
   iterator_id_ = 0;
 
   // HACKHACKHACK - register ourselves with any existing tables
@@ -328,7 +329,11 @@ void Worker::Restore(int epoch) {
 }
 
 void Worker::HandlePutRequest() {
-  boost::recursive_mutex::scoped_lock sl(state_lock_);
+  boost::recursive_try_mutex::scoped_lock sl(state_lock_);
+  if (!sl.owns_lock() || handling_putreqs_ == true)
+    return;
+
+  handling_putreqs_ = true;	//protected by state_lock_
 
   TableData put;
   while (network_->TryRead(MPI::ANY_SOURCE, MTYPE_PUT_REQUEST, &put)) {
@@ -342,6 +347,7 @@ void Worker::HandlePutRequest() {
 
     MutableGlobalTable *t = TableRegistry::Get()->mutable_table(put.table());
     t->ApplyUpdates(put);
+	VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
 
     // Record messages from our peer channel up until they checkpointed.
     if (active_checkpoint_ == CP_MASTER_CONTROLLED ||
@@ -357,6 +363,8 @@ void Worker::HandlePutRequest() {
       t->get_partition_info(put.shard())->tainted = false;
     }
   }
+
+  handling_putreqs_ = false;		//protected by state_lock_
 }
 
 void Worker::HandleGetRequest(const HashGet& get_req, TableData *get_resp, const RPCInfo& rpc) {
