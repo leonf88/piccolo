@@ -241,10 +241,13 @@ public:
 
   void ApplyUpdates(const dsm::TableData& req) {
     boost::recursive_mutex::scoped_lock sl(mutex());
-    if (applyingupdates == true)
+    if (applyingupdates == true) {
+      VLOG(2) << "Avoiding recursive ApplyUpdate()." << endl;
       return;						//prevent recursive applyupdates
+    }
 
     applyingupdates = true;
+    VLOG(3) << "Performing non-recursive ApplyUpdate()." << endl;
     if (!is_local_shard(req.shard())) {
       LOG_EVERY_N(INFO, 1000)
           << "Forwarding push request from: " << MP(id(), req.shard())
@@ -471,15 +474,24 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
-  int i=update_queue.size();
+
+  int i;
   deque<KVPair> removed_items;
-  removed_items.clear();
-  update_queue.swap(removed_items);
-  VLOG(3) << "clearing update queue of " << i << " items" << endl;
+  {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+    //Swap queue with an empty queue so we don't recurse way down
+    i=update_queue.size();
+    VLOG(1) << "clearing update queue for table " << this->id() << " of " << i << " items" << endl;
+
+    removed_items.clear();
+    update_queue.swap(removed_items);
+  }
+
   while(!removed_items.empty()) {
     KVPair thispair(removed_items.front());
-    removed_items.pop_front();
+	VLOG(3) << "Removed pair (" << (i-removed_items.size()) << " of " << i << ")" << endl;
     update(thispair.first,thispair.second);
+    removed_items.pop_front();
     i++;
   }
   return i;
@@ -534,9 +546,11 @@ void TypedGlobalTable<K, V>::retrigger_thread(void) {
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
-  VLOG(2) << "Enqueing update." << endl;
+  boost::recursive_mutex::scoped_lock sl(mutex());
+
   const KVPair thispair(k,v);
   update_queue.push_back(thispair);
+  VLOG(2) << "Enqueing table id " << this->id() << " update (" << update_queue.size() << " pending pairs)" << endl;
 }
 
 // Return the value associated with 'k', possibly blocking for a remote fetch.

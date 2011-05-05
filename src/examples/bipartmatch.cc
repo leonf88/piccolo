@@ -88,6 +88,7 @@ class BPMKernel : public DSMKernel {
 		}
 
 		void PopulateLeft() {
+			srand(current_shard());
 			TypedTableIterator<int, vector<int> > *it = 
 				leftoutedges->get_typed_iterator(current_shard());
             CHECK(it != NULL);
@@ -247,6 +248,9 @@ int Bipartmatch(ConfigData& conf) {
 	m.run_all("BPMKernel","PopulateLeft",  leftoutedges);
 	m.barrier();
 
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
+
 	bool unstable;
 	int invocations = 0;
 	do {
@@ -262,9 +266,12 @@ int Bipartmatch(ConfigData& conf) {
 		}
 		invocations++;
 	} while(unstable);
-	printf("---- Completed in %d triples of kernel invocations ----",invocations);
+	cout << "---- Completed in " << invocations << " triples of kernel invocations ----" << endl;
+    gettimeofday(&end_time, NULL);
+    long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+    cout << "Total matching time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
 
-//	m.run_one("BPMKernel","EvalPerformance",leftmatches);
+	m.run_one("BPMKernel","EvalPerformance",leftmatches);
 
 	return 0;
 }
