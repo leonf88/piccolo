@@ -120,7 +120,12 @@ protected:
 
   int worker_id_;
 
+  // partitions_ for buffering remote writes to non-Trigger tables,
+  // or writebufs_ for Trigger tables
   vector<LocalTable*> partitions_;
+  vector<TableData*> writebufs_;
+  vector<ProtoTableCoder*> writebufcoders_;
+
   vector<LocalTable*> cache_;
 
   boost::recursive_mutex& mutex() { return m_; }
@@ -194,7 +199,12 @@ public:
   virtual void Init(const TableDescriptor *tinfo, int retrigt_count) {
     GlobalTableBase::Init(tinfo);
     for (int i = 0; i < partitions_.size(); ++i) {
+      // For non-triggered tables that allow remote accumulation
       partitions_[i] = create_local(i);
+
+      // For triggered tables that do not allow remote accumulation
+      writebufs_[i] = new TableData;
+      writebufcoders_[i] = new ProtoTableCoder(writebufs_[i]);
     }
     
     //Clear the update queue, just in case
@@ -233,6 +243,9 @@ public:
   TableIterator* get_iterator(int shard, unsigned int fetch_num = FETCH_NUM);
   TypedTable<K, V>* partition(int idx) {
     return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]);
+  }
+  ProtoTableCoder* writebufcoder(int idx) {
+    return writebufcoders_[idx];
   }
 
   virtual TypedTableIterator<K, V>* get_typed_iterator(int shard,unsigned int fetch_num = FETCH_NUM) {
@@ -459,7 +472,18 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
     //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   } else {
 
-    partition(shard)->update(k, v);
+    if (num_triggers() == 0) {
+      //No triggers, remote accumulation is OK
+      partition(shard)->update(k, v);
+
+    } else {
+      //Triggers, no remote accumulation allowed
+      string sk, sv;
+      ((Marshal<K>*)(info_.key_marshal))->marshal((k), &sk);
+      ((Marshal<V>*)(info_.value_marshal))->marshal((v), &sv);
+      writebufcoder(shard)->WriteEntry(sk,sv);
+
+    }
     ++pending_writes_;
     if (pending_writes_ > kWriteFlushCount) {
       SendUpdates();
@@ -481,7 +505,7 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     boost::recursive_mutex::scoped_lock sl(mutex());
     //Swap queue with an empty queue so we don't recurse way down
     i=update_queue.size();
-    VLOG(1) << "clearing update queue for table " << this->id() << " of " << i << " items" << endl;
+    VLOG(3) << "clearing update queue for table " << this->id() << " of " << i << " items" << endl;
 
     removed_items.clear();
     update_queue.swap(removed_items);
