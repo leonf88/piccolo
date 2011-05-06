@@ -12,6 +12,8 @@ void GlobalTableBase::UpdatePartitions(const ShardInfo& info) {
 GlobalTableBase::~GlobalTableBase() {
   for (int i = 0; i < partitions_.size(); ++i) {
     delete partitions_[i];
+    delete writebufs_[i];
+    delete writebufcoders_[i];
   }
 }
 
@@ -33,6 +35,8 @@ void GlobalTableBase::Init(const TableDescriptor *info) {
   TableBase::Init(info);
   partitions_.resize(info->num_shards);
   partinfo_.resize(info->num_shards);
+  writebufs_.resize(info->num_shards);
+  writebufcoders_.resize(info->num_shards);
 }
 
 int64_t GlobalTableBase::shard_size(int shard) {
@@ -211,20 +215,29 @@ void MutableGlobalTableBase::SendUpdates(int* count) {
   TableData put;
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
+    ProtoTableCoder *ptc = writebufcoders_[i];
 
-    if (!is_local_shard(i) && (get_partition_info(i)->dirty || !t->empty())) {
+    if (!is_local_shard(i) && (
+        get_partition_info(i)->dirty || !t->empty() || ptc->t_->kv_data_size() > 0)) {
       // Always send at least one chunk, to ensure that we clear taint on
       // tables we own.
       do {
         put.Clear();
+
+        if (!t->empty()) {
+          VLOG(3) << "Sending update from non-trigger table " << endl;
+          ProtoTableCoder c(&put);
+          t->Serialize(&c);
+          t->clear();
+        } else {
+          VLOG(3) << "Sending update from trigger table with " << ptc->t_->kv_data_size() << " pairs." << endl;
+          put.CopyFrom(*(ptc->t_));
+          ptc->t_->Clear();
+        }
         put.set_shard(i);
         put.set_source(helper()->id());
         put.set_table(id());
         put.set_epoch(helper()->epoch());
-
-        ProtoTableCoder c(&put);
-        t->Serialize(&c);
-        t->clear();
 
         put.set_done(true);
 
