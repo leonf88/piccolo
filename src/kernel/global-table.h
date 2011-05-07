@@ -131,8 +131,8 @@ protected:
   boost::recursive_mutex& mutex() { return m_; }
   boost::recursive_mutex m_;
 
-  boost::mutex& trigger_mutex() { return m_trig_; }
-  boost::mutex m_trig_;
+  boost::recursive_mutex& trigger_mutex() { return m_trig_; }
+  boost::recursive_mutex m_trig_;
 
   boost::mutex& retrigger_mutex() { return m_retrig_; }
   boost::mutex m_retrig_;
@@ -449,7 +449,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
     V v2 = v;
     V v1;
 
-    boost::mutex::scoped_lock sl(trigger_mutex());
+    boost::recursive_mutex::scoped_lock sl(trigger_mutex());
 
     if (partition(shard)->contains(k))
       v1 = partition(shard)->get(k);
