@@ -11,6 +11,7 @@ piccolo_pp(k-means.pp
            pagerank.pp
            raytrace.pp
            shortest-path.pp
+           shortest-path-trigger.pp
            wordcount.pp)
 
 add_custom_target(example_proto DEPENDS ${EXAMPLE_PB_HDR})
@@ -25,6 +26,7 @@ add_library(example
             matmul.pp.cc             
             k-means.pp.cc
             shortest-path.pp.cc
+            shortest-path-trigger.pp.cc
             pagerank.pp.cc
             test-tables.cc
             test-tables2.cc
