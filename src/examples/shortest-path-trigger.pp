@@ -2,7 +2,7 @@
 #include "kernel/disk-table.h"
 
 using namespace dsm;
-DEFINE_int32(tnum_nodes_record, 10000, "");
+DEFINE_int32(tnum_nodes, 10000, "");
 DEFINE_bool(tdump_output, false, "");
 
 static int NUM_WORKERS = 0;
@@ -43,7 +43,7 @@ namespace dsm{
 class SSSPTrigger : public Trigger<int, double> {
 	public:
 		bool Fire(const int& key, const double& value, double& newvalue) {
-			cout << "TRIGGER: k=" << key <<", v="<< value << ",newvalue=" <<newvalue<<endl;
+			//cout << "TRIGGER: k=" << key <<", v="<< value << ",newvalue=" <<newvalue<<endl;
 			if (value <= newvalue || newvalue >= 20)
 				return false;
 			vector<double> thisnode = nodes->get(key);
@@ -96,36 +96,44 @@ int ShortestPathTrigger(ConfigData& conf) {
 	Master m(conf);
 
 	if (FLAGS_build_graph) {
-		BuildGraph(FLAGS_shards, FLAGS_tnum_nodes_record, 4);
+		BuildGraph(FLAGS_shards, FLAGS_tnum_nodes, 4);
 		return 0;
 	}
 
 	m.enable_trigger(trigid, 0, false);
 
 	PRunOne(distance_map, {
-			for (int i = 0; i < FLAGS_tnum_nodes_record; ++i) {
+			for (int i = 0; i < FLAGS_tnum_nodes; ++i) {
 			distance_map->update(i, 1e9);
 			}
 
 			});
+
+	//Start all vectors with empty adjacency lists
 	PRunOne(nodes, {
 			vector<double> v;
 			v.clear();
 
-			nodes->resize(FLAGS_tnum_nodes_record);
-			for(int i=0; i<FLAGS_tnum_nodes_record; i++)
-				nodes->update(i,v);
-	});
+			nodes->resize(FLAGS_tnum_nodes);
+			for(int i=0; i<FLAGS_tnum_nodes; i++)
+			nodes->update(i,v);
+			});
 
+	//Build adjacency lists by appending RecordTables' contents
 	PMap({n: nodes_record}, {
 			vector<double> v=nodes->get(n.id());
 			for(int i=0; i < n.target_size(); i++)
-				v.push_back(n.target(i));
-			cout << "writing node " << n.id() << endl;
+			v.push_back(n.target(i));
+			//cout << "writing node " << n.id() << endl;
 			nodes->update(n.id(),v);
 			});
 
 	m.enable_trigger(trigid, 0, true);
+
+	//Start the timer!
+	struct timeval start_time, end_time;
+	gettimeofday(&start_time, NULL);
+
 	PRunOne(distance_map, {
 			// Initialize a root node.
 			// and enable the trigger.
@@ -133,18 +141,25 @@ int ShortestPathTrigger(ConfigData& conf) {
 			});
 	m.enable_trigger(trigid, 0, false);
 
-	PRunOne(distance_map, {
-			for (int i = 0; i < FLAGS_tnum_nodes_record; ++i) {
-			if (i % 30 == 0) {
-			fprintf(stderr, "\n%5d: ", i);
-			}
+	//Finish the timer!
+	gettimeofday(&end_time, NULL);
+	long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+	cout << "Total SSSP time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
 
-			int d = (int)distance_map->get(i);
-			if (d >= 1000) { d = -1; }
-			fprintf(stderr, "%3d ", d);
-			}
-			fprintf(stderr, "\n");
-			});
+	if (FLAGS_tdump_output) {
+		PRunOne(distance_map, {
+				for (int i = 0; i < FLAGS_tnum_nodes; ++i) {
+				if (i % 30 == 0) {
+				fprintf(stderr, "\n%5d: ", i);
+				}
+
+				int d = (int)distance_map->get(i);
+				if (d >= 1000) { d = -1; }
+				fprintf(stderr, "%3d ", d);
+				}
+				fprintf(stderr, "\n");
+				});
+	}
 	return 0;
 }
 REGISTER_RUNNER(ShortestPathTrigger);

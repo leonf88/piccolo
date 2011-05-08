@@ -59,6 +59,10 @@ int ShortestPath(ConfigData& conf) {
     distance_map->update(0, 0);
   });
 
+  //Start the timer!
+  struct timeval start_time, end_time;
+  gettimeofday(&start_time, NULL);
+
   for (int i = 0; i < 20; ++i) {
     PMap({n : nodes}, {
         for (int j = 0; j < n.target_size(); ++j) {
@@ -67,18 +71,25 @@ int ShortestPath(ConfigData& conf) {
     });
   }
 
-  PRunOne(distance_map, {
-    for (int i = 0; i < FLAGS_num_nodes; ++i) {
-      if (i % 30 == 0) {
-        fprintf(stderr, "\n%5d: ", i);
-      }
+  //Finish the timer!
+  gettimeofday(&end_time, NULL);
+  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+  cout << "Total SSSP time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
 
-      int d = (int)distance_map->get(i);
-      if (d >= 1000) { d = -1; }
-      fprintf(stderr, "%3d ", d);
-    }
-    fprintf(stderr, "\n");
-  });
+  if (FLAGS_dump_output) {
+    PRunOne(distance_map, {
+      for (int i = 0; i < FLAGS_num_nodes; ++i) {
+        if (i % 30 == 0) {
+          fprintf(stderr, "\n%5d: ", i);
+        }
+
+        int d = (int)distance_map->get(i);
+        if (d >= 1000) { d = -1; }
+        fprintf(stderr, "%3d ", d);
+      }
+      fprintf(stderr, "\n");
+    });
+  }
   return 0;
 }
 REGISTER_RUNNER(ShortestPath);
