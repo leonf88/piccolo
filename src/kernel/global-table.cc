@@ -213,6 +213,7 @@ void MutableGlobalTableBase::SendUpdates() {
 
 void MutableGlobalTableBase::SendUpdates(int* count) {
   TableData put;
+  boost::recursive_mutex::scoped_lock sl(mutex());
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
     ProtoTableCoder *ptc = writebufcoders_[i];
