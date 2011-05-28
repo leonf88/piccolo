@@ -186,6 +186,7 @@ public:
   //update queuing support
   typedef pair<K, V> KVPair;
   deque<KVPair> update_queue;
+  bool clearingUpdateQueue;
 
   //long trigger support
   typedef pair<K,TriggerID> RetriggerPair;
@@ -208,6 +209,7 @@ public:
     }
     
     //Clear the update queue, just in case
+    clearingUpdateQueue = false;
     update_queue.clear();
 
 	//Clear the long/retrigger map, just in case, and
@@ -499,24 +501,38 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 template<class K, class V>
 int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 
-  int i;
+  int i=0;
   deque<KVPair> removed_items;
   {
     boost::recursive_mutex::scoped_lock sl(mutex());
-    //Swap queue with an empty queue so we don't recurse way down
-    i=update_queue.size();
-    VLOG(3) << "clearing update queue for table " << this->id() << " of " << i << " items" << endl;
+	if (clearingUpdateQueue)
+		return 0;
+	clearingUpdateQueue = true;		//turn recursion into iteration
 
-    removed_items.clear();
-    update_queue.swap(removed_items);
   }
+  int lastqueuesize = 0;
+  do {
+    {
+      boost::recursive_mutex::scoped_lock sl(mutex());
+      //Swap queue with an empty queue so we don't recurse way down
+      VLOG(3) << "clearing update queue for table " << this->id() << " of " << update_queue.size() << " items" << endl;
 
-  while(!removed_items.empty()) {
-    KVPair thispair(removed_items.front());
-	VLOG(3) << "Removed pair (" << (i-removed_items.size()) << " of " << i << ")" << endl;
-    update(thispair.first,thispair.second);
-    removed_items.pop_front();
-    i++;
+      removed_items.clear();
+      update_queue.swap(removed_items);
+      lastqueuesize = removed_items.size();
+    }
+
+    while(!removed_items.empty()) {
+      KVPair thispair(removed_items.front());
+      VLOG(3) << "Removed pair (" << (i-removed_items.size()) << " of " << i << ")" << endl;
+      update(thispair.first,thispair.second);
+      removed_items.pop_front();
+      i++;
+    }
+  } while(lastqueuesize != 0);
+  {
+    boost::recursive_mutex::scoped_lock sl(mutex());
+	clearingUpdateQueue = false;		//turn recursion into iteration
   }
   return i;
 }

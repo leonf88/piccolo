@@ -44,7 +44,7 @@ class SSSPTrigger : public Trigger<int, double> {
 	public:
 		bool Fire(const int& key, const double& value, double& newvalue) {
 			//cout << "TRIGGER: k=" << key <<", v="<< value << ",newvalue=" <<newvalue<<endl;
-			if (value <= newvalue || newvalue >= 20)
+			if (value <= newvalue)
 				return false;
 			vector<double> thisnode = nodes->get(key);
 			vector<double>::iterator it = thisnode.begin();
