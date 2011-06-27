@@ -75,9 +75,11 @@ Worker::Worker(const ConfigData &c) {
                    new EmptyMessage, new EmptyMessage,
                    &Worker::HandleApply, this);
 
+/*
   RegisterCallback(MTYPE_ENABLE_TRIGGER,
                    new EnableTrigger, new EmptyMessage,
                    &Worker::HandleEnableTrigger, this);
+*/
 
   NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_FLUSH);
   NetworkThread::Get()->SpawnThreadFor(MTYPE_WORKER_APPLY);
@@ -507,6 +509,7 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCI
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
 }
 
+/*
 void Worker::HandleEnableTrigger(const EnableTrigger& req, EmptyMessage *resp, const RPCInfo& rpc) {
   GlobalTable *t = TableRegistry::Get()->tables()[req.table()];
   CHECK(t != NULL);
@@ -514,6 +517,7 @@ void Worker::HandleEnableTrigger(const EnableTrigger& req, EmptyMessage *resp, c
   CHECK(trigger != NULL);
   trigger->enable(req.enable());
 }
+*/
 
 void Worker::CheckForMasterUpdates() {
   boost::recursive_mutex::scoped_lock sl(state_lock_);

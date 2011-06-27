@@ -40,17 +40,21 @@ namespace dsm{
 // This is the trigger. In order to experiment with non-trigger version,
 // I limited the maximum distance will be 20.
 
-class SSSPTrigger : public Trigger<int, double> {
+struct SSSPTrigger : public Trigger<int, double> {
 	public:
-		bool Fire(const int& key, const double& value, double& newvalue) {
-			//cout << "TRIGGER: k=" << key <<", v="<< value << ",newvalue=" <<newvalue<<endl;
-			if (value <= newvalue)
-				return false;
-			vector<double> thisnode = nodes->get(key);
+		void Fire(const int* key, double* value, const double& newvalue, bool* doUpdate) {
+			//fprintf(stderr,"TRIGGER: k=%d,v=%f,nv=%f\n",*key,*value,newvalue);
+			if (*value <= newvalue) {
+				doUpdate = false;
+				return;
+			}
+			vector<double> thisnode = nodes->get(*key);
 			vector<double>::iterator it = thisnode.begin();
 			for(; it!=thisnode.end(); it++)
 				distance_map->enqueue_update((*it), newvalue+1);
-			return true;
+			*value = newvalue;
+			*doUpdate = true;
+			return;
 		}
 		bool LongFire(const int& key) {
 			return false;
@@ -87,10 +91,10 @@ static void BuildGraph(int shards, int nodes_record, int density) {
 int ShortestPathTrigger(ConfigData& conf) {
 	NUM_WORKERS = conf.num_workers();
 
-	distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);
+	distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Triggers<int,double>::NullTrigger);
 	nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
 	nodes        = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-	TriggerID trigid = distance_map->register_trigger(new SSSPTrigger);
+	//TriggerID trigid = distance_map->register_trigger(new SSSPTrigger);
 
 	StartWorker(conf);
 	Master m(conf);
@@ -100,11 +104,9 @@ int ShortestPathTrigger(ConfigData& conf) {
 		return 0;
 	}
 
-	m.enable_trigger(trigid, 0, false);
-
 	PRunOne(distance_map, {
 			for (int i = 0; i < FLAGS_tnum_nodes; ++i) {
-			distance_map->update(i, 1e9);
+				distance_map->update(i, 1e9);
 			}
 
 			});
@@ -128,7 +130,9 @@ int ShortestPathTrigger(ConfigData& conf) {
 			nodes->update(n.id(),v);
 			});
 
-	m.enable_trigger(trigid, 0, true);
+	PRunAll(distance_map, {
+			distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
+			});
 
 	//Start the timer!
 	struct timeval start_time, end_time;
@@ -139,7 +143,11 @@ int ShortestPathTrigger(ConfigData& conf) {
 			// and enable the trigger.
 			distance_map->update(0, 0);
 			});
-	m.enable_trigger(trigid, 0, false);
+
+	PRunAll(distance_map, {
+			distance_map->swap_accumulator(new Triggers<int,double>::NullTrigger);
+			});
+
 
 	//Finish the timer!
 	gettimeofday(&end_time, NULL);

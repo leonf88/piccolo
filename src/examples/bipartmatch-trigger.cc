@@ -54,6 +54,140 @@ namespace dsm{
 
 //-----------------------------------------------
 
+struct MatchRequestTrigger : public Trigger<int, int> {
+	public:
+		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate ) {
+			int newcost = MAXCOST;
+
+#ifdef DEBUGOUT
+/*
+			if (rightmatches->get(key) != value) {
+				cout << "KEY MISMATCH RIGHT IN TRIGGER: [" <<
+					key << ",({" << value << " vs " << rightmatches->get(key)
+					<< "}, " << newvalue << ")]" <<  endl;
+				exit(-1);
+			}
+*/
+#endif
+
+			if (newvalue != -1) {
+			}
+			if (*value != -1) {
+#ifdef DEBUGOUT
+				cout << "Denying match on " << *key << " from " << newvalue << endl;
+#endif
+				leftmatches->enqueue_update(newvalue,-1);
+				*doUpdate = false;
+				return;
+		//		return false;
+			} else {
+				//Else this match is acceptable.  Set new cost.
+#ifdef DEBUGOUT
+				cout << "Accepting match on " << *key << " from " << newvalue << endl;
+#endif
+				rightcosts->enqueue_update(*key,newcost);
+				leftmatches->enqueue_update(newvalue,*key);
+			}
+			*value = newvalue;
+			*doUpdate = true;
+			return;
+//			return true;
+		}
+
+		//No longfire
+		bool LongFire(const int& key) {
+			volatile bool rv = false;
+			return rv;
+		}
+};
+
+struct LeftTrigger : public Trigger<int, int> {
+	public:
+		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate ) {
+
+			//Sanity check: make sure the right side isn't trying to
+            //break an already-agreed match or re-assign a left vertex
+            //that's already linked.
+#ifdef DEBUGOUT
+/*
+			if (leftmatches->get(key) != value || value != -1) {
+				cout << "KEY MISMATCH LEFT IN TRIGGER: [" <<
+					key << ",(" << value << ", " << newvalue << ")]" <<  endl;
+				exit(-1);
+			}
+*/
+#endif
+
+			//Don't store the denial!
+			if (newvalue == -1) {
+
+
+				//Denied: remove possible right match
+				//Also, this is always a local get(), so no possible consistency issues
+				vector<int> v  = leftoutedges->get(*key);
+
+				vector<int>::iterator it = v.begin();
+
+#ifdef DEBUGOUT
+				cout << "Match on " << *key << " denied from " << *(v.end()-1) << endl;
+#endif
+
+				v.erase(v.end()-1);
+
+				int j=-1;
+				if (v.size() != 0) {
+				//try to find a random or best match
+					//all edges equal; pick one at random
+					j = v.size()*((float)rand()/(float)RAND_MAX);
+					j = (j>=v.size())?v.size()-1:j;
+					int j2 = v[j];
+					v.erase(v.begin()+j);
+					v.push_back(j2);
+					j = j2;
+				}
+
+				//Enqueue the removal
+				leftoutedges->enqueue_update((int)*key,v);
+
+				if (v.size() == 0) {		//forget it if no more candidates
+#ifdef DEBUGOUT
+					cout << "Ran out of right candidates for " << *key << endl;
+#endif
+					*value = newvalue;
+					*doUpdate = true;
+					return;
+//					return true;
+				}
+
+				rightmatches->enqueue_update(j,*key);
+				*value = j;
+#ifdef DEBUGOUT
+				cout << "Re-attempting from " << *key << " to " << j << endl;
+#endif
+				*doUpdate = false;
+				return;
+//				return false;
+			}
+
+			//It was not a denial; store it.
+			*value = newvalue;
+#ifdef DEBUGOUT
+			cout << "Storing accepting match on left " << *key << " from right " << value << endl;
+#endif
+			*doUpdate = true;
+			return;
+//			return true;
+		}
+
+		//No longfire
+		bool LongFire(const int& key) {
+			volatile bool rv = false;
+			return rv;
+		}
+};
+
+//-----------------------------------------------
+
 class BPMTKernel : public DSMKernel {
 	public:
 		void InitTables() {
@@ -214,124 +348,14 @@ class BPMTKernel : public DSMKernel {
 			printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_tleft_vertices);
 			printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_tright_vertices);
 		}
-};
 
-class MatchRequestTrigger : public Trigger<int, int> {
-	public:
-		bool Fire(const int& key, const int& value, int& newvalue ) {
-			int newcost = MAXCOST;
-
-#ifdef DEBUGOUT
-/*
-			if (rightmatches->get(key) != value) {
-				cout << "KEY MISMATCH RIGHT IN TRIGGER: [" <<
-					key << ",({" << value << " vs " << rightmatches->get(key)
-					<< "}, " << newvalue << ")]" <<  endl;
-				exit(-1);
-			}
-*/
-#endif
-
-			if (newvalue != -1) {
-			}
-			if (value != -1) {
-#ifdef DEBUGOUT
-				cout << "Denying match on " << key << " from " << newvalue << endl;
-#endif
-				leftmatches->enqueue_update(newvalue,-1);
-				return false;
-			} else {
-				//Else this match is acceptable.  Set new cost.
-#ifdef DEBUGOUT
-				cout << "Accepting match on " << key << " from " << newvalue << endl;
-#endif
-				rightcosts->enqueue_update(key,newcost);
-				leftmatches->enqueue_update(newvalue,key);
-			}
-			return true;
+		void EnableTriggers() {
+			leftmatches->swap_accumulator((Trigger<int,int>*)new LeftTrigger);
+			rightmatches->swap_accumulator((Trigger<int,int>*)new MatchRequestTrigger);
 		}
-
-		//No longfire
-		bool LongFire(const int& key) {
-			volatile bool rv = false;
-			return rv;
-		}
-};
-
-class LeftTrigger : public Trigger<int, int> {
-	public:
-		bool Fire(const int& key, const int& value, int& newvalue ) {
-
-			//Sanity check: make sure the right side isn't trying to
-            //break an already-agreed match or re-assign a left vertex
-            //that's already linked.
-#ifdef DEBUGOUT
-/*
-			if (leftmatches->get(key) != value || value != -1) {
-				cout << "KEY MISMATCH LEFT IN TRIGGER: [" <<
-					key << ",(" << value << ", " << newvalue << ")]" <<  endl;
-				exit(-1);
-			}
-*/
-#endif
-
-			//Don't store the denial!
-			if (newvalue == -1) {
-
-
-				//Denied: remove possible right match
-				//Also, this is always a local get(), so no possible consistency issues
-				vector<int> v  = leftoutedges->get(key);
-
-				vector<int>::iterator it = v.begin();
-
-#ifdef DEBUGOUT
-				cout << "Match on " << key << " denied from " << *(v.end()-1) << endl;
-#endif
-
-				v.erase(v.end()-1);
-
-				int j=-1;
-				if (v.size() != 0) {
-				//try to find a random or best match
-					//all edges equal; pick one at random
-					j = v.size()*((float)rand()/(float)RAND_MAX);
-					j = (j>=v.size())?v.size()-1:j;
-					int j2 = v[j];
-					v.erase(v.begin()+j);
-					v.push_back(j2);
-					j = j2;
-				}
-
-				//Enqueue the removal
-				leftoutedges->enqueue_update((int)key,v);
-
-				if (v.size() == 0) {		//forget it if no more candidates
-#ifdef DEBUGOUT
-					cout << "Ran out of right candidates for " << key << endl;
-#endif
-					return true;
-				}
-
-				rightmatches->enqueue_update(j,key);
-				newvalue = j;
-#ifdef DEBUGOUT
-				cout << "Re-attempting from " << key << " to " << j << endl;
-#endif
-				return false;
-			}
-
-			//It was not a denial; store it.
-#ifdef DEBUGOUT
-			cout << "Storing accepting match on left " << key << " from right " << value << endl;
-#endif
-			return true;
-		}
-
-		//No longfire
-		bool LongFire(const int& key) {
-			volatile bool rv = false;
-			return rv;
+		void DisableTriggers() {
+			leftmatches->swap_accumulator(new Triggers<int,int>::NullTrigger);
+			rightmatches->swap_accumulator(new Triggers<int,int>::NullTrigger);
 		}
 };
 
@@ -343,21 +367,24 @@ REGISTER_METHOD(BPMTKernel, PopulateLeft);
 REGISTER_METHOD(BPMTKernel, BeginBPMT);
 REGISTER_METHOD(BPMTKernel, EvalPerformance);
 
+REGISTER_METHOD(BPMTKernel, EnableTriggers);
+REGISTER_METHOD(BPMTKernel, DisableTriggers);
+
 int Bipartmatch_trigger(ConfigData& conf) {
 
 	leftoutedges  = CreateTable(0,conf.num_workers(),new Sharding::Mod, 
 		new Accumulators<vector<int> >::Replace);
 	leftmatches   = CreateTable(1,conf.num_workers(),new Sharding::Mod,
-		new Accumulators<int>::Replace);
+		new Triggers<int,int>::NullTrigger);
 	leftoutcosts  = CreateTable(3,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<vector<int> >::Replace);
 	rightmatches  = CreateTable(2,conf.num_workers(),new Sharding::Mod,
-		new Accumulators<int>::Replace);
+		new Triggers<int,int>::NullTrigger);								//NullTrigger accepts everything
 	rightcosts    = CreateTable(4,conf.num_workers(),new Sharding::Mod,
 		new Accumulators<int>::Replace);
 
-	TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
-	TriggerID lefttriggerid = leftmatches->register_trigger(new LeftTrigger);
+//	TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
+//	TriggerID lefttriggerid = leftmatches->register_trigger(new LeftTrigger);
 
 	StartWorker(conf);
 	Master m(conf);
@@ -366,8 +393,8 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	printf("---- Initializing Bipartmatch-trigger on %d workers ----\n",NUM_WORKERS);
 
 	//Disable triggers
-	m.enable_trigger(matchreqid,2,false);
-	m.enable_trigger(lefttriggerid,1,false);
+//	m.enable_trigger(matchreqid,2,false);
+//	m.enable_trigger(lefttriggerid,1,false);
 
 	//Fill in all necessary keys
 	m.run_one("BPMTKernel","InitTables",  leftoutedges);
@@ -376,8 +403,9 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	m.barrier();
 
 	//Enable triggers
-	m.enable_trigger(matchreqid,2,true);
-	m.enable_trigger(lefttriggerid,1,true);
+	m.run_all("BPMTKernel","EnableTriggers", leftmatches);
+	//m.enable_trigger(matchreqid,2,true);
+	//m.enable_trigger(lefttriggerid,1,true);
 	m.barrier();
 
 	struct timeval start_time, end_time;
@@ -390,8 +418,9 @@ int Bipartmatch_trigger(ConfigData& conf) {
 	cout << "Total matching time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
 
 	//Disable triggers
-	m.enable_trigger(matchreqid,2,false);
-	m.enable_trigger(lefttriggerid,1,false);
+	m.run_all("BPMTKernel","DisableTriggers", leftmatches);
+//	m.enable_trigger(matchreqid,2,false);
+//	m.enable_trigger(lefttriggerid,1,false);
 
 	m.run_one("BPMTKernel","EvalPerformance",leftmatches);
 

@@ -61,7 +61,7 @@ public:
   SparseTable(int size=1);
   ~SparseTable() {}
 
-  void Init(const TableDescriptor* td) {
+  void Init(const TableDescriptor * td) {
     TableBase::Init(td);
   }
 
@@ -208,7 +208,17 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
   int b = bucket_for_key(k);
 
   if (b != -1) {
-    ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
+    if (info_.accum->accumtype == ACCUMULATOR) {
+      ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
+    } else if (info_.accum->accumtype == TRIGGER) {
+      V v2 = buckets_[b].v;
+      bool doUpdate = false;
+      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate);
+      if (doUpdate)
+        buckets_[b].v = v2;
+    } else {
+      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
+    }
   } else {
     put(k, v);
   }

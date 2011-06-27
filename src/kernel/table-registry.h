@@ -73,6 +73,22 @@ static TypedGlobalTable<K, V>* CreateTable(int id, int shards,
 }
 
 template<class K, class V>
+static TypedGlobalTable<K, V>* CreateTable(int id, int shards,
+                                           Sharder<K>* sharding, 
+                                           Trigger<K,V>* trigger,
+                                           int retrigt_count = 0) {
+
+  TableDescriptor *info = new TableDescriptor(id, shards);
+  info->key_marshal = new Marshal<K>;
+  info->value_marshal = new Marshal<V>;
+  info->sharder = sharding;
+  info->partition_factory = new typename SparseTable<K, V>::Factory;
+  info->accum = trigger;
+
+  return CreateTable<K, V>(info, retrigt_count);
+}
+  
+template<class K, class V>
 static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info,
                                            int retrigt_count = 0) {
   TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>();
