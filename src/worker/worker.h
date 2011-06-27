@@ -50,8 +50,10 @@ public:
   void HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc);
   void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
 
+/*
   // Enable or disable triggers
   void HandleEnableTrigger(const EnableTrigger& req, EmptyMessage* resp, const RPCInfo& rpc);
+*/
 
   int peer_for_shard(int table_id, int shard) const;
   int id() const { return config_.worker_id(); };

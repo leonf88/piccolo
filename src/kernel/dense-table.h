@@ -98,7 +98,7 @@ public:
 
   ~DenseTable() {}
 
-  void Init(const TableDescriptor* td) {
+  void Init(const TableDescriptor * td) {
     TableBase::Init(td);
   }
 
@@ -133,7 +133,19 @@ public:
 
   void update(const K& k, const V& v) {
     V* vb = get_block(k);
-    ((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
+
+    if (info_.accum->accumtype == ACCUMULATOR) {
+      ((Accumulator<V>*)info_.accum)->Accumulate(&vb[block_pos(k)], v);
+    } else if (info_.accum->accumtype == TRIGGER) {
+      V v2 = vb[block_pos(k)];
+      bool doUpdate = false;
+      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate);
+      if (doUpdate)
+        vb[block_pos(k)] = v2;
+    } else {
+      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
+    }
+
 //    K k2(k);
 //    ((Accumulator<V>*)info_.accum)->Accumulate(&k2, v);
   }

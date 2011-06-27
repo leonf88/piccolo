@@ -231,6 +231,8 @@ public:
   void put(const K &k, const V &v);
   void update(const K &k, const V &v);
   void enqueue_update(K k, V v);
+  void swap_accumulator(Accumulator<V>* newaccum);
+  void swap_accumulator(Trigger<K,V>* newaccum);
   int clearUpdateQueue();
 
   // Provide a mechanism to enable a long trigger / retrigger, as well as
@@ -446,6 +448,7 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 
   if (is_local_shard(shard)) {
 
+/*
     // invoke any registered triggers.
     bool doUpdate = true;
     V v2 = v;
@@ -468,13 +471,14 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 
     // Only update if no triggers NACKed
     if (doUpdate) {
-      partition(shard)->update(k, v2);
-    }
+*/
+      partition(shard)->update(k, v);
+//    }
 
     //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   } else {
 
-    if (num_triggers() == 0) {
+    if (this->info().accum->accumtype != TRIGGER) {
       //No triggers, remote accumulation is OK
       partition(shard)->update(k, v);
 
@@ -591,6 +595,21 @@ void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
   const KVPair thispair(k,v);
   update_queue.push_back(thispair);
   VLOG(2) << "Enqueing table id " << this->id() << " update (" << update_queue.size() << " pending pairs)" << endl;
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::swap_accumulator(Accumulator<V>* newaccum) {
+  this->mutable_info().swap_accumulator((AccumulatorBase*)newaccum);
+  for (int i = 0; i < partitions_.size(); ++i) {
+    partitions_[i]->info_.swap_accumulator((AccumulatorBase*)newaccum);
+  }
+}
+template<class K, class V>
+void TypedGlobalTable<K, V>::swap_accumulator(Trigger<K,V>* newaccum) {
+  this->mutable_info().swap_accumulator((AccumulatorBase*)newaccum);
+  for (int i = 0; i < partitions_.size(); ++i) {
+    partitions_[i]->info_.swap_accumulator((AccumulatorBase*)newaccum);
+  }
 }
 
 // Return the value associated with 'k', possibly blocking for a remote fetch.

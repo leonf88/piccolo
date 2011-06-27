@@ -25,7 +25,11 @@ struct TableHelper {
 };
 
 struct SharderBase {};
-struct AccumulatorBase {};
+enum AccumulatorType { ACCUMULATOR, TRIGGER };
+struct AccumulatorBase {
+	AccumulatorType accumtype;
+};
+
 struct BlockInfoBase {};
 
 
@@ -51,11 +55,13 @@ private:
 //
 // When firing, triggers are activated in the order specified at
 // initialization time.
+/*
 template <class K, class V>
 struct Trigger : public TriggerBase {
   virtual bool Fire(const K& k, const V& current, V& update) = 0;
   virtual bool LongFire(const K& k) = 0;
 };
+*/
 
 //#ifdef SWIGPYTHON
 //template <class K, class V> class TriggerDescriptor : public Trigger;
@@ -67,12 +73,43 @@ struct Trigger : public TriggerBase {
 // applied whenever an update is supplied for an existing key-value cell.
 template <class V>
 struct Accumulator : public AccumulatorBase {
+  Accumulator() {
+    accumtype = ACCUMULATOR;
+  }
   virtual void Accumulate(V* a, const V& b) = 0;
 };
+
+// <<CRM 2011-06-09
+template <class K, class V>
+struct Trigger : public AccumulatorBase {
+  Trigger() {
+    accumtype = TRIGGER;
+  }
+  virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) = 0;
+};
+// CRM 2001-06-09>>
 
 template <class K>
 struct Sharder : public SharderBase {
   virtual int operator()(const K& k, int shards) = 0;
+};
+
+// Commonly-used trigger operators.
+template <class K, class V>
+struct Triggers {
+  struct NullTrigger : public Trigger<K, V> {
+    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) {
+      *value = updateval;
+      *doUpdate = true;
+      return;
+    }
+  };
+  struct ReadOnlyTrigger : public Trigger<K, V> {
+    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) {
+      *doUpdate = false;
+      return;
+    }
+  };
 };
 
 // Commonly used accumulation and sharding operators.
@@ -135,7 +172,13 @@ public:
     key_marshal = value_marshal = NULL;
     accum = NULL;
     sharder = NULL;
-    triggers.clear();
+    //triggers.clear();
+  }
+
+  void swap_accumulator(AccumulatorBase* newaccum) {
+    //delete accum;
+    accum = newaccum;
+    return;
   }
 
   int table_id;
@@ -145,7 +188,7 @@ public:
   int shard;
   int default_shard_size;
 
-  vector<TriggerBase*> triggers;
+//  vector<TriggerBase*> triggers;
 
   AccumulatorBase *accum;
   SharderBase *sharder;
@@ -194,13 +237,13 @@ struct TableIterator {
 class TableBase : public Table {
 public:
   typedef TableIterator Iterator;
-  virtual void Init(const TableDescriptor* info) {
+  virtual void Init(const TableDescriptor * info) {
 	info_ = *info;
     CHECK(info_.key_marshal != NULL);
     CHECK(info_.value_marshal != NULL);
   }
 
-  const TableDescriptor& info() const { return info_; }
+  const TableDescriptor & info() const { return info_; }
   TableDescriptor& mutable_info() { return info_; }
   int id() const { return info().table_id; }
   int num_shards() const { return info().num_shards; }
@@ -208,9 +251,10 @@ public:
   TableHelper *helper() { return info().helper; }
   int helper_id() { return helper()->id(); }
 
-  int num_triggers() { return info_.triggers.size(); }
-  TriggerBase *trigger(int idx) { return info_.triggers[idx]; }
+  //int num_triggers() { return info_.triggers.size(); }
+  //TriggerBase *trigger(int idx) { return info_.triggers[idx]; }
 
+/*
   TriggerID register_trigger(TriggerBase *t) {
     if (helper()) {
       t->helper = helper();
@@ -221,16 +265,19 @@ public:
     info_.triggers.push_back(t);
     return t->triggerid;
   }
+*/
 
   void set_helper(TableHelper *w) {
+/*
     for (int i = 0; i < info_.triggers.size(); ++i) {
       trigger(i)->helper = w;
     }
+*/
 
     info_.helper = w;
   }
 
-protected:
+//protected:
   TableDescriptor info_;
 };
 

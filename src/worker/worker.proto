@@ -115,11 +115,11 @@ message ClearTable {
   required int32 table = 1;
 }
 
-message EnableTrigger {
-  required int32 trigger_id = 1;
-  required int32 table = 2;
-  required bool enable = 3;
-}
+//message EnableTrigger {
+//  required int32 trigger_id = 1;
+//  required int32 table = 2;
+//  required bool enable = 3;
+//}
 
 message FlushResponse {
   required int32 updatesdone = 1;

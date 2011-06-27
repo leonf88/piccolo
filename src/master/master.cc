@@ -690,6 +690,7 @@ void Master::cp_barrier() {
   barrier();
 }
 
+/*
 void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
   EnableTrigger trigreq;
   for (int i = 0; i < workers_.size(); ++i) {
@@ -701,6 +702,7 @@ void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
   }
 
 }
+*/
 
 void Master::barrier() {
   MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
