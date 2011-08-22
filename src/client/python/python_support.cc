@@ -53,7 +53,9 @@ PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& co
   Init(thistable);
   params_.put("python_code_short", codeshort);
   params_.put("python_code_long", codelong);
-  trigid = thistable->register_trigger(this);
+
+  LOG(FATAL) << "Python trigger support is not available.";
+  //trigid = thistable->register_trigger(this);
 }
 
 template<class K, class V>
@@ -91,23 +93,23 @@ bool PythonTrigger<K, V>::LongFire(const K& k) {
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::Fire(const K& k, const V& current, V& update) {
+void PythonTrigger<K, V>::Fire(const K* k, V* update, const V& current, bool* rv) {
   string python_code = params_.get<string> ("python_code_short");
   PyObject *key, *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
-  key = PyString_FromString(k.c_str());
+  key = PyString_FromString(k->c_str());
 
   // Make sure all the callfunctionobjarg arguments are fine
   if (key == NULL || callable == NULL) {
     LOG(ERROR) << "Failed to launch trigger " << python_code << "!";
     if (key == NULL) LOG(ERROR) << "[FAIL] key was null";
     if (callable == NULL) LOG(ERROR) << "[FAIL] callable was null";
-    return true;
+    *rv = true;
+    return;
   }
 
-  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, update, false);
+  *rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, *update, false);
   LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << "from long trigger";
-  return rv;
 }
 
 template<class K, class V>
