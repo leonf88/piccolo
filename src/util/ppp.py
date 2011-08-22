@@ -178,7 +178,7 @@ def ParsePMap(s):
   _, keys, _, code, _ = s.read(r'\(', '{'), ParseKeys(s), s.read('}', ','), ParseCode(s), s.read(r'\)', ';')
   
   
-  filename = os.path.basename(s._f)
+  filename = s._f
   prefix = re.sub(r'[\W]', '_', filename)
   
   id = get_id()
@@ -214,7 +214,7 @@ def ParsePRunOne(s):
   s.push('ParsePRunOne')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
   
-  filename = os.path.basename(s._f)
+  filename = s._f
   prefix = re.sub(r'[\W]', '_', filename)
   
   id = get_id()
@@ -232,7 +232,7 @@ def ParsePRunAll(s):
   s.push('ParsePRunAll')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
   
-  filename = os.path.basename(s._f)
+  filename = s._f
   prefix = re.sub(r'[\W]', '_', filename)
   
   id = get_id()
@@ -251,7 +251,7 @@ def ProcessFile(f_in, f_out):
   global c
   s = Scanner(f_in)
   print >>f_out, HEADER
-  print >>f_out, '#line 1 "%s"' % os.path.basename(f_in)
+  print >>f_out, '#line 1 "%s"' % f_in
   
   while 1:
     g = s.search('PMap|PRunOne|PRunAll')
