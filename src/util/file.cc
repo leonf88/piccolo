@@ -307,7 +307,10 @@ bool RecordFile::read(google::protobuf::Message *m) {
   if (!m)
     return true;
 
-  CHECK(m->ParseFromString(buf_));
+  CHECK(m->ParseFromString(buf_)) 
+    << "Failed to parse entry of size " << buf_.size() 
+    << " at position " << fp->tell() 
+    << " from RecordFile " << path_;
   return true;
 }
 

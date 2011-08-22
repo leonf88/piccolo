@@ -4,6 +4,7 @@
 #include <time.h>
 #include <vector>
 #include <string>
+#include <deque>
 
 #include <stdint.h>
 #include <stdio.h>
