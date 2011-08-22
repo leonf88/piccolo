@@ -210,7 +210,7 @@ private:
 public:
   Trigger(GlobalTable* thistable);
   Init(GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update);
+  bool Fire(const K& k, const V& current, V& update, bool*);
 };
 
 template <class K, class V>
@@ -218,7 +218,7 @@ struct PythonTrigger<K, V> {
 public:
   PythonTrigger(GlobalTable* thistable, const string& code);
   void Init(GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update);
+  bool Fire(const K& k, V* update, const V& current, bool*);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update);
 };
 
@@ -267,12 +267,12 @@ public:
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
 
-  PythonTrigger<string, string>* GetStringPythonTrigger(int tidx, int idx) {
-    return (PythonTrigger<string, string>*)($self->get_table<string, string>(tidx)->trigger(idx));
-  }
-  PythonTrigger<string, int64_t>* GetIntPythonTrigger(int tidx, int idx) {
-    return (PythonTrigger<string, int64_t>*)($self->get_table<string, int64_t>(tidx)->trigger(idx));
-  }
+//  PythonTrigger<string, string>* GetStringPythonTrigger(int tidx, int idx) {
+//    return (PythonTrigger<string, string>*)($self->get_table<string, string>(tidx)->trigger(idx));
+//  }
+//  PythonTrigger<string, int64_t>* GetIntPythonTrigger(int tidx, int idx) {
+//    return (PythonTrigger<string, int64_t>*)($self->get_table<string, int64_t>(tidx)->trigger(idx));
+//  }
 }
 
 %template(CreateStringTable) CreateTable<string, string>;

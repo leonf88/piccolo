@@ -70,7 +70,7 @@ class PythonTrigger : public Trigger<K, V> {
 public:
   PythonTrigger(dsm::GlobalTable* thistable, const string& codeshort, const string& codelong);
   void Init(dsm::GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update);
+  void Fire(const K* k, V*, const V& current, bool*);
   bool LongFire(const K& k);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update, bool isLongFire);
 
