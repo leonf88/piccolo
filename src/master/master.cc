@@ -411,6 +411,7 @@ bool Master::restore() {
 }
 
 void Master::run_all(RunDescriptor r) {
+  CHECK_NE(r.table, (void*)NULL) << "Must specify a table for locality.";
   run_range(r, range(r.table->num_shards()));
 }
 

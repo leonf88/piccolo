@@ -80,7 +80,8 @@ static vector<int> InitSites() {
   }
   return site_sizes;
 }
-static vector<int> site_sizes = InitSites();
+
+static vector<int> site_sizes;
 
 static void BuildGraph(int shard, int nshards, int nodes, int density) {
   char* d = strdup(FLAGS_graph_prefix.c_str());
@@ -94,9 +95,11 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
 
   srand(shard);
   Page n;
-  RecordFile out(target, "w", RecordFile::LZO);
+  RecordFile out(target, "w", RecordFile::NONE);
   // Only sites with site_id % nshards == shard are in this shard.
   for (int i = shard; i < site_sizes.size(); i += nshards) {
+    PERIODIC(1, LOG(INFO) << "Working: Shard -- " << shard << " of " << nshards 
+                          << "; site " << i << " of " << site_sizes.size());
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
       n.set_site(i);
@@ -106,6 +109,7 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
         n.add_target_site(target_site);
         n.add_target_id(random() % site_sizes[target_site]);
       }
+
       out.write(n);
     }
   }
@@ -243,6 +247,8 @@ TypedGlobalTable<PageId, float>* next_pr;
 DiskTable<uint64_t, Page> *pages;
 
 int Pagerank(ConfigData& conf) {
+  site_sizes = InitSites();
+
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_nodes;
 
@@ -256,9 +262,20 @@ int Pagerank(ConfigData& conf) {
   pr_desc->sharder = new SiteSharding;
   pr_desc->accum = new Accumulators<float>::Sum;
 
-  CreateTable<PageId, float>(pr_desc);
+  curr_pr = CreateTable<PageId, float>(pr_desc);
   pr_desc->table_id = 1;
-  CreateTable<PageId, float>(pr_desc);
+  next_pr = CreateTable<PageId, float>(pr_desc);
+
+  if (FLAGS_build_graph) {
+    if (NetworkThread::Get()->id() == 0) {
+      LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; " 
+                << FLAGS_nodes << " nodes.";
+      for (int i = 0; i < FLAGS_shards; ++i) {
+         BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
+      }
+    }
+    return 0;
+  }
 
   if (FLAGS_memory_graph) {
     pages = new InMemoryTable(FLAGS_shards);
@@ -269,15 +286,6 @@ int Pagerank(ConfigData& conf) {
 
   StartWorker(conf);
   Master m(conf);
-  if (FLAGS_build_graph) {
-    PRunAll(pages, {
-      for (int i = 0; i < FLAGS_shards; ++i) {
-         BuildGraph(i, FLAGS_shards, FLAGS_nodes, 15);
-      }
-    });
-
-    return 0;
-  }
 
   if (!FLAGS_convert_graph.empty()) {
     ConvertGraph(FLAGS_convert_graph, FLAGS_shards);
@@ -309,15 +317,12 @@ int Pagerank(ConfigData& conf) {
         }
     });
 
+    PageId pzero = { 0, 0 };
+    fprintf(stderr, "Iteration %d; PR %.3f\n", i, curr_pr->contains(pzero) ? curr_pr->get(pzero) : 0);
+
     // Move the values computed from the last iteration into the current table.
     swap(curr_pr, next_pr);
     next_pr->clear();
-
-    PRunOne(curr_pr, {
-            fprintf(stderr, "Iteration %d, PR:: ", get_arg<int>("iteration"));
-            PageId pzero = { 0, 0 };
-            fprintf(stderr, "%.2f\n", curr_pr->get(pzero));
-    });
   }
 
   return 0;
