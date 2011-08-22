@@ -71,6 +71,8 @@ public:
 template <class K, class V>
 DiskTable<K, V>::DiskTable(StringPiece file_pattern, uint64_t split_files_at) {
   vector<File::Info> files = File::MatchingFileinfo(file_pattern);
+  CHECK(!files.empty()) << "DiskTable failed to find any matching files for pattern: " << file_pattern.AsString();
+
   if (split_files_at == 0) { split_files_at = ULONG_MAX; }
 
   for (int i = 0; i < files.size(); ++i) {
