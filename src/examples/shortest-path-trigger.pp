@@ -42,7 +42,7 @@ namespace dsm{
 
 struct SSSPTrigger : public Trigger<int, double> {
 	public:
-		void Fire(const int* key, double* value, const double& newvalue, bool* doUpdate) {
+		void Fire(const int* key, double* value, const double& newvalue, bool* doUpdate, bool isNew) {
 			//fprintf(stderr,"TRIGGER: k=%d,v=%f,nv=%f\n",*key,*value,newvalue);
 			if (*value <= newvalue) {
 				doUpdate = false;
@@ -56,7 +56,7 @@ struct SSSPTrigger : public Trigger<int, double> {
 			*doUpdate = true;
 			return;
 		}
-		bool LongFire(const int& key) {
+		bool LongFire(const int key) {
 			return false;
 		}
 };

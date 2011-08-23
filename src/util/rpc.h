@@ -10,6 +10,10 @@
 #include <google/protobuf/message.h>
 #include <mpi.h>
 
+#include <deque>
+using std::deque;
+using std::string;
+
 namespace dsm {
 
 typedef google::protobuf::Message Message;

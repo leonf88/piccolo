@@ -189,10 +189,9 @@ public:
   bool clearingUpdateQueue;
 
   //long trigger support
-  typedef pair<K,TriggerID> RetriggerPair;
-  queue<RetriggerPair> retrigger_map;	// which keys still
+  vector<K> retrigger_vector;	// which keys still
 										// request long triggers
-  int retrigger_mode;		// 0 = scan retrigger_map for flags
+  int retrigger_mode;		// 0 = scan retrigger_vector for flags
 							// 1 = scan table for flags
 
   typedef TypedTableIterator<K, V> Iterator;
@@ -215,7 +214,7 @@ public:
 	//Clear the long/retrigger map, just in case, and
     //then start up the retrigger thread
     if (retrigt_count != 0) {
-      while (!retrigger_map.empty()) retrigger_map.pop();
+      retrigger_vector.clear();
 	  retrigger_mode = RETRIGGER_MODE_EXPLICIT; //separate map to start
       for (int i=0; i<retrigt_count; i++)
         boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this));
@@ -237,7 +236,7 @@ public:
 
   // Provide a mechanism to enable a long trigger / retrigger, as well as
   // a function from which to create a retrigger thread
-  void enable_retrigger(K k, TriggerID id);
+  void enable_retrigger(K k);
   void retrigger_thread(void);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
@@ -542,14 +541,13 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 }
 
 template<class K, class V>
-void TypedGlobalTable<K, V>::enable_retrigger(K k, TriggerID id) {
+void TypedGlobalTable<K, V>::enable_retrigger(K k) {
   boost::mutex::scoped_lock sl(retrigger_mutex());
   if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
     //insert or update item in retrigger map
-    RetriggerPair rtpair(k,id);
 
     //Set new one
-    retrigger_map.push(rtpair);
+    retrigger_vector.push_back(k);
   } else { //RETRIGGER_MODE_IMPLICIT
     //Set bit in table instead of in retrigger map
     LOG(FATAL) << "Retrigger mode 1 not yet implemented." << endl;
@@ -561,25 +559,20 @@ void TypedGlobalTable<K, V>::retrigger_thread(void) {
   while(1) {
     {
  //     boost::mutex::scoped_lock sl(retrigger_mutex());
+      LOG(ERROR) << "Retrigger thread tick." << endl;
       if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
-/*
-        typename map<K, RetriggerPair>::iterator it = retrigger_map.begin();
-        typename map<K, RetriggerPair>::iterator oldit;
-        for(; it != retrigger_map.end();) {
-          if (it->second.first == true) {
-            V v = get(it->first);
-            it->second.first = 
-				reinterpret_cast<Trigger<K, V>*>(trigger(it->second.second))->
-				Fire(it->first, v, v);
-          }
-          if (it->second.first == false) {
+        typename vector<K>::iterator it = retrigger_vector.begin();
+        typename vector<K>::iterator oldit;
+        for(; it != retrigger_vector.end();) {
+          bool retain = true;
+          retain = ((Trigger<K,V>*)info_.accum)->LongFire(*it);
+          if (retain == false) {
             oldit = it;
             it++;
-            retrigger_map.erase(oldit);
+            retrigger_vector.erase(oldit);
           } else
             it++;
         }
-*/
       } else { //RETRIGGER_MODE_IMPLICIT
         LOG(FATAL) << "Retrigger mode 1 not yet implemented!" << endl;
       }

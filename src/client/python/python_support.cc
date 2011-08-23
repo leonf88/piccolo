@@ -53,8 +53,6 @@ PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& co
   Init(thistable);
   params_.put("python_code_short", codeshort);
   params_.put("python_code_long", codelong);
-
-  LOG(FATAL) << "Python trigger support is not available.";
   //trigid = thistable->register_trigger(this);
 }
 
@@ -72,7 +70,7 @@ void PythonTrigger<K, V>::Init(dsm::GlobalTable* thistable) {
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::LongFire(const K& k) {
+bool PythonTrigger<K, V>::LongFire(const K k) {
   string python_code = params_.get<string> ("python_code_long");
   PyObject *key, *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
@@ -87,13 +85,13 @@ bool PythonTrigger<K, V>::LongFire(const K& k) {
   }
 
   V dummyv;
-  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, dummyv, dummyv, true);
-  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << "from long trigger";
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, &dummyv, dummyv, true, false);
+  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from long trigger";
   return rv;
 }
 
 template<class K, class V>
-void PythonTrigger<K, V>::Fire(const K* k, V* update, const V& current, bool* rv) {
+void PythonTrigger<K, V>::Fire(const K* k, V* value, const V& newvalue, bool* doUpdate, bool isNew) { //const V& current, V& update) {
   string python_code = params_.get<string> ("python_code_short");
   PyObject *key, *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
@@ -104,22 +102,24 @@ void PythonTrigger<K, V>::Fire(const K* k, V* update, const V& current, bool* rv
     LOG(ERROR) << "Failed to launch trigger " << python_code << "!";
     if (key == NULL) LOG(ERROR) << "[FAIL] key was null";
     if (callable == NULL) LOG(ERROR) << "[FAIL] callable was null";
-    *rv = true;
+    *doUpdate = true;
     return;
   }
 
-  *rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, current, *update, false);
-  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << "from long trigger";
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, value, newvalue, false, isNew);
+  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from normal trigger";
+  *doUpdate = rv;
+  return;
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update, bool isLongTrigger) {
+bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isLongTrigger, bool isNew) {
   LOG(FATAL) << "No such CallPythonTrigger for this key/value pair type!";
   exit(1);
 }
 
 template<>
-bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const int64_t& current, int64_t& update, bool isLongTrigger) {
+bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& newvalue, bool isLongTrigger, bool isNew) {
   PyObjectPtr retval;
 
   //Handle LongTriggers
@@ -131,11 +131,12 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
       PyErr_Print();
       exit(1);
     }
-    return (retval == Py_True);
+    return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
   }
  
-  PyObject* cur_obj = PyLong_FromLongLong(current);
-  PyObject* upd_obj = PyLong_FromLongLong(update);
+  PyObject* cur_obj = PyLong_FromLongLong(*value);
+  PyObject* upd_obj = PyLong_FromLongLong(newvalue);
+  PyObject* isnew_obj = PyBool_FromLong((long)isNew);
 
   if (cur_obj == NULL || upd_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
@@ -143,20 +144,20 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
   }
   try {
     retval = PyObject_CallFunctionObjArgs(
-		callable, key, cur_obj, upd_obj, NULL);
+		callable, key, cur_obj, upd_obj, isnew_obj, NULL);
     Py_DECREF(callable);
   } catch (error_already_set& e) {
     PyErr_Print();
     exit(1);
   }
 
-  update = PyLong_AsLongLong(upd_obj);
+  *value = PyLong_AsLongLong(cur_obj);
 
-  return (retval == Py_True);
+  return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
 }
 
 template<>
-bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const string& current, string& update, bool isLongTrigger) {
+bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, string* value, const string& newvalue, bool isLongTrigger, bool isNew) {
   PyObjectPtr retval;
 
   //Handle LongTriggers
@@ -168,11 +169,12 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
       PyErr_Print();
       exit(1);
     }
-    return (retval == Py_True);
+    return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
   }
  
-  PyObject* cur_obj = PyString_FromString(current.c_str());
-  PyObject* upd_obj = PyString_FromString(update.c_str());
+  PyObject* cur_obj = PyString_FromString(value->c_str());
+  PyObject* upd_obj = PyString_FromString(newvalue.c_str());
+  PyObject* isnew_obj = PyBool_FromLong((long)isNew);
 
   if (cur_obj == NULL || upd_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
@@ -180,16 +182,16 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
   }
   try {
     retval = PyObject_CallFunctionObjArgs(
-		callable, key, cur_obj, upd_obj, NULL);
+		callable, key, cur_obj, upd_obj, isnew_obj, NULL);
     Py_DECREF(callable);
   } catch (error_already_set& e) {
     PyErr_Print();
     exit(1);
   }
 
-  update = PyString_AsString(upd_obj);
+  *value = PyString_AsString(cur_obj);
 
-  return (retval == Py_True);
+  return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
 }
 
 class PythonKernel: public DSMKernel {
@@ -222,6 +224,18 @@ public:
     }
   }
 
+  void swap_python_accumulator() {
+    LOG(FATAL) << "Swapping accumulators in Python not yet implemented." << endl;
+//    the_kernel = this;
+//    string python_code = get_arg<string> ("python_accumulator");
+//    LOG(INFO) << "Swapping python accumulator: " << python_code;
+//    try {
+//    } catch (error_already_set e) {
+//      PyErr_Print();
+//      exit(1);
+//    }
+  }
+
 private:
   object crawl_module_;
   object crawl_ns_;
@@ -229,6 +243,8 @@ private:
 REGISTER_KERNEL(PythonKernel)
 ;
 REGISTER_METHOD(PythonKernel, run_python_code)
+;
+REGISTER_METHOD(PythonKernel, swap_python_accumulator)
 ;
 
 template class PythonTrigger<string, string>;
