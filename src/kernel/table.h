@@ -85,7 +85,8 @@ struct Trigger : public AccumulatorBase {
   Trigger() {
     accumtype = TRIGGER;
   }
-  virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) = 0;
+  virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate, bool isNew) = 0;
+  virtual bool LongFire(const K key) = 0;
 };
 // CRM 2001-06-09>>
 
@@ -98,16 +99,22 @@ struct Sharder : public SharderBase {
 template <class K, class V>
 struct Triggers {
   struct NullTrigger : public Trigger<K, V> {
-    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) {
+    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate, bool isNew) {
       *value = updateval;
       *doUpdate = true;
       return;
     }
+    bool LongFire(const K key) {
+      return false;
+    }
   };
   struct ReadOnlyTrigger : public Trigger<K, V> {
-    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate) {
+    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate, bool isNew) {
       *doUpdate = false;
       return;
+    }
+    bool LongFire(const K key) {
+      return false;
     }
   };
 };

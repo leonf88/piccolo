@@ -56,7 +56,7 @@ namespace dsm{
 
 struct MatchRequestTrigger : public Trigger<int, int> {
 	public:
-		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate ) {
+		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate, bool isNew) {
 			int newcost = MAXCOST;
 
 #ifdef DEBUGOUT
@@ -95,7 +95,7 @@ struct MatchRequestTrigger : public Trigger<int, int> {
 		}
 
 		//No longfire
-		bool LongFire(const int& key) {
+		bool LongFire(const int key) {
 			volatile bool rv = false;
 			return rv;
 		}
@@ -103,7 +103,7 @@ struct MatchRequestTrigger : public Trigger<int, int> {
 
 struct LeftTrigger : public Trigger<int, int> {
 	public:
-		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate ) {
+		void Fire(const int* key, int* value, const int& newvalue, bool* doUpdate, bool isNew ) {
 
 			//Sanity check: make sure the right side isn't trying to
             //break an already-agreed match or re-assign a left vertex
@@ -180,7 +180,7 @@ struct LeftTrigger : public Trigger<int, int> {
 		}
 
 		//No longfire
-		bool LongFire(const int& key) {
+		bool LongFire(const int key) {
 			volatile bool rv = false;
 			return rv;
 		}

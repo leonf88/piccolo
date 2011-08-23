@@ -9,6 +9,7 @@ protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR ${PICCOLO_SOURCE_DIR} exampl
 piccolo_pp(k-means.pp 
            matmul.pp 
            pagerank.pp
+#           accelpagerank.pp
            raytrace.pp
            shortest-path.pp
            shortest-path-trigger.pp
@@ -28,6 +29,7 @@ add_library(example
             shortest-path.pp.cc
             shortest-path-trigger.pp.cc
             pagerank.pp.cc
+#			accelpagerank.pp.cc
             test-tables.cc
             test-tables2.cc
             wordcount.pp.cc
