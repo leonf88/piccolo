@@ -7,6 +7,7 @@
 using namespace dsm;
 using namespace std;
 
+#define PREFETCH 512
 static float TOTALRANK = 0;
 static int NUM_WORKERS = 2;
 
@@ -19,6 +20,7 @@ DEFINE_bool(memory_graph, false,
 
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(nodes, 10000, "");
+DEFINE_int32(show_top, 10, "number of top results to display");
 
 DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
 
@@ -324,6 +326,50 @@ int Pagerank(ConfigData& conf) {
     swap(curr_pr, next_pr);
     next_pr->clear();
   }
+
+  //Final evaluation
+  PRunOne(curr_pr, {
+    fprintf(stdout,"PageRank complete, tabulating results...\n");
+    float pr_min = 1, pr_max = 0, pr_sum = 0;
+    struct PageId toplist[FLAGS_show_top];
+    float topscores[FLAGS_show_top];
+	int totalpages = 0;
+
+    for(int shard=0; shard < curr_pr->num_shards(); shard++) {
+      TypedTableIterator<PageId, float> *it = curr_pr->get_typed_iterator(shard,PREFETCH);
+
+      for(; !it->done(); it->Next()) {
+        totalpages++;
+        if (it->value() > pr_max)
+          pr_max = it->value();
+        if (it->value() > topscores[FLAGS_show_top-1]) {
+          topscores[FLAGS_show_top-1] = it->value();
+          toplist[FLAGS_show_top-1] = it->key();
+          for(int i=FLAGS_show_top-2; i>=0; i--) {
+            if (topscores[i] < topscores[i+1]) {
+              float a = topscores[i];
+              struct PageId b = toplist[i];
+              topscores[i] = topscores[i+1];
+              toplist[i] = toplist[i+1];
+              topscores[i+1] = a;
+              toplist[i+1] = b;
+            } else {
+              break;
+            }
+          }
+        }
+        if (it->value() < pr_min)
+          pr_min = it->value();
+        pr_sum += it->value();
+      }
+    }
+    float pr_avg = pr_sum/totalpages;
+    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages);
+    fprintf(stdout,"Top Pages:\n");
+    for(int i=0;i<FLAGS_show_top;i++) {
+      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+    }
+  });
 
   return 0;
 }
