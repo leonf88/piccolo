@@ -21,7 +21,7 @@ static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
 DEFINE_string(apr_graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(apr_nodes, 10000, "");
-DEFINE_double(apr_tol, 1e-8, "threshold for updates");
+DEFINE_double(apr_tol, 1e-6, "threshold for updates");
 DEFINE_double(apr_d, 0.85, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
 
@@ -220,7 +220,7 @@ static void ConvertGraph(string path, int nshards) {
   RecordFile *out[nshards];
   for (int i = 0; i < nshards; ++i) {
     string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_apr_graph_prefix.c_str(), i, nshards, r.nodes);
-    out[i] = new RecordFile(target, "w", RecordFile::LZO);
+    out[i] = new RecordFile(target, "w", RecordFile::NONE);
   }
 
   // XXX Maybe we should take at most FLAGS_apr_nodes nodes
@@ -283,17 +283,7 @@ int AccelPagerank(ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_apr_nodes;
 
-  TableDescriptor* pr_desc = new TableDescriptor(0, FLAGS_shards);
-  pr_desc->key_marshal = new Marshal<APageId>;
-  pr_desc->value_marshal = new Marshal<AccelPRStruct>;
-
-  pr_desc->partition_factory = new SparseTable<APageId, AccelPRStruct>::Factory;
-  pr_desc->block_size = 1000;
-  pr_desc->block_info = new APageIdBlockInfo;
-  pr_desc->sharder = new SiteSharding;
-  pr_desc->accum = (Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger;
-
-  prs = CreateTable<APageId, AccelPRStruct>(pr_desc);
+  prs = CreateTable(0, FLAGS_shards, new SiteSharding, (Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
 
   if (FLAGS_build_graph) {
     if (NetworkThread::Get()->id() == 0) {
@@ -310,7 +300,9 @@ int AccelPagerank(ConfigData& conf) {
   apages = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<APageInfo>::Replace);
 
   //Also need to load pages
-  pagedb = CreateRecordTable<Page>(2, FLAGS_apr_graph_prefix + "*", false);
+  if (FLAGS_apr_convert_graph.empty()) {
+    pagedb = CreateRecordTable<Page>(2, FLAGS_apr_graph_prefix + "*", false);
+  }
 
   StartWorker(conf);
   Master m(conf);
@@ -378,7 +370,7 @@ int AccelPagerank(ConfigData& conf) {
       }
     }
     float pr_avg = pr_sum/totalpages;
-    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages);
+    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
     fprintf(stdout,"Top Pages:\n");
     for(int i=0;i<FLAGS_ashow_top;i++) {
       fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);

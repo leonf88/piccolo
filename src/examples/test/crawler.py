@@ -18,6 +18,7 @@ for n in [2]:#runutil.parallelism:
 #                  'xterm -display beaker-2:1 -hold -e gdb -ex run --args python src/examples/crawler/crawler.py',
                   'python src/examples/crawler/crawler.py',
                   '--log_prefix=false',
+                  '-v=0',
                   '--crawler_triggers=%s' % usetriggers,
                   '--crawler_runtime=30'])
   

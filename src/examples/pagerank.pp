@@ -166,7 +166,7 @@ static void ConvertGraph(string path, int nshards) {
   RecordFile *out[nshards];
   for (int i = 0; i < nshards; ++i) {
     string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), i, nshards, r.nodes);
-    out[i] = new RecordFile(target, "w", RecordFile::LZO);
+    out[i] = new RecordFile(target, "w", RecordFile::NONE);
   }
 
   // XXX Maybe we should take at most FLAGS_nodes nodes
@@ -282,9 +282,9 @@ int Pagerank(ConfigData& conf) {
   if (FLAGS_memory_graph) {
     pages = new InMemoryTable(FLAGS_shards);
     TableRegistry::Get()->tables().insert(make_pair(2, pages));
-  } else {
+  } else if (FLAGS_convert_graph.empty()) {
     pages = CreateRecordTable<Page>(2, FLAGS_graph_prefix + "*", false);
-  }
+  } //else we're doing a conversion
 
   StartWorker(conf);
   Master m(conf);
@@ -310,6 +310,7 @@ int Pagerank(ConfigData& conf) {
         float v = 0;
         if (curr_pr->contains(p)) {
           v = curr_pr->get_local(p);
+          printf("PAGE: site=%d, id=%d\n",n.site(),n.id());
         }
 
         float contribution = kPropagationFactor * v / n.target_site_size();
@@ -364,7 +365,7 @@ int Pagerank(ConfigData& conf) {
       }
     }
     float pr_avg = pr_sum/totalpages;
-    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages);
+    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,curr_pr->num_shards());
     fprintf(stdout,"Top Pages:\n");
     for(int i=0;i<FLAGS_show_top;i++) {
       fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
