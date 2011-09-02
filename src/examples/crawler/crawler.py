@@ -35,9 +35,10 @@ num_crawlers = NetworkThread.Get().size() - 1
 crawler_id = NetworkThread.Get().id()
 
 import logging
+LOGLEVEL = logging.WARN
 
 os.system('mkdir -p logs.%d' % num_crawlers)
-logging.basicConfig(level=logging.WARN)
+logging.basicConfig(level=LOGLEVEL)
                     #filename='logs.%d/crawl.log.%s.%d' % (num_crawlers, socket.gethostname(), os.getpid()),
                                    
 def now(): return time.time()
@@ -48,7 +49,7 @@ def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args, **kwargs)
 def error(fmt, *args, **kwargs): logging.error(str(fmt) % args, **kwargs)
 def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args, **kwargs)
 def console(fmt, *args, **kwargs):
-  info(fmt, *args, **kwargs)
+  logging.info(str(fmt) % args, **kwargs)
   print >> sys.stderr, str(fmt) % args 
 
 CRAWLER_THREADS = 5
@@ -221,11 +222,17 @@ def parse_robots(site, rtxt):
   except:
     warn('Failed to parse robots file!', exc_info=1)
 
-def update_fetch_table(key, status, byte_count=0):
-    fetch_table.update(key, status)
-    fetch_counts.update(FetchStatus.as_str[status], 1)
-    if byte_count > 0:
-      fetch_counts.update(FetchStatus.as_str[FetchStatus.FETCHED_BYTES], byte_count)
+def update_fetch_table(key, status, byte_count=0, inside_trigger=0):
+    if crawler_triggers() and inside_trigger:
+      fetch_table.enqueue_update(key, status)
+      fetch_counts.enqueue_update(FetchStat.as_str[status], 1)
+      if byte_count > 0: 
+        fetch_counts.enqueue_update(FetchStatus.as_str[FetchStats.FETCHED_BYTES], byte_count)
+    else:
+      fetch_table.update(key, status)
+      fetch_counts.update(FetchStatus.as_str[status], 1)
+      if byte_count > 0:
+        fetch_counts.update(FetchStatus.as_str[FetchStatus.FETCHED_BYTES], byte_count)
 
 def fetch_page(page):
   info('Fetching page: %s', page.url_s)
@@ -438,6 +445,7 @@ def fetchadd(k,current,update,isnew):
       console("%s has been blacklisted")
   else:
     console("%s determined not to be SHOULD_FETCH" & (url))
+  print(logging.Logger.root)
   return True
 
 def fetchretrigger(k):
@@ -478,7 +486,7 @@ def crawl_setlongtrigger(k):
       fetch_page(page)
       extract_links(page)
       add_links(page)
-      fetch_table.update(page.key(), FetchStatus.DONE)
+      update_fetch_table(page.key(), FetchStatus.DONE)
     except:
       warn('Error when processing page %s', page.url_s, exc_info=1)
       update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
@@ -487,30 +495,37 @@ def crawl_setlongtrigger(k):
   
 
 def trigger_crawl():
-  global RUNTIME
+  global RUNTIME,LOGLEVEL
   global running
+  logging.level = LOGLEVEL
   RUNTIME = crawler_runtime()
 
 #  status = StatusThread(threads)
 #  status.start()
   
-  warn('Starting crawl!')
+  warn('[%d] Starting crawl!',kernel().current_shard())
   last_t = time.time()
 
-  if kernel().current_shard() == 1:
+  if kernel().current_shard() == 0:
     console('Adding seed page...')
     key = key_from_url(urlparse("http://kermit.news.cs.nyu.edu/crawlstart.html"))
-    fetch_table.update(
+    print(logging.Logger.root)
+    update_fetch_table(
       key,
       FetchStatus.SHOULD_FETCH)
+    print(logging.Logger.root)
+    logging.Logger.root.parent = None
+    console("[0] Waiting for page...")
     while not(fetch_table.contains(key)):
+      update_tables()
       time.sleep(0.05)
+    console("[0] Page added.")
  
   it = fetch_table.get_iterator(kernel().current_shard())
-  print "iterator..."
+  console("iterator...")
   local = set()
   while not it.done():
-    print "iterate!"
+    console("iterate!")
     local.add(it.key())
     it.Next()
 
@@ -520,7 +535,7 @@ def trigger_crawl():
     
     for url in local:   
       status = fetch_table.get(url)
-      console('Looking AT: %s %s', url, status)
+      console('Looking AT: %s %s',url,status)
       
       url = url_from_key(url)
       
@@ -528,7 +543,11 @@ def trigger_crawl():
 #        check_url(url, status)
       if status < FetchStatus.DONE:
         done = False
-    console("Wait iteration finished with done=%d, running=%d" % (done,running))
+
+    if len(local) == 0:
+      done = False
+
+    console("[%d] Wait iteration finished with done=%d, running=%d" % (kernel().current_shard(),done,running))
     
     time.sleep(0.1)
   
@@ -585,7 +604,10 @@ def check_url(url, status):
     
   if not robots_table.contains(robots_key):
     console('Queueing robots fetch: %s', site)    
-    robots_table.update(robots_key, RobotStatus.FETCHING)
+    if crawler_triggers():
+      robots_table.enqueue_update(robots_key, RobotStatus.FETCHING)
+    else:
+      robots_table.update(robots_key,RobotStatus.FETCHING)
     robots_queue.put(site)
     return FetchCheckStatus.PENDING
   
@@ -595,7 +617,7 @@ def check_url(url, status):
   
   if not check_robots(url):
     console('Blocked by robots "%s"', url_s)
-    update_fetch_table(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST, 1)
+    update_fetch_table(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST, 1, 1) #does proper enqueue_update'ing for triggers
     return FetchCheckStatus.BLACKLIST
     
   last_crawl = 0
