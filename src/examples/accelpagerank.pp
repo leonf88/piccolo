@@ -21,7 +21,7 @@ static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
 DEFINE_string(apr_graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(apr_nodes, 10000, "");
-DEFINE_double(apr_tol, 1e-6, "threshold for updates");
+DEFINE_double(apr_tol, 1e-4, "threshold for updates");
 DEFINE_double(apr_d, 0.85, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
 
@@ -258,9 +258,9 @@ struct AccelPRTrigger : public Trigger<APageId, AccelPRStruct> {
       } else {
         value->pr_int += (FLAGS_apr_d*newvalue.pr_ext)/newvalue.L;
       }
-      fprintf(stderr,"diff %f tol %f\n",abs(value->pr_int-value->pr_ext),FLAGS_apr_tol);
+//      fprintf(stderr,"diff %f tol %f\n",abs(value->pr_int-value->pr_ext),FLAGS_apr_tol);
       if (abs(value->pr_int-value->pr_ext) >= FLAGS_apr_tol) {
-        fprintf(stderr,"Propagating trigger for %ld-%ld\n",key->site,key->page);
+//        fprintf(stderr,"Propagating trigger for %ld-%ld\n",key->site,key->page);
         APageInfo p = apages->get(*key);
         struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int-value->pr_ext };
         vector<APageId>::iterator it = p.adj.begin();
@@ -314,7 +314,7 @@ int AccelPagerank(ConfigData& conf) {
 
   m.restore();
 
-  PMap({ n : pagedb },  {
+  PMap({n : pagedb}, {
     struct APageId p = { n.site(), n.id() };
     struct APageInfo info;
     info.adj.clear();
@@ -322,6 +322,7 @@ int AccelPagerank(ConfigData& conf) {
       struct APageId neigh = { n.target_site(i), n.target_id(i) };
       info.adj.push_back(neigh);
     }
+    fprintf(stdout,"Pushing back %ld-%ld\n",p.site,p.page);
     apages->update(p,info);
   });
 
