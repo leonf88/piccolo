@@ -213,7 +213,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     } else if (info_.accum->accumtype == TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
-      LOG(INFO) << "Executing Trigger [sparse]" << endl;
+//      LOG(INFO) << "Executing Trigger [sparse]" << endl;
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
       if (doUpdate)
         buckets_[b].v = v2;

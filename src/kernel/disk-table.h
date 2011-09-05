@@ -77,6 +77,7 @@ DiskTable<K, V>::DiskTable(StringPiece file_pattern, uint64_t split_files_at) {
 
   for (int i = 0; i < files.size(); ++i) {
     File::Info fi = files[i];
+    VLOG(3) << "DiskTable populating from file " << (i+1) << " of " << files.size() << " <" << fi.name << ">" << endl;
     for (uint64_t j = 0; j < fi.stat.st_size; j += split_files_at) {
       FilePartition*p = new FilePartition();
       p->info = fi;

@@ -139,7 +139,7 @@ public:
     } else if (info_.accum->accumtype == TRIGGER) {
       V v2 = vb[block_pos(k)];
       bool doUpdate = false;
-      LOG(INFO) << "Executing Trigger [dense]" << endl;
+//      LOG(INFO) << "Executing Trigger [dense]" << endl;
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true);	//isNew=true, but this is not reliable
       if (doUpdate)
         vb[block_pos(k)] = v2;
