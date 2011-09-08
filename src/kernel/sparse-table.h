@@ -213,14 +213,23 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     } else if (info_.accum->accumtype == TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
-      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate);
+//      LOG(INFO) << "Executing Trigger [sparse]" << endl;
+      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
       if (doUpdate)
         buckets_[b].v = v2;
     } else {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
     }
   } else {
-    put(k, v);
+    if (info_.accum->accumtype == TRIGGER) {
+      bool doUpdate = true;
+      V v2 = v;
+      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true
+      if (doUpdate)
+        put(k, v2);
+    } else {
+      put(k, v);
+    }
   }
 }
 

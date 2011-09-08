@@ -18,13 +18,14 @@ struct RecordIterator : public TypedTableIterator<uint64_t, Message> {
   void value_str(string *out) { vmarshal_.marshal(*data_, out); }
 
   bool done() {
-//    LOG(INFO) << "RecordIterator: " << p_.info.name << " : " << (pos_ >= p_.end_pos) << ":: " << done_;
-    return done_ || pos_ >= p_.end_pos;
+//    LOG(INFO) << "RecordIterator: done()" << p_.info.name << " : " << (pos_ > p_.end_pos) << ":: " << done_;
+    return done_ || pos_ > p_.end_pos;
   }
 
   void Next() {
     done_ = !r_.read(data_);
     pos_ = r_.fp->tell();
+//    LOG(INFO) << "RecordIterator: Next()" << p_.info.name << " : " << (pos_ > p_.end_pos) << ":: " << done_;
   }
 
   uint64_t pos_;

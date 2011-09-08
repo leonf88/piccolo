@@ -95,8 +95,8 @@ typedef TypedGlobalTable<string, string> StringTable;
 typedef TypedTableIterator<string, int64_t> IntIterator;
 typedef TypedTableIterator<string, string> StringIterator;
 
-typedef Trigger<string, int64_t> IntTrigger;
-typedef Trigger<string, string> StringTrigger;
+//typedef Trigger<string, int64_t> IntTrigger;
+//typedef Trigger<string, string> StringTrigger;
 
 typedef PythonTrigger<string, int64_t> IntPythonTrigger;
 typedef PythonTrigger<string, string> StringPythonTrigger;
@@ -134,6 +134,18 @@ void Init(int argc, char** argv);
     static Accumulator<string>* Max() { return new dsm::Accumulators<string>::Max; }
     static Accumulator<string>* Sum() { return new dsm::Accumulators<string>::Sum; }
     static Accumulator<string>* Replace() { return new dsm::Accumulators<string>::Replace; }
+  };
+
+  struct IntTrigger {
+    static Trigger<string,int64_t>* Null() { return new dsm::Triggers<string,int64_t>::NullTrigger; }
+    static Trigger<string,int64_t>* ReadOnly() { return new dsm::Triggers<string,int64_t>::ReadOnlyTrigger; }
+    static Trigger<string,int64_t>* PythonCode(const string& codeshort, const string& codelong) { return new IntPythonTrigger(0,codeshort,codelong); }
+  };
+
+  struct StringTrigger {
+    static Trigger<string,string>* Null() { return new dsm::Triggers<string,string>::NullTrigger; }
+    static Trigger<string,string>* ReadOnly() { return new dsm::Triggers<string,string>::ReadOnlyTrigger; }
+    static Trigger<string,string>* PythonCode(const string& codeshort, const string& codelong) { return new StringPythonTrigger(0,codeshort,codelong); }
   };
   
   static Sharding::String* StringSharding() { return new Sharding::String; }
@@ -210,7 +222,7 @@ private:
 public:
   Trigger(GlobalTable* thistable);
   Init(GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update, bool*);
+  bool Fire(const K& k, const V& current, V& update, bool isNew);
 };
 
 template <class K, class V>
@@ -218,7 +230,7 @@ struct PythonTrigger<K, V> {
 public:
   PythonTrigger(GlobalTable* thistable, const string& code);
   void Init(GlobalTable* thistable);
-  bool Fire(const K& k, V* update, const V& current, bool*);
+  bool Fire(const K& k, const V& current, V& update, bool isNew);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update);
 };
 
@@ -234,7 +246,7 @@ public:
   void enqueue_update(const K& k, const V&);
   void put(const K& k, const V&);
   
-  void enable_retrigger(K k, TriggerID id);
+  void enable_retrigger(K k);
 
   TypedTableIterator<K, V>* get_iterator(int shard);
   
@@ -243,9 +255,10 @@ public:
 
   %extend {
     // Register a trigger
-    int py_register_trigger(const string& codeshort, const string& codelong) {
-      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, codeshort, codelong);
-      return trigger->trigid;
+    void py_swap_accumulator(const string& codeshort, const string& codelong) {
+//      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, codeshort, codelong);
+		LOG(FATAL) << "Python may not yet swap accumulators" << endl;
+        return;
     }
   }
 };

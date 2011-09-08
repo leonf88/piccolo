@@ -7,6 +7,7 @@
 using namespace dsm;
 using namespace std;
 
+#define PREFETCH 512
 static float TOTALRANK = 0;
 static int NUM_WORKERS = 2;
 
@@ -19,6 +20,7 @@ DEFINE_bool(memory_graph, false,
 
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(nodes, 10000, "");
+DEFINE_int32(show_top, 10, "number of top results to display");
 
 DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
 
@@ -126,7 +128,7 @@ static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
 
   while (r->readURL(&url)) {
     if (i++ % 100000 == 0)
-      LOG(INFO) << "Reading URL " << i-1 << " of " << wgr->nodes;
+      LOG(INFO) << "Reading URL " << i+1 << " of " << wgr->nodes;
 
     // Get host part
     int hostLen = url.find('/', 8);
@@ -146,6 +148,7 @@ static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
     }
 
     out->push_back(pid);
+    ++i;
   }
 
   delete r;
@@ -164,21 +167,23 @@ static void ConvertGraph(string path, int nshards) {
   RecordFile *out[nshards];
   for (int i = 0; i < nshards; ++i) {
     string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_graph_prefix.c_str(), i, nshards, r.nodes);
-    out[i] = new RecordFile(target, "w", RecordFile::LZO);
+    out[i] = new RecordFile(target, "w", RecordFile::NONE);
   }
 
   // XXX Maybe we should take at most FLAGS_nodes nodes
   const WebGraph::Node *node;
   Page n;
+  LOG(INFO) << "Beginning ConvertGraph..." << endl;
   while ((node = r.readNode())) {
-    if (node->node % 100000 == 0)
-      LOG(INFO) << "Reading node " << node->node << " of " << r.nodes;
+    if (i++ % 100000 == 0)
+      LOG(INFO) << "Reading node " << 1+node->node << " of " << r.nodes;
     PageId src = pageIds.at(node->node);
     n.Clear();
     n.set_site(src.site);
     n.set_id(src.page);
     for (unsigned int i = 0; i < node->links.size(); ++i) {
       PageId dest = pageIds.at(node->links[i]);
+      LOG(INFO) << "Translating neighbor node "<<i<<" of "<<node->links.size()<<" @offset="<< node->links[i] <<": site=" << dest.site << ", page=" << dest.page << endl;
       n.add_target_site(dest.site);
       n.add_target_id(dest.page);
     }
@@ -280,9 +285,9 @@ int Pagerank(ConfigData& conf) {
   if (FLAGS_memory_graph) {
     pages = new InMemoryTable(FLAGS_shards);
     TableRegistry::Get()->tables().insert(make_pair(2, pages));
-  } else {
+  } else if (FLAGS_convert_graph.empty()) {
     pages = CreateRecordTable<Page>(2, FLAGS_graph_prefix + "*", false);
-  }
+  } //else we're doing a conversion
 
   StartWorker(conf);
   Master m(conf);
@@ -301,7 +306,10 @@ int Pagerank(ConfigData& conf) {
   });
 
   for (; i < FLAGS_iterations; ++i) {
-    PMap({ n : pages },  {
+    PRunAll(pages, {
+      DiskTable<uint64_t, Page>::Iterator *it =  pages->get_typed_iterator(current_shard());
+      for (; !it->done(); it->Next()) {
+        Page& n = it->value();
         struct PageId p = { n.site(), n.id() };
         next_pr->update(p, random_restart_seed());
 
@@ -315,15 +323,62 @@ int Pagerank(ConfigData& conf) {
           PageId target = { n.target_site(i), n.target_id(i) };
           next_pr->update(target, contribution);
         }
+      }
+      delete it;
     });
 
     PageId pzero = { 0, 0 };
     fprintf(stderr, "Iteration %d; PR %.3f\n", i, curr_pr->contains(pzero) ? curr_pr->get(pzero) : 0);
 
     // Move the values computed from the last iteration into the current table.
-    swap(curr_pr, next_pr);
+    curr_pr->swap(next_pr);
     next_pr->clear();
   }
+
+  //Final evaluation
+  PRunOne(curr_pr, {
+    fprintf(stdout,"PageRank complete, tabulating results...\n");
+    float pr_min = 1, pr_max = 0, pr_sum = 0;
+    struct PageId toplist[FLAGS_show_top];
+    float topscores[FLAGS_show_top];
+	int totalpages = 0;
+
+    for(int shard=0; shard < curr_pr->num_shards(); shard++) {
+      TypedTableIterator<PageId, float> *it = curr_pr->get_typed_iterator(shard,PREFETCH);
+
+      for(; !it->done(); it->Next()) {
+        totalpages++;
+        if (it->value() > pr_max)
+          pr_max = it->value();
+        if (it->value() > topscores[FLAGS_show_top-1]) {
+          topscores[FLAGS_show_top-1] = it->value();
+          toplist[FLAGS_show_top-1] = it->key();
+          for(int i=FLAGS_show_top-2; i>=0; i--) {
+            if (topscores[i] < topscores[i+1]) {
+              float a = topscores[i];
+              struct PageId b = toplist[i];
+              topscores[i] = topscores[i+1];
+              toplist[i] = toplist[i+1];
+              topscores[i+1] = a;
+              toplist[i+1] = b;
+            } else {
+              break;
+            }
+          }
+        }
+        if (it->value() < pr_min)
+          pr_min = it->value();
+        pr_sum += it->value();
+      }
+    }
+    if (0 >= totalpages) { LOG(FATAL) << "No pages found in output table!" << endl; }
+    float pr_avg = pr_sum/totalpages;
+    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,curr_pr->num_shards());
+    fprintf(stdout,"Top Pages:\n");
+    for(int i=0;i<FLAGS_show_top;i++) {
+      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+    }
+  });
 
   return 0;
 }
