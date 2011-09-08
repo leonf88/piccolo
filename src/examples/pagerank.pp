@@ -21,6 +21,7 @@ DEFINE_bool(memory_graph, false,
 DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(nodes, 10000, "");
 DEFINE_int32(show_top, 10, "number of top results to display");
+DEFINE_double(tol,0.0, "convergence tolerance (0 to use iteration count)");
 
 DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
 
@@ -148,7 +149,6 @@ static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
     }
 
     out->push_back(pid);
-    ++i;
   }
 
   delete r;
@@ -174,6 +174,7 @@ static void ConvertGraph(string path, int nshards) {
   const WebGraph::Node *node;
   Page n;
   LOG(INFO) << "Beginning ConvertGraph..." << endl;
+  int i=0;
   while ((node = r.readNode())) {
     if (i++ % 100000 == 0)
       LOG(INFO) << "Reading node " << 1+node->node << " of " << r.nodes;
@@ -183,7 +184,7 @@ static void ConvertGraph(string path, int nshards) {
     n.set_id(src.page);
     for (unsigned int i = 0; i < node->links.size(); ++i) {
       PageId dest = pageIds.at(node->links[i]);
-      LOG(INFO) << "Translating neighbor node "<<i<<" of "<<node->links.size()<<" @offset="<< node->links[i] <<": site=" << dest.site << ", page=" << dest.page << endl;
+//      LOG(INFO) << "Translating neighbor node "<<i<<" of "<<node->links.size()<<" @offset="<< node->links[i] <<": site=" << dest.site << ", page=" << dest.page << endl;
       n.add_target_site(dest.site);
       n.add_target_id(dest.page);
     }
@@ -247,10 +248,14 @@ private:
   int num_shards_;
 };
 
+//Tables in use
 TypedGlobalTable<PageId, float>* curr_pr;
 TypedGlobalTable<PageId, float>* next_pr;
 DiskTable<uint64_t, Page> *pages;
+TypedGlobalTable<int, float>* maxtol;
+static TypedGlobalTable<string, string>* StatsTable = NULL;
 
+//Main PageRank driver
 int Pagerank(ConfigData& conf) {
   site_sizes = InitSites();
 
@@ -271,6 +276,7 @@ int Pagerank(ConfigData& conf) {
   pr_desc->table_id = 1;
   next_pr = CreateTable<PageId, float>(pr_desc);
 
+
   if (FLAGS_build_graph) {
     if (NetworkThread::Get()->id() == 0) {
       LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; " 
@@ -289,6 +295,11 @@ int Pagerank(ConfigData& conf) {
     pages = CreateRecordTable<Page>(2, FLAGS_graph_prefix + "*", false);
   } //else we're doing a conversion
 
+  maxtol  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<float>::Replace);
+  StatsTable = CreateTable(10000,1,new Sharding::String, new Accumulators<string>::Replace);
+  maxtol->resize(FLAGS_shards);
+  StatsTable->resize(1);
+
   StartWorker(conf);
   Master m(conf);
 
@@ -305,7 +316,9 @@ int Pagerank(ConfigData& conf) {
         curr_pr->resize((int)(2 * FLAGS_nodes));
   });
 
-  for (; i < FLAGS_iterations; ++i) {
+  
+  bool done = (i>=FLAGS_iterations);
+  while(!done) {
     PRunAll(pages, {
       DiskTable<uint64_t, Page>::Iterator *it =  pages->get_typed_iterator(current_shard());
       for (; !it->done(); it->Next()) {
@@ -327,12 +340,39 @@ int Pagerank(ConfigData& conf) {
       delete it;
     });
 
+    // Find per-shard max delta
+    PRunAll(curr_pr, {
+      TypedTableIterator<PageId,float>* it = curr_pr->get_typed_iterator(current_shard());
+      float diff = 0;
+      for(; !it->done(); it->Next()) {
+        diff = max(diff,(next_pr->get(it->key())-it->value())-random_restart_seed());
+      }
+      maxtol->update(current_shard(),diff);
+    });
+
+    // Find overall max delta, establish quiescence state
+    PRunOne(maxtol, {
+      float maxdiff = 0;
+	  for(int shard = 0; shard < curr_pr->num_shards(); shard++) {
+        maxdiff = max(maxdiff,maxtol->get(shard));
+      }
+      fprintf(stderr, "Maximum PR delta for iteration: %f\n",maxdiff);
+      StatsTable->update("q",(maxdiff<FLAGS_tol)?"q":"u");	//_q_uiescent or _u_nstable
+    });
+
     PageId pzero = { 0, 0 };
     fprintf(stderr, "Iteration %d; PR %.3f\n", i, curr_pr->contains(pzero) ? curr_pr->get(pzero) : 0);
 
     // Move the values computed from the last iteration into the current table.
     curr_pr->swap(next_pr);
     next_pr->clear();
+
+	i++;
+    if (FLAGS_tol == 0.0) {
+      done = (i>=FLAGS_iterations);
+    } else {
+      done = ((i > 1) && (0 == strcmp("q",StatsTable->get("q").c_str())));
+    }
   }
 
   //Final evaluation
