@@ -322,7 +322,6 @@ int AccelPagerank(ConfigData& conf) {
       struct APageId neigh = { n.target_site(i), n.target_id(i) };
       info.adj.push_back(neigh);
     }
-    fprintf(stdout,"Pushing back %ld-%ld\n",p.site,p.page);
     apages->update(p,info);
   });
 
