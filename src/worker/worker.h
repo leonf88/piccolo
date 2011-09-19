@@ -25,7 +25,7 @@ class Worker : public TableHelper, private boost::noncopyable {
 struct Stub;
 public:
   Worker(const ConfigData &c);
-  ~Worker();
+  virtual ~Worker();
 
   void Run();
 
@@ -49,6 +49,7 @@ public:
   // Barrier: wait until all table data is transmitted.
   void HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc);
   void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleStartRestore(const StartRestore& req, EmptyMessage *resp, const RPCInfo& rpc);
 
 /*
   // Enable or disable triggers
@@ -67,7 +68,6 @@ public:
 private:
   void StartCheckpoint(int epoch, CheckpointType type);
   void FinishCheckpoint();
-  void Restore(int epoch);
   void UpdateEpoch(int peer, int peer_epoch);
 
   mutable boost::recursive_mutex state_lock_;

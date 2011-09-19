@@ -95,6 +95,8 @@ static int KMeans(ConfigData& conf) {
        
         clusters->update(p.source, c);
       });
+      
+      m.checkpoint();
     }
   }
   return 0;
