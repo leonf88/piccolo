@@ -266,12 +266,12 @@ void Master::start_checkpoint() {
     return;
   }
 
-  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
-
   Timer cp_timer;
 
   checkpoint_epoch_ += 1;
   checkpointing_ = true;
+
+  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
@@ -283,8 +283,6 @@ void Master::start_checkpoint() {
   for (int i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
   }
-
-  LOG(INFO) << "Checkpoint finished in " << cp_timer.elapsed();
 }
 
 void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
@@ -294,7 +292,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
     return;
   }
 
-  VLOG(1) << "Starting checkpoint on: " << worker_id;
+  VLOG(1) << "Starting checkpoint on worker: " << worker_id;
 
   workers_[worker_id]->checkpointing = true;
 
@@ -307,6 +305,8 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
   }
 
   network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
+  EmptyMessage resp;
+  network_->Read(1 + worker_id, MTYPE_START_CHECKPOINT_DONE, &resp);
 }
 
 void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
@@ -318,11 +318,9 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   }
 
   EmptyMessage resp;
-  network_->Read(1 + worker_id, MTYPE_CHECKPOINT_DONE, &resp);
+  network_->Read(1 + worker_id, MTYPE_FINISH_CHECKPOINT_DONE, &resp);
 
   VLOG(1) << worker_id << " finished checkpointing.";
-
-
   workers_[worker_id]->checkpointing = false;
 }
 
@@ -331,6 +329,8 @@ void Master::finish_checkpoint() {
     finish_worker_checkpoint(i, current_run_);
     CHECK_EQ(workers_[i]->checkpointing, false);
   }
+
+  LOG(INFO) << "All workers finished checkpointing.  Flushing.";
 
   Args *params = current_run_.params.ToMessage();
   Args *cp_vars = cp_vars_.ToMessage();
@@ -399,8 +399,10 @@ bool Master::restore() {
 
   LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
 
-  kernel_epoch_ = info.kernel_epoch();
-  checkpoint_epoch_ = info.checkpoint_epoch();
+  // The next checkpoint should be committed to a separate epoch from the
+  // restored checkpoint.
+  kernel_epoch_ = info.kernel_epoch() + 1;
+  checkpoint_epoch_ = info.checkpoint_epoch() + 1;
 
   StartRestore req;
   req.set_epoch(epoch);
@@ -747,7 +749,6 @@ void Master::barrier() {
                   !w.checkpointing) {
                 start_worker_checkpoint(w.id, current_run_);
               }
-
             }
 
             if (need_update) {
@@ -773,18 +774,26 @@ void Master::barrier() {
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
-	VLOG(3) << "Sent flush broadcast to workers" << endl;
+    VLOG(3) << "Sent flush broadcast to workers" << endl;
 
     int flushed=0,applied=0;
     FlushResponse done_msg;
-    int w_id = 0;
+    int worker_id = 0;
     while (flushed < workers_.size()) {
 	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
-      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_FLUSH_RESPONSE, &done_msg, &w_id)) {
+      if (network_->TryRead(MPI::ANY_SOURCE,
+                            MTYPE_FLUSH_RESPONSE,
+                            &done_msg,
+                            &worker_id)) {
         flushed++;
-        if (done_msg.updatesdone() > 0)
+        if (done_msg.updatesdone() > 0) {
           quiescent = false;
-        VLOG(3) << "Received flush response " << flushed << " of " << workers_.size() << " with " << done_msg.updatesdone() << " updates done." << endl;
+        }
+
+        VLOG(3) << "Received flush response " << flushed
+                << " of " << workers_.size()
+                << " with " << done_msg.updatesdone()
+                << " updates done." << endl;
       } else {
         Sleep(FLAGS_sleep_time);
       }
@@ -793,23 +802,22 @@ void Master::barrier() {
     //2nd round-trip to make sure all workers have applied all updates
     //XXX: incorrect if MPI does not guarantee remote delivery
     network_->Broadcast(MTYPE_WORKER_APPLY, empty);
-	VLOG(3) << "Sent apply broadcast to workers" << endl;
+    VLOG(3) << "Sent apply broadcast to workers" << endl;
 
-	//If we don't wait for Apply responses, then we will send more FLUSH messages
-	//potentially even out of other with APPLY, which can easily cause deadlocks
-	//on the sl mutex because of multiple simultaneous attempted HandlePutRequest()s
+    //If we don't wait for Apply responses, then we will send more FLUSH messages
+    //potentially even out of other with APPLY, which can easily cause deadlocks
+    //on the sl mutex because of multiple simultaneous attempted HandlePutRequest()s
 
     EmptyMessage apply_msg;
     while (applied < workers_.size()) {
 	  //VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
-      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &w_id)) {
+      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
         applied++;
         VLOG(3) << "Received apply done " << applied << " of " << workers_.size() << endl;
       } else {
         Sleep(FLAGS_sleep_time);
       }
     }
-
   } while (!quiescent);
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {

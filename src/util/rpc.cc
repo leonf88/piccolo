@@ -329,10 +329,10 @@ void NetworkThread::WaitForSync(int method, int count) {
       if (check_reply_queue(*i, method, NULL)) {
         pending.erase(i);
       } else {
-        LOG(INFO) << "Sync blocked on worker " << *i;
+        VLOG(2) << "Sync blocked on worker " << *i;
       }
     }
-    LOG(INFO) << "Waiting for sync " << pending.size();
+    VLOG(2) << "Waiting for sync " << pending.size();
     Sleep(FLAGS_sleep_time);
   }
 }

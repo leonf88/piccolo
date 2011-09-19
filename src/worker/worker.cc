@@ -245,6 +245,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   }
 
   if (checkpoint_done) {
+    LOG(INFO) << "Finishing rolling checkpoint on worker " << id();
     FinishCheckpoint();
   }
 }
@@ -291,6 +292,8 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
     }
   }
 
+  EmptyMessage req;
+  network_->Send(config_.master_id(), MTYPE_START_CHECKPOINT_DONE, req);
   VLOG(1) << "Starting delta logging... " << MP(id(), epoch_, epoch);
 }
 
@@ -309,11 +312,13 @@ void Worker::FinishCheckpoint() {
     Checkpointable *t = dynamic_cast<Checkpointable*>(i->second);
     if (t) {
       t->finish_checkpoint();
+    } else {
+      LOG(INFO) << "Skipping finish checkpoint for " << i->second->id();
     }
   }
 
   EmptyMessage req;
-  network_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
+  network_->Send(config_.master_id(), MTYPE_FINISH_CHECKPOINT_DONE, req);
 }
 
 void Worker::HandleStartRestore(const StartRestore& req,
@@ -355,7 +360,7 @@ void Worker::HandlePutRequest() {
 
     MutableGlobalTable *t = TableRegistry::Get()->mutable_table(put.table());
     t->ApplyUpdates(put);
-	VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
+    VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
 
     // Record messages from our peer channel up until they checkpointed.
     if (active_checkpoint_ == CP_MASTER_CONTROLLED ||
@@ -546,7 +551,7 @@ void Worker::CheckForMasterUpdates() {
     StartCheckpoint(checkpoint_msg.epoch(),
                     (CheckpointType)checkpoint_msg.checkpoint_type());
   }
-  
+
   while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &empty)) {
     FinishCheckpoint();
   }
