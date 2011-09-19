@@ -132,15 +132,6 @@ void MutableGlobalTableBase::start_checkpoint(const string& f) {
   }
 }
 
-void MutableGlobalTableBase::write_delta(const TableData& d) {
-  if (!is_local_shard(d.shard())) {
-    LOG_EVERY_N(INFO, 1000) << "Ignoring delta write for forwarded data";
-    return;
-  }
-
-  partitions_[d.shard()]->write_delta(d);
-}
-
 void MutableGlobalTableBase::finish_checkpoint() {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
@@ -150,6 +141,17 @@ void MutableGlobalTableBase::finish_checkpoint() {
     }
   }
 }
+
+void MutableGlobalTableBase::write_delta(const TableData& d) {
+  if (!is_local_shard(d.shard())) {
+    LOG_EVERY_N(INFO, 1000) << "Ignoring delta write for forwarded data";
+    return;
+  }
+
+  partitions_[d.shard()]->write_delta(d);
+}
+
+
 
 void MutableGlobalTableBase::restore(const string& f) {
   for (int i = 0; i < partitions_.size(); ++i) {
