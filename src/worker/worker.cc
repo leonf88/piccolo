@@ -8,8 +8,8 @@
 
 DEFINE_double(sleep_hack, 0.0, "");
 DEFINE_double(sleep_time, 0.001, "");
-DEFINE_string(checkpoint_write_dir, "/scratch/power/checkpoints", "");
-DEFINE_string(checkpoint_read_dir, "/scratch/power/checkpoints", "");
+DEFINE_string(checkpoint_write_dir, "/var/tmp/piccolo-checkpoint", "");
+DEFINE_string(checkpoint_read_dir, "/var/tmp/piccolo-checkpoint", "");
 
 namespace dsm {
 
@@ -74,6 +74,10 @@ Worker::Worker(const ConfigData &c) {
   RegisterCallback(MTYPE_WORKER_APPLY,
                    new EmptyMessage, new EmptyMessage,
                    &Worker::HandleApply, this);
+
+  RegisterCallback(MTYPE_RESTORE,
+                   new StartRestore, new EmptyMessage,
+                   &Worker::HandleStartRestore, this);
 
 /*
   RegisterCallback(MTYPE_ENABLE_TRIGGER,
@@ -312,7 +316,10 @@ void Worker::FinishCheckpoint() {
   network_->Send(config_.master_id(), MTYPE_CHECKPOINT_DONE, req);
 }
 
-void Worker::Restore(int epoch) {
+void Worker::HandleStartRestore(const StartRestore& req,
+                                     EmptyMessage* resp,
+                                     const RPCInfo& rpc) {
+  int epoch = req.epoch();
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   LOG(INFO) << "Worker restoring state from epoch: " << epoch;
   epoch_ = epoch;
@@ -326,8 +333,7 @@ void Worker::Restore(int epoch) {
     }
   }
 
-  EmptyMessage req;
-  network_->Send(config_.master_id(), MTYPE_RESTORE_DONE, req);
+  LOG(INFO) << "State restored.";
 }
 
 void Worker::HandlePutRequest() {
@@ -543,11 +549,6 @@ void Worker::CheckForMasterUpdates() {
   
   while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &empty)) {
     FinishCheckpoint();
-  }
-
-  StartRestore restore_msg;
-  while (network_->TryRead(config_.master_id(), MTYPE_RESTORE, &restore_msg)) {
-    Restore(restore_msg.epoch());
   }
 }
 

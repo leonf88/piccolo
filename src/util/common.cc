@@ -205,8 +205,8 @@ void Init(int argc, char** argv) {
                               " -bycore"
                               " -nooversubscribe"
                               " -n %d"
-                              " %s"
-                              " --log_prefix=false ",
+                              " %s",
+//                              " --log_prefix=false ",
                               FLAGS_hostfile.c_str(),
                               FLAGS_workers,
                               JoinString(&argv[0], &argv[argc]).c_str()

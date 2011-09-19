@@ -5,7 +5,6 @@
 
 DECLARE_bool(localtest);
 DECLARE_double(sleep_time);
-DEFINE_bool(rpc_log, false, "");
 
 namespace dsm {
 
@@ -317,11 +316,23 @@ void NetworkThread::SyncBroadcast(int method, const Message& msg) {
 
 void NetworkThread::WaitForSync(int method, int count) {
   EmptyMessage empty;
-  while (count > 0) {
-    for (int i = 0; i < world_->Get_size(); ++i) {
-      if (check_reply_queue(i, method, NULL))
-        --count;
+  unordered_set<int> pending;
+
+  for (int i = 1; i < world_->Get_size(); ++i) {
+    pending.insert(i);
+  }
+
+  while (!pending.empty()) {
+    for (unordered_set<int>::iterator i = pending.begin();
+         i != pending.end();
+         ++i) {
+      if (check_reply_queue(*i, method, NULL)) {
+        pending.erase(i);
+      } else {
+        LOG(INFO) << "Sync blocked on worker " << *i;
+      }
     }
+    LOG(INFO) << "Waiting for sync " << pending.size();
     Sleep(FLAGS_sleep_time);
   }
 }
