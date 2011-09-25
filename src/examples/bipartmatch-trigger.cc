@@ -310,10 +310,6 @@ class BPMTKernel : public DSMKernel {
 
 		void EvalPerformance() {
 			int left_matched=0, right_matched=0;
-			int rightset[FLAGS_tright_vertices];
-
-			//float edgecost = 0.f;
-			//float worstedgecost = 0.f;
 
 			for(int i=0; i<leftmatches->num_shards(); i++) {
 				TypedTableIterator<int, int> *it = 
@@ -326,25 +322,6 @@ class BPMTKernel : public DSMKernel {
 				}
 			}
 
-/*
-			for(int i=0; i<FLAGS_tright_vertices; i++) {
-				rightset[i] = 0;
-				right_matched += (-1 < rightmatches->get(i));
-
-				//TODO calculate how the costs worked out
-			}
-
-			for(int i=0; i<FLAGS_tleft_vertices; i++) {
-				int rightmatch = leftmatches->get(i);
-				if (-1 < rightmatch) {
-					left_matched++;
-					rightset[rightmatch]++;
-					if (rightset[rightmatch] > 1)
-						LOG(ERROR) << rightset[rightmatch] << " left vertices have right vertex " <<
-							rightmatch << " as a match: one is " << i << endl;
-				}
-			}
-*/
 			printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_tleft_vertices);
 			printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_tright_vertices);
 		}

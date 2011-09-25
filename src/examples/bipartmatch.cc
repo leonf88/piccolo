@@ -189,7 +189,6 @@ class BPMKernel : public DSMKernel {
 
 		void EvalPerformance() {
 			int left_matched=0, right_matched=0;
-			int rightset[FLAGS_right_vertices];
 
 			for(int i=0; i<leftmatches->num_shards(); i++) {
 				TypedTableIterator<int, int> *it = 

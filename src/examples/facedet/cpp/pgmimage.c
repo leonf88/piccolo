@@ -120,7 +120,11 @@ IMAGE *img_open(char *filename)
   new->name = img_basename(filename);
 
   /*** Scan pnm type information, expecting P5 ***/
-  fgets(line, 511, pgm);
+  if (NULL == fgets(line, 511, pgm)) {
+    printf("IMGOPEN: Failed to read data from PGM file\n");
+    fclose(pgm);
+    return(NULL);
+  }
   sscanf(line, "P%d %d %d %d", &type, &nc, &nr, &maxval);
   if (type != 5 && type != 2) {
     printf("IMGOPEN: Only handles pgm files (type P5 or P2)\n");
