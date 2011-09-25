@@ -21,7 +21,6 @@ using namespace std;
 
 void ImageNet::load_target(IMAGE *img, BPNN* net)
 {
-  int scale;
   char userid[40], head[40], expression[40], eyes[40], photo[40];
 
   userid[0] = head[0] = expression[0] = eyes[0] = photo[0] = '\0';

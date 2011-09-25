@@ -120,10 +120,13 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
 
 static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
   WebGraph::URLReader *r = wgr->newURLReader();
+
+  map<string,struct PageId> hosts;
+  map<string,struct PageId>::iterator it;
   struct PageId pid = {-1, -1};
-  string prev, url;
-  int prevHostLen = 0;
+  string prev, url, host, prevhost;
   int i = 0;
+  int maxsite = 0;
 
   out->reserve(wgr->nodes);
 
@@ -136,16 +139,24 @@ static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
     CHECK(hostLen != url.npos) << "Failed to split host in URL " << url;
     ++hostLen;
 
-    if (prev.compare(0, prevHostLen, url, 0, hostLen) == 0) {
-      // Same site
-      ++pid.page;
+    host = url.substr(7,hostLen-7);
+
+    if (0 == host.compare(prevhost)) {
+      // Existing site.  Pid.site already set. it already set
+      pid.page = it->second.page++;
+    } else if ((it = hosts.find(host)) != hosts.end()) {
+      // Existing site
+      pid.page = it->second.page++;
+      pid.site = it->second.site;
     } else {
       // Different site
-      ++pid.site;
       pid.page = 0;
+      pid.site = maxsite;
+      struct PageId newpid = {maxsite++, 1};
+	  hosts.insert(pair<string, struct PageId>(host,newpid));
+      //LOG(INFO) << "Host " << host << " is new site # " << pid.site;
 
       swap(prev, url);
-      prevHostLen = hostLen;
     }
 
     out->push_back(pid);
@@ -153,7 +164,7 @@ static void WebGraphPageIds(WebGraph::Reader *wgr, vector<PageId> *out) {
 
   delete r;
 
-  LOG(INFO) << pid.site+1 << " total sites read";
+  LOG(INFO) << "URLReader: " << maxsite << " total sites read containing " << i << " nodes";
 }
 
 static void ConvertGraph(string path, int nshards) {
@@ -191,8 +202,9 @@ static void ConvertGraph(string path, int nshards) {
     out[src.site % nshards]->write(n);
   }
 
-  for (int i = 0; i < nshards; ++i)
-    delete out[i];
+  for (int j = 0; j < nshards; ++j)
+    delete out[j];
+  LOG(INFO) << "ConvertGraph: " << i << " nodes read";
 }
 
 // Generate a graph on-demand rather then reading from disk.
@@ -255,6 +267,38 @@ DiskTable<uint64_t, Page> *pages;
 TypedGlobalTable<int, float>* maxtol;
 static TypedGlobalTable<string, string>* StatsTable = NULL;
 
+// This kernel contains awkward functions that need to directly play with the RunDescriptor,
+// and therefore can't be run via the abstracted P RunOne/P RunAll/P Map interfaces.
+class prcp_kern : public DSMKernel {
+public:
+  // Fake little method to cause a checkpoint
+  void prcp_kern_cp() {
+    volatile int i=0;
+    i++;
+  }
+
+  // Perform prescaling of a loaded checkpoint's PR values
+  void prcp_kern_prescale() {
+    const string& psfs("psf");
+    int psf = get_arg<int>(psfs);
+    TypedTableIterator<PageId,float>* it = curr_pr->get_typed_iterator(current_shard());
+    for(; !it->done(); it->Next()) {
+      //negative zeroes it, fraction scales it.
+      float newpr = -it->value()+(it->value()/psf);
+      curr_pr->update(it->key(),newpr);
+    }
+    it = next_pr->get_typed_iterator(current_shard());
+    for(; !it->done(); it->Next()) {
+      float newpr = -it->value()+(it->value()/psf);
+      next_pr->update(it->key(),newpr);
+    }
+  }
+};
+
+REGISTER_KERNEL(prcp_kern);
+REGISTER_METHOD(prcp_kern,prcp_kern_cp);
+REGISTER_METHOD(prcp_kern,prcp_kern_prescale);
+
 //Main PageRank driver
 int Pagerank(ConfigData& conf) {
   site_sizes = InitSites();
@@ -297,8 +341,8 @@ int Pagerank(ConfigData& conf) {
 
   maxtol  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<float>::Replace);
   StatsTable = CreateTable(10000,1,new Sharding::String, new Accumulators<string>::Replace);
-  maxtol->resize(FLAGS_shards);
-  StatsTable->resize(1);
+  maxtol->resize(FLAGS_shards*2); //first FLAGS_shards nodes for max tol, second FLAGS_shards nodes for PR sums
+  StatsTable->resize(1); //pass quiescence state
 
   StartWorker(conf);
   Master m(conf);
@@ -308,19 +352,33 @@ int Pagerank(ConfigData& conf) {
     return 0;
   }
 
-  m.restore();
-
-  int &i = m.get_cp_var<int>("iteration", 0);
   PRunAll(curr_pr, {
         next_pr->resize((int)(2 * FLAGS_nodes));
         curr_pr->resize((int)(2 * FLAGS_nodes));
   });
 
-  
-  bool done = (i>=FLAGS_iterations);
+  bool restored = m.restore();			//Restore checkpoint, if it exists and restore flag is true.  Useful for stopping the process and modifying the graph.
+  fprintf(stderr,"%s restore%s previous checkpoint.\n",(restored?"Successfully":"Did not successfully"),(restored?"d":""));
+
+  int &i = m.get_cp_var<int>("iteration", 0);	//actual iteration count
+  int i2 = 0;									//number of iterations since this particular run started
+
+  //If necessary, do some pre-scaling
+  if (i != 0) {
+    RunDescriptor prescale_rd("prcp_kern", "prcp_kern_prescale", curr_pr);
+    prescale_rd.params.put("psf",i);
+    m.run_all(prescale_rd);
+  }
+
+  bool done = (i>=FLAGS_iterations) && FLAGS_tol == 0.0;
+
+  struct timeval start_time, end_time;
+  gettimeofday(&start_time, NULL);
+
   while(!done) {
     PRunAll(pages, {
       DiskTable<uint64_t, Page>::Iterator *it =  pages->get_typed_iterator(current_shard());
+      int pcount=0;
       for (; !it->done(); it->Next()) {
         Page& n = it->value();
         struct PageId p = { n.site(), n.id() };
@@ -336,6 +394,7 @@ int Pagerank(ConfigData& conf) {
           PageId target = { n.target_site(i), n.target_id(i) };
           next_pr->update(target, contribution);
         }
+        pcount++;
       }
       delete it;
     });
@@ -343,21 +402,28 @@ int Pagerank(ConfigData& conf) {
     // Find per-shard max delta
     PRunAll(curr_pr, {
       TypedTableIterator<PageId,float>* it = curr_pr->get_typed_iterator(current_shard());
-      float diff = 0;
+      float diff = -999999.9;
+      double sum = 0;
       for(; !it->done(); it->Next()) {
-        diff = max(diff,(next_pr->get(it->key())-it->value())-random_restart_seed());
+        float thispr = it->value();
+        CHECK(next_pr->contains(it->key())) << "Missing key from next_pr! site " << it->key().site << ", page " << it->key().page;
+        diff = max(diff,(next_pr->get(it->key())-thispr)-random_restart_seed());
+        sum += thispr;
       }
-      maxtol->update(current_shard(),diff);
+      maxtol->update(current_shard(),diff);	//first num_shards items are per-shard max deltas
+      maxtol->update(current_shard()+curr_pr->num_shards(),sum);	//next num_shard items are per-shard PR sums
     });
 
     // Find overall max delta, establish quiescence state
     PRunOne(maxtol, {
-      float maxdiff = 0;
+      float maxdiff = -99999.9;
+      double sum = 0;
 	  for(int shard = 0; shard < curr_pr->num_shards(); shard++) {
         maxdiff = max(maxdiff,maxtol->get(shard));
+        sum += maxtol->get(shard+curr_pr->num_shards());
       }
-      fprintf(stderr, "Maximum PR delta for iteration: %f\n",maxdiff);
-      StatsTable->update("q",(maxdiff<FLAGS_tol)?"q":"u");	//_q_uiescent or _u_nstable
+      fprintf(stderr, "Maximum PR delta=%e, sum=%f, scaled max=%e\n",maxdiff,sum,maxdiff/sum);	//scaling necessary because of PR method used
+      StatsTable->update("q",((maxdiff/sum)<FLAGS_tol)?"q":"u");	//_q_uiescent or _u_nstable based on tolerance vs. max delta PR
     });
 
     PageId pzero = { 0, 0 };
@@ -367,21 +433,38 @@ int Pagerank(ConfigData& conf) {
     curr_pr->swap(next_pr);
     next_pr->clear();
 
-	i++;
-    if (FLAGS_tol == 0.0) {
+	i++; i2++;
+    if (FLAGS_tol == 0.0) {			//0.0 == use strict iteration count
       done = (i>=FLAGS_iterations);
     } else {
-      done = ((i > 1) && (0 == strcmp("q",StatsTable->get("q").c_str())));
+      done = ((i2 > 1) && (0 == strcmp("q",StatsTable->get("q").c_str())));	//otherwise check if tolerance is reached
+																			//why the i2 check? Because other restarting with a modified/augmented
+																			//graph fails, since it thinks it converged on the first iter
     }
   }
+
+  gettimeofday(&end_time, NULL);
+  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+  cout << "Total PageRank time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
+
+  //Perform checkpoint
+  vector<int> cptables;
+  cptables.push_back(0);
+  cptables.push_back(1);
+  cptables.push_back(3);
+  RunDescriptor cp_rd("prcp_kern", "prcp_kern_cp", curr_pr, cptables);
+  m.run_all(cp_rd);
 
   //Final evaluation
   PRunOne(curr_pr, {
     fprintf(stdout,"PageRank complete, tabulating results...\n");
     float pr_min = 1, pr_max = 0, pr_sum = 0;
-    struct PageId toplist[FLAGS_show_top];
-    float topscores[FLAGS_show_top];
+    struct PageId toplist[FLAGS_show_top];					//Array of top-scoring page IDs
+    float topscores[FLAGS_show_top];						//Array of top-scoring page ranks
 	int totalpages = 0;
+    for(int i=0; i<FLAGS_show_top; i++) {
+      topscores[i] = -99999.9999;
+    }
 
     for(int shard=0; shard < curr_pr->num_shards(); shard++) {
       TypedTableIterator<PageId, float> *it = curr_pr->get_typed_iterator(shard,PREFETCH);
@@ -416,7 +499,7 @@ int Pagerank(ConfigData& conf) {
     fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,curr_pr->num_shards());
     fprintf(stdout,"Top Pages:\n");
     for(int i=0;i<FLAGS_show_top;i++) {
-      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+      fprintf(stdout,"%d\t%e\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
     }
   });
 
