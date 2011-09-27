@@ -71,11 +71,31 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-exec_program("mpic++ -showme:compile" OUTPUT_VARIABLE MPI_COMPILE_FLAGS)
-exec_program("mpic++ -showme:incdirs" OUTPUT_VARIABLE MPI_INCDIRS)
-exec_program("mpic++ -showme:link" OUTPUT_VARIABLE MPI_LINK_FLAGS)
-exec_program("mpic++ -showme:libdirs" OUTPUT_VARIABLE MPI_LIBDIRS)
-exec_program("mpic++ -showme:libs" OUTPUT_VARIABLE MPI_LIBS)
+exec_program("mpic++ -showme:compile" OUTPUT_VARIABLE MPI_COMPILE_FLAGS RETURN_VALUE MPI_COMPILE_RV)
+exec_program("mpic++ -showme:incdirs" OUTPUT_VARIABLE MPI_INCDIRS RETURN_VALUE MPI_INCDIR_RV)
+exec_program("mpic++ -showme:link" OUTPUT_VARIABLE MPI_LINK_FLAGS RETURN_VALUE MPI_LINK_RV)
+exec_program("mpic++ -showme:libdirs" OUTPUT_VARIABLE MPI_LIBDIRS RETURN_VALUE MPI_LIBDIR_RV)
+exec_program("mpic++ -showme:libs" OUTPUT_VARIABLE MPI_LIBS RETURN_VALUE MPI_LIB_RC)
+
+if (MPI_COMPILE_RV)
+message(FATAL_ERROR "Failed to execute mpic++ to gather environment information.")
+endif()
+
+if (MPI_INCDIR_RV)
+message(FATAL_ERROR "Failed to execute mpic++ to gather environment information.")
+endif()
+
+if (MPI_LINK_RV)
+message(FATAL_ERROR "Failed to execute mpic++ to gather environment information.")
+endif()
+
+if (MPI_LIBDIR_RV)
+message(FATAL_ERROR "Failed to execute mpic++ to gather environment information.")
+endif()
+
+if (MPI_LIB_RV)
+message(FATAL_ERROR "Failed to execute mpic++ to gather environment information.")
+endif()
 
 string(REPLACE " " ";" MPI_INCDIRS "${MPI_INCDIRS}")
 string(REPLACE " " ";" MPI_LINK_FLAGS "${MPI_LINK_FLAGS}")
