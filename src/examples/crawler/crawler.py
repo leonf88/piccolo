@@ -448,8 +448,8 @@ def fetchadd(k,current,update,isnew):
   print(logging.Logger.root)
   return True
 
-def fetchretrigger(k):
-  console("Long Trigger: %s %d %d" % (k, current, update))
+def fetchretrigger(k,lastrun):
+  console("Long Trigger: %s %d" % (k, lastrun))
   return True
 
 def robotsadd(k,current,update,isnew):
@@ -477,8 +477,8 @@ def crawl_setlong(k,current,update,isnew):
   enable_retrigger(k)
   return True
 
-def crawl_setlongtrigger(k):
-  console("crawling %s" % (k))
+def crawl_setlongtrigger(k,lastrun):
+  console("crawling %s (terminating = %d)" % (k,lastrun))
   page = Page.create(k)
   if page:
     try:

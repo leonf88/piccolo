@@ -56,7 +56,7 @@ struct SSSPTrigger : public Trigger<int, double> {
 			*doUpdate = true;
 			return;
 		}
-		bool LongFire(const int key) {
+		bool LongFire(const int key, bool lastrun) {
 			return false;
 		}
 };

@@ -71,7 +71,7 @@ public:
   PythonTrigger(dsm::GlobalTable* thistable, const string& codeshort, const string& codelong);
   void Init(dsm::GlobalTable* thistable);
   void Fire(const K* k, V* value, const V& newvalue, bool* doUpdate, bool isNew);
-  bool LongFire(const K k);
+  bool LongFire(const K k, bool lastrun);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isLongFire, bool isNew);
 
   TriggerID trigid;

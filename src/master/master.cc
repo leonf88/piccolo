@@ -768,9 +768,10 @@ void Master::barrier() {
   VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_ << endl;
 
   bool quiescent;
+  EmptyMessage empty;
+  int worker_id = 0;
   do {
     quiescent = true;
-    EmptyMessage empty;
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
@@ -778,7 +779,6 @@ void Master::barrier() {
 
     int flushed=0,applied=0;
     FlushResponse done_msg;
-    int worker_id = 0;
     while (flushed < workers_.size()) {
 	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
       if (network_->TryRead(MPI::ANY_SOURCE,
@@ -819,6 +819,21 @@ void Master::barrier() {
       }
     }
   } while (!quiescent);
+
+  // Finally, we can do some cleanup/finalization tasks.  For now, this only
+  // includes turning off any pending long triggers.
+  network_->Broadcast(MTYPE_WORKER_FINALIZE, empty);
+  VLOG(3) << "Sent finalize broadcast to workers" << endl;
+  int finalized = 0;
+  EmptyMessage finalize_msg;
+  while (finalized < workers_.size()) {
+    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_FINALIZE_DONE, &finalize_msg, &worker_id)) {
+      finalized++;
+      VLOG(3) << "Received finalize done " << finalized << " of " << workers_.size() << endl;
+    } else {
+      Sleep(FLAGS_sleep_time);
+    }
+  }
 
   if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
     if (!checkpointing_) {

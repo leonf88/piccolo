@@ -33,6 +33,9 @@ enum MessageTypes {
   MTYPE_ENABLE_TRIGGER = 38;
 
   MTYPE_FLUSH_RESPONSE = 39;
+
+  MTYPE_WORKER_FINALIZE = 40;
+  MTYPE_WORKER_FINALIZE_DONE = 41;
 };
 
 message EmptyMessage {}

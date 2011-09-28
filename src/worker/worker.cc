@@ -75,6 +75,10 @@ Worker::Worker(const ConfigData &c) {
                    new EmptyMessage, new EmptyMessage,
                    &Worker::HandleApply, this);
 
+  RegisterCallback(MTYPE_WORKER_FINALIZE,
+                   new EmptyMessage, new EmptyMessage,
+                   &Worker::HandleFinalize, this);
+
   RegisterCallback(MTYPE_RESTORE,
                    new StartRestore, new EmptyMessage,
                    &Worker::HandleStartRestore, this);
@@ -518,6 +522,26 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCI
 
   HandlePutRequest();
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
+}
+
+// For now, this only stops Long Trigger (aka retriggering).  Could be used for other
+// kernel finalization tasks too, though.
+void Worker::HandleFinalize(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  Timer net;
+  VLOG(2) << "Finalize request received from master; performing finalization." << endl;
+
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+    if (t) {
+      t->KernelFinalize();	//just does retrigger_stop() for now
+    }
+  }
+
+  VLOG(2) << "Telling master: Finalized." << endl;
+  network_->Send(config_.master_id(), MTYPE_WORKER_FINALIZE_DONE, *resp);
+
+  stats_["network_time"] += net.elapsed();
 }
 
 /*

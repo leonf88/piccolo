@@ -287,7 +287,7 @@ struct AccelPRTrigger : public Trigger<APageId, AccelPRStruct> {
       }
       return;
     }
-    bool LongFire(const APageId key) {
+    bool LongFire(const APageId key, bool lastrun) {
       return false;
     }
 }; };
@@ -358,13 +358,15 @@ int AccelPagerank(ConfigData& conf) {
     apages->update(p,info);	//some/all of these are wasteful when restoring from checkpoint
   });
 
+  struct timeval start_time, end_time;
+  gettimeofday(&start_time, NULL);
+
   //Do initialization! But don't start processing yet, otherwise some of the vertices
   //will exist because of trigger propagation before they get their initialization value.
   PRunAll(apages, {
     TypedTableIterator<APageId, APageInfo> *it =
       apages->get_typed_iterator(current_shard());
     int i=0;
-    fprintf(stderr,"initval %f\n",(1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
     for(; !it->done(); it->Next()) {
       if (!prs->contains(it->key())) {
         struct AccelPRStruct initval = { it->value().adj.size(), 0, (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d) };
@@ -374,9 +376,6 @@ int AccelPagerank(ConfigData& conf) {
     }
     fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
   });
-
-  struct timeval start_time, end_time;
-  gettimeofday(&start_time, NULL);
 
   //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
   PRunAll(prs, {

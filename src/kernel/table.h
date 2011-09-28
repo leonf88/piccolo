@@ -86,7 +86,7 @@ struct Trigger : public AccumulatorBase {
     accumtype = TRIGGER;
   }
   virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate, bool isNew) = 0;
-  virtual bool LongFire(const K key) = 0;
+  virtual bool LongFire(const K key, bool lastrun) = 0;
 };
 // CRM 2001-06-09>>
 
@@ -104,7 +104,7 @@ struct Triggers {
       *doUpdate = true;
       return;
     }
-    bool LongFire(const K key) {
+    bool LongFire(const K key, bool lastrun) {
       return false;
     }
   };
@@ -113,7 +113,7 @@ struct Triggers {
       *doUpdate = false;
       return;
     }
-    bool LongFire(const K key) {
+    bool LongFire(const K key, bool lastrun) {
       return false;
     }
   };
