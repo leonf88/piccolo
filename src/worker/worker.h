@@ -49,6 +49,7 @@ public:
   // Barrier: wait until all table data is transmitted.
   void HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc);
   void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleFinalize(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
   void HandleStartRestore(const StartRestore& req, EmptyMessage *resp, const RPCInfo& rpc);
 
 /*

@@ -95,7 +95,7 @@ struct MatchRequestTrigger : public Trigger<int, int> {
 		}
 
 		//No longfire
-		bool LongFire(const int key) {
+		bool LongFire(const int key, bool lastrun) {
 			volatile bool rv = false;
 			return rv;
 		}
@@ -180,7 +180,7 @@ struct LeftTrigger : public Trigger<int, int> {
 		}
 
 		//No longfire
-		bool LongFire(const int key) {
+		bool LongFire(const int key, bool lastrun) {
 			volatile bool rv = false;
 			return rv;
 		}
