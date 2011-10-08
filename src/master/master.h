@@ -52,7 +52,7 @@ struct RunDescriptor {
      checkpoint_tables = cp_tables;
 
      if (!checkpoint_tables.empty()) {
-       checkpoint_type = CP_MASTER_CONTROLLED;
+       checkpoint_type = CP_TASK_COMMIT;
      }
 
      this->kernel = kernel;
