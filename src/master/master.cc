@@ -277,7 +277,7 @@ void Master::start_checkpoint() {
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
 
   if (current_run_.checkpoint_type == CP_NONE) {
-    current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+    current_run_.checkpoint_type = CP_TASK_COMMIT;
   }
 
   for (int i = 0; i < workers_.size(); ++i) {
@@ -312,7 +312,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
 void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   CHECK_EQ(workers_[worker_id]->checkpointing, true);
 
-  if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
+  if (r.checkpoint_type == CP_TASK_COMMIT) {
     EmptyMessage req;
     network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
@@ -689,7 +689,7 @@ void Master::run(RunDescriptor r) {
 }
 
 void Master::cp_barrier() {
-  current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+  current_run_.checkpoint_type = CP_TASK_COMMIT;
   barrier();
 }
 
@@ -717,7 +717,7 @@ void Master::barrier() {
           dump_stats();
         });
 
-    if (current_run_.checkpoint_type == CP_ROLLING &&
+    if (current_run_.checkpoint_type == CP_INTERVAL &&
         Now() - last_checkpoint_ > current_run_.checkpoint_interval) {
       checkpoint();
     }
@@ -743,7 +743,7 @@ void Master::barrier() {
                 }
               }
 
-              if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED &&
+              if (current_run_.checkpoint_type == CP_TASK_COMMIT &&
                   0.7 * current_run_.shards.size() < finished_ &&
                   w.idle_time() > 0 &&
                   !w.checkpointing) {
@@ -835,7 +835,7 @@ void Master::barrier() {
     }
   }
 
-  if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
+  if (current_run_.checkpoint_type == CP_TASK_COMMIT) {
     if (!checkpointing_) {
       start_checkpoint();
     }

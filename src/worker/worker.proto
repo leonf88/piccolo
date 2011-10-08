@@ -5,8 +5,9 @@ option optimize_for = SPEED;
 
 enum CheckpointType {
   CP_NONE = 0;
-  CP_MASTER_CONTROLLED = 1;
-  CP_ROLLING = 2;
+  CP_TASK_COMMIT = 1;
+  CP_INTERVAL = 2;
+  CP_CONTINUOUS = 3;
 };
 
 message RegisterWorkerRequest {
