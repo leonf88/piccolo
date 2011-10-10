@@ -5,6 +5,7 @@ using google::protobuf::Message;
 namespace dsm {
 
 struct RecordIterator : public TypedTableIterator<uint64_t, Message> {
+  virtual ~RecordIterator () {}
   RecordIterator(const FilePartition& p, Message *msg) : p_(p), r_(p.info.name, "r") {
     r_.seek(p.start_pos);
     data_ = msg;

@@ -14,8 +14,10 @@ static TypedGlobalTable<int, string>* string_hash = NULL;
 
 #define PREFETCH 512
 
-class TableKernel2 : public DSMKernel {
+class TableKernel2: public DSMKernel {
 public:
+  virtual ~TableKernel2() {
+  }
   void TestPut2() {
     for (int i = 0; i < FLAGS_table_size2; ++i) {
       LOG_EVERY_N(INFO, 100000) << "Writing... " << LOG_OCCURRENCES;
@@ -45,39 +47,48 @@ public:
   }
 
   void TestGetIterator2() {
-    int k=current_shard();
+    int k = current_shard();
     int totalrows = 0;
     int num_shards = min_hash->num_shards();
-    for(int j=0; j<num_shards; j++) {
-		TypedTableIterator<int, int> *it_min = min_hash->get_typed_iterator(j,PREFETCH);
-		TypedTableIterator<int, int> *it_max = max_hash->get_typed_iterator(j,PREFETCH);
-		TypedTableIterator<int, int> *it_replace = replace_hash->get_typed_iterator(j,PREFETCH);
-		TypedTableIterator<int, int> *it_sum = sum_hash->get_typed_iterator(j,PREFETCH);
-		TypedTableIterator<int, string> *it_string = string_hash->get_typed_iterator(j,PREFETCH);
-		int i=0;
-		for(; !it_min->done() && !it_max->done() && !it_replace->done() && !it_sum->done() && !it_string->done() ; )
-		{
-		  LOG_EVERY_N(INFO, 10000) << "Iter Fetching Shard " << j << " (local " << k << ")... " << i;
-		  CHECK_EQ(it_min->value(), it_min->key()) << " i= " << i;
-          it_min->Next();
-		  CHECK_EQ(it_max->value(), it_max->key()) << " i= " << i;
-          it_max->Next();
-		  CHECK_EQ(it_replace->value(), it_replace->key()) << " i= " << i;
-          it_replace->Next();
-		  CHECK_EQ(it_sum->value(), num_shards) << " i= " << i;
-          it_sum->Next();
-		  CHECK_EQ(it_string->value(), StringPrintf("%d", it_string->key())) << " i= " << i;
-          it_string->Next();
+    for (int j = 0; j < num_shards; j++) {
+      TypedTableIterator<int, int> *it_min = min_hash->get_typed_iterator(j,
+          PREFETCH);
+      TypedTableIterator<int, int> *it_max = max_hash->get_typed_iterator(j,
+          PREFETCH);
+      TypedTableIterator<int, int> *it_replace =
+          replace_hash->get_typed_iterator(j, PREFETCH);
+      TypedTableIterator<int, int> *it_sum = sum_hash->get_typed_iterator(j,
+          PREFETCH);
+      TypedTableIterator<int, string> *it_string =
+          string_hash->get_typed_iterator(j, PREFETCH);
+      int i = 0;
+      for (;
+          !it_min->done() && !it_max->done() && !it_replace->done()
+              && !it_sum->done() && !it_string->done();) {
+        LOG_EVERY_N(INFO, 10000) << "Iter Fetching Shard " << j << " (local "
+              << k << ")... " << i;
+        CHECK_EQ(it_min->value(), it_min->key()) << " i= " << i;
+        it_min->Next();
+        CHECK_EQ(it_max->value(), it_max->key()) << " i= " << i;
+        it_max->Next();
+        CHECK_EQ(it_replace->value(), it_replace->key()) << " i= " << i;
+        it_replace->Next();
+        CHECK_EQ(it_sum->value(), num_shards) << " i= " << i;
+        it_sum->Next();
+        CHECK_EQ(it_string->value(), StringPrintf("%d", it_string->key()))
+            << " i= " << i;
+        it_string->Next();
 
-		  i++;
-          totalrows++;
-		}
+        i++;
+        totalrows++;
+      }
     }
-    printf("Total of %d rows read\n",totalrows);
+    printf("Total of %d rows read\n", totalrows);
   }
 
   void TestGetLocal2() {
-    TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(current_shard());
+    TypedTableIterator<int, int> *it = min_hash->get_typed_iterator(
+        current_shard());
     int num_shards = min_hash->num_shards();
 
     while (!it->done()) {
@@ -115,25 +126,30 @@ REGISTER_METHOD(TableKernel2, TestGetLocal2);
 REGISTER_METHOD(TableKernel2, TestIterator2);
 
 static int TestTables2(ConfigData &conf) {
-  min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
-  max_hash = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Max);
-  sum_hash = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Sum);
-  replace_hash = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Replace);
-  string_hash = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<string>::Replace);
+  min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod,
+      new Accumulators<int>::Min);
+  max_hash = CreateTable(1, FLAGS_shards, new Sharding::Mod,
+      new Accumulators<int>::Max);
+  sum_hash = CreateTable(2, FLAGS_shards, new Sharding::Mod,
+      new Accumulators<int>::Sum);
+  replace_hash = CreateTable(3, FLAGS_shards, new Sharding::Mod,
+      new Accumulators<int>::Replace);
+  string_hash = CreateTable(4, FLAGS_shards, new Sharding::Mod,
+      new Accumulators<string>::Replace);
 
   if (!StartWorker(conf)) {
     Master m(conf);
-    m.run_all("TableKernel2", "TestPut2",  min_hash);
+    m.run_all("TableKernel2", "TestPut2", min_hash);
     //m.checkpoint();
 
     // wipe all the tables and then restore from the previous checkpoint.
     // m.run_all(Master::RunDescriptor::C("TableKernel", "TestClear", 0, 0));
 
     //m.restore();
-    m.run_all("TableKernel2", "TestGetLocal2",  min_hash);
+    m.run_all("TableKernel2", "TestGetLocal2", min_hash);
 
     //m.checkpoint();
-    m.run_all("TableKernel2", "TestGetIterator2",  min_hash);
+    m.run_all("TableKernel2", "TestGetIterator2", min_hash);
 
 //		m.run_one("TableKernel", "TestIterator",  min_hash);
   }
