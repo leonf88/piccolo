@@ -27,6 +27,7 @@ typedef PyObject* PyObjectPtr;
 
 struct PythonSharder : public Sharder<string> {
   PythonSharder(PyObjectPtr callback) : c_(callback) {}
+  virtual ~PythonSharder() {}
   int operator()(const string& k, int shards);
 private:
   PyObjectPtr c_;

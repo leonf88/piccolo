@@ -36,11 +36,20 @@ DEFINE_bool(run_tests, false, "");
 
 DEFINE_string(hostfile, "conf/mpi-cluster", "");
 DEFINE_int32(workers, 2, "");
+DEFINE_double(sleep_time, 0.001, "");
 
 namespace dsm {
 
 const double Histogram::kMinVal = 1e-9;
 const double Histogram::kLogBase = 1.1;
+
+double rand_double() {
+  return double(random()) / RAND_MAX;
+}
+
+vector<int> range(int to) {
+  return range(0, to);
+}
 
 
 int Histogram::bucketForVal(double v) {

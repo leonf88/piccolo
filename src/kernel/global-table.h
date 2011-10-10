@@ -40,6 +40,8 @@ struct PartitionInfo {
 
 class GlobalTable : virtual public TableBase {
 public:
+  virtual ~GlobalTable() {}
+
   virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
   virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
 
@@ -198,7 +200,7 @@ public:
   typedef DecodeIterator<K, V> UpdateDecoder;
   virtual void Init(const TableDescriptor *tinfo, int retrigt_count) {
     GlobalTableBase::Init(tinfo);
-    for (int i = 0; i < partitions_.size(); ++i) {
+    for (size_t i = 0; i < partitions_.size(); ++i) {
       // For non-triggered tables that allow remote accumulation
       partitions_[i] = create_local(i);
 
@@ -306,7 +308,7 @@ public:
 
     VLOG(3) << "Created RemoteIterator on table " << table->id() << ", shard " << shard <<" @" << this << endl;
     NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
-    for(int i=1; i<=response_.row_count(); i++) {
+    for(size_t i=1; i<=response_.row_count(); i++) {
       pair<string, string> row;
       row = make_pair(response_.key(i-1),response_.value(i-1));
       cached_results.push(row);
@@ -343,7 +345,7 @@ public:
       if (response_.row_count() < 1 && !response_.done())
         LOG(ERROR) << "Call to server requesting " << request_.row_count() <<
 			" rows returned " << response_.row_count() << " rows." << endl;
-      for(int i=1; i<=response_.row_count(); i++) {
+      for(size_t i=1; i<=response_.row_count(); i++) {
         pair<string, string> row;
 		row = make_pair(response_.key(i-1),response_.value(i-1));
         cached_results.push(row);
@@ -600,7 +602,7 @@ void TypedGlobalTable<K, V>::swap_accumulator(Accumulator<V>* newaccum) {
 template<class K, class V>
 void TypedGlobalTable<K, V>::swap_accumulator(Trigger<K,V>* newaccum) {
   this->mutable_info().swap_accumulator((AccumulatorBase*)newaccum);
-  for (int i = 0; i < partitions_.size(); ++i) {
+  for (size_t i = 0; i < partitions_.size(); ++i) {
     partitions_[i]->info_.swap_accumulator((AccumulatorBase*)newaccum);
   }
 }

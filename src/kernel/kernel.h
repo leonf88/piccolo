@@ -152,6 +152,7 @@ private:
 };
 
 struct KernelInfo {
+  virtual ~KernelInfo() {}
   KernelInfo(const char* name) : name_(name) {}
 
   virtual DSMKernel* create() = 0;

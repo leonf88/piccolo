@@ -34,6 +34,7 @@ struct RegistryHelper {
 };
 
 struct CodeHelper {
+  virtual ~CodeHelper() {}
   virtual void Run() = 0;
 };
 
@@ -48,6 +49,7 @@ extern void RunTests();
 #define REGISTER(type, k, v) static dsm::RegistryHelper<type> rhelper_ ## k (#k, v);
 #define REGISTER_CODE(type, k, code)\
 struct k ## CodeHelper : public type {\
+  virtual ~ k ## CodeHelper() {} \
   void Run() { code; }\
 };\
 REGISTER(type, k, new k ## CodeHelper);

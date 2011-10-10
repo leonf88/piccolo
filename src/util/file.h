@@ -187,6 +187,7 @@ public:
 
   bool read_line(string *out) {
     LOG(FATAL) << "Not implemented";
+    return false;
   }
 
   virtual int read(char *buffer, int len);

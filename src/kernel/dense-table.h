@@ -10,6 +10,7 @@ namespace dsm {
 
 template <class K>
 struct BlockInfo : BlockInfoBase {
+  virtual ~BlockInfo () {}
   // Returns the key representing the first element in the block
   // containing 'k'.
   virtual K start(const K& k, int block_size) = 0;

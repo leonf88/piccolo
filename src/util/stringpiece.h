@@ -39,7 +39,9 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
   return a.data == b.data && a.len == b.len;
 }
 
-static const char* strnstr(const char* haystack, const char* needle, int len) {
+static inline const char* strnstr(const char* haystack,
+                                  const char* needle,
+                                  int len) {
   int nlen = strlen(needle);
   for (int i = 0; i < len - nlen; ++i) {
     if (strncmp(haystack + i, needle, nlen) == 0) {
