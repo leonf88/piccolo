@@ -247,7 +247,7 @@ REGISTER_KERNEL(NBodyKernel);
 REGISTER_METHOD(NBodyKernel, CreatePoints);
 REGISTER_METHOD(NBodyKernel, Simulate);
 
-int NBody(ConfigData& conf) {
+int NBody(const ConfigData& conf) {
   curr = CreateTable(0, kNumPartitions * kNumPartitions * kNumPartitions,
               new PosSharding, new SetAccum);
   

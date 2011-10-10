@@ -12,6 +12,8 @@ DEFINE_bool(build_graph, false, "");
 
 DECLARE_bool(log_prefix);
 
+extern int KernelRunner(const ConfigData& config);
+
 int main(int argc, char** argv) {
   FLAGS_log_prefix = false;
 
@@ -21,10 +23,6 @@ int main(int argc, char** argv) {
   conf.set_num_workers(MPI::COMM_WORLD.Get_size() - 1);
   conf.set_worker_id(MPI::COMM_WORLD.Get_rank() - 1);
 
-//  LOG(INFO) << "Running: " << FLAGS_runner;
-  CHECK_NE(FLAGS_runner, "");
-  RunnerRegistry::KernelRunner k = RunnerRegistry::Get()->runner(FLAGS_runner);
-  CHECK(k != NULL) << "Could not find kernel runner " << FLAGS_runner;
-  k(conf);
+  KernelRunner(conf);
   LOG(INFO) << "Exiting.";
 }

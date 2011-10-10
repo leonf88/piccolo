@@ -36,7 +36,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   }
 }
 
-int ShortestPath(ConfigData& conf) {
+int ShortestPath(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
   distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);

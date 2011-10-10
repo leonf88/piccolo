@@ -223,7 +223,7 @@ REGISTER_METHOD(BPMKernel, BPMRoundRight);
 REGISTER_METHOD(BPMKernel, BPMRoundCleanupLeft);
 REGISTER_METHOD(BPMKernel, EvalPerformance);
 
-int Bipartmatch(ConfigData& conf) {
+int Bipartmatch(const ConfigData& conf) {
 
   leftoutedges = CreateTable(0, conf.num_workers(), new Sharding::Mod,
       new Accumulators<vector<int> >::Replace);

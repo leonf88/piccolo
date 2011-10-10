@@ -1,4 +1,4 @@
-#include "examples.h"
+#include "examples/examples.h"
 #include <cblas.h>
 
 using namespace dsm;
@@ -62,7 +62,7 @@ struct ShardHelper {
   }
 };
 
-int MatrixMultiplication(ConfigData& conf) {
+int MatrixMultiplication(const ConfigData& conf) {
   bCols = FLAGS_edge_size / FLAGS_block_size;
   bRows = FLAGS_edge_size / FLAGS_block_size;
 

@@ -101,7 +101,7 @@ using namespace dsm;
 MAP_KERNEL = '''
 class %(prefix)sMapKernel%(id)s : public DSMKernel {
 public:
-  virtual ~%(prefix)sMapKernel%(id)s {}
+  virtual ~%(prefix)sMapKernel%(id)s() {}
   template <class K, %(klasses)s>
   void run_iter(const K& k, %(decl)s) {
 #line %(line)s "%(filename)s"
@@ -129,6 +129,7 @@ REGISTER_METHOD(%(prefix)sMapKernel%(id)s, map);
 RUN_KERNEL = '''
 class %(prefix)sRunKernel%(id)s : public DSMKernel {
 public:
+  virtual ~%(prefix)sRunKernel%(id)s () {}
   void run() {
 #line %(line)s "%(filename)s"
       %(code)s;
@@ -180,7 +181,7 @@ def ParsePMap(s):
 
 
   filename = s._f
-  prefix = re.sub(r'[\W]', '_', filename)
+  prefix = re.sub(r'[\W]', 'P_', filename)
 
   id = get_id()
   main_table = keys[0][1]

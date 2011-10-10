@@ -158,29 +158,33 @@ def build(bld):
   main_obj = bld.objects(target='example_main.o',
                          source=['examples/main.cc'])
 
-  def example_driver(target, sources):
+  def example_driver(target, sources, use=None):
+    if not use: use = []
     bld.program(target=target,
                 source=[join('examples', src) for src in sources],
                 features='cxxprogram cxx',
-                use=['example_main.o',
-                     'piccolo_proto',
-                     'worker', 'master', 'common', 'kernel',
-                     'gflags', 'glog'])
+                use=use + ['example_main.o',
+                           'piccolo_proto',
+                           'worker', 'master', 'common', 'kernel',
+                           'gflags', 'glog'])
 
   example_driver('matmul', ['matmul.pp', ])
   example_driver('k-means', ['k-means.pp', ])
   example_driver('shortest-path', ['shortest-path.pp', ])
   example_driver('shortest-path-trigger', ['shortest-path-trigger.pp', ])
-  example_driver('pagerank', ['pagerank.pp', ])
-  example_driver('accelpagerank', ['accelpagerank.pp', ])
+
+  example_driver('pagerank', ['pagerank.pp'], use=['webgraph'])
+  example_driver('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])
+
   example_driver('test-tables', ['test-tables.cc', ])
   example_driver('test-tables2', ['test-tables2.cc', ])
   example_driver('wordcount', ['wordcount.pp', ])
   example_driver('faceclass', ['facedet/cpp/pgmimage.c',
-                     'facedet/cpp/imagenet.cpp',
-                     'facedet/cpp/backprop.cpp',
-                     'faceclass.cc', ])
+                               'facedet/cpp/imagenet.cpp',
+                               'facedet/cpp/backprop.cpp',
+                               'faceclass.cc', ])
   example_driver('nas/isort', ['nas/isort.cc', ])
   example_driver('nas/n-body', ['nas/n-body.cc', ])
-  example_driver('bipartmatch-trigger', ['bipartmatch.cc', 'bipartmatch-trigger.cc', ])
+  example_driver('bipartmatch', ['bipartmatch.cc'])
+  example_driver('bipartmatch-trigger', ['bipartmatch-trigger.cc', ])
 

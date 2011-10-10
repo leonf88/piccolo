@@ -30,7 +30,7 @@ struct ClusterAccum : public Accumulator<Cluster> {
   }
 };
 
-static int KMeans(ConfigData& conf) {
+static int KMeans(const ConfigData& conf) {
   const int num_shards = conf.num_workers() * 4;
   clusters = CreateTable(0, num_shards, new Sharding::Mod, new ClusterAccum);
   points = CreateTable(1, num_shards, new Sharding::Mod, new Accumulators<Point>::Replace);

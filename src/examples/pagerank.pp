@@ -1,5 +1,5 @@
 #include "examples/examples.h"
-#include "webgraph.h"
+#include "external/webgraph/webgraph.h"
 
 #include <algorithm>
 #include <libgen.h>
@@ -300,7 +300,7 @@ REGISTER_METHOD(prcp_kern,prcp_kern_cp);
 REGISTER_METHOD(prcp_kern,prcp_kern_prescale);
 
 //Main PageRank driver
-int Pagerank(ConfigData& conf) {
+int Pagerank(const ConfigData& conf) {
   site_sizes = InitSites();
 
   NUM_WORKERS = conf.num_workers();

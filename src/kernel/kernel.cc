@@ -28,11 +28,4 @@ KernelRegistry* KernelRegistry::Get() {
   return r;
 }
 
-RunnerRegistry* RunnerRegistry::Get() {
-  static RunnerRegistry* r = NULL;
-  if (!r) { r = new RunnerRegistry; }
-  return r;
-}
-
-
 }

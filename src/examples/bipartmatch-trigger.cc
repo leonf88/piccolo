@@ -95,7 +95,7 @@ public:
   }
 
   //No longfire
-  bool LongFire(const int key) {
+  bool LongFire(const int key, bool) {
     volatile bool rv = false;
     return rv;
   }
@@ -180,7 +180,7 @@ public:
   }
 
   //No longfire
-  bool LongFire(const int key) {
+  bool LongFire(const int key, bool) {
     volatile bool rv = false;
     return rv;
   }
@@ -349,7 +349,7 @@ REGISTER_METHOD(BPMTKernel, EvalPerformance);
 REGISTER_METHOD(BPMTKernel, EnableTriggers);
 REGISTER_METHOD(BPMTKernel, DisableTriggers);
 
-int Bipartmatch_trigger(ConfigData& conf) {
+int Bipartmatch_trigger(const ConfigData& conf) {
 
   leftoutedges = CreateTable(0, conf.num_workers(), new Sharding::Mod,
       new Accumulators<vector<int> >::Replace);

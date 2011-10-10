@@ -99,7 +99,7 @@ struct Trigger: public AccumulatorBase {
   }
   virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
       bool isNew) = 0;
-  virtual bool LongFire(const K key) = 0;
+  virtual bool LongFire(const K key, bool) = 0;
 };
 // CRM 2001-06-09>>
 
