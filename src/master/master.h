@@ -150,8 +150,8 @@ private:
 
   RunDescriptor current_run_;
   double current_run_start_;
-  int dispatched_; //# of dispatched tasks
-  int finished_; //# of finished tasks
+  size_t dispatched_; //# of dispatched tasks
+  size_t finished_; //# of finished tasks
 
   bool shards_assigned_;
 

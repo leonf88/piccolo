@@ -6,8 +6,8 @@
 #include "kernel/kernel.h"
 #include "kernel/table-registry.h"
 
+DECLARE_double(sleep_time);
 DEFINE_double(sleep_hack, 0.0, "");
-DEFINE_double(sleep_time, 0.001, "");
 DEFINE_string(checkpoint_write_dir, "/var/tmp/piccolo-checkpoint", "");
 DEFINE_string(checkpoint_read_dir, "/var/tmp/piccolo-checkpoint", "");
 
@@ -104,7 +104,7 @@ void Worker::Run() {
 Worker::~Worker() {
   running_ = false;
 
-  for (int i = 0; i < peers_.size(); ++i) {
+  for (size_t i = 0; i < peers_.size(); ++i) {
     delete peers_[i];
   }
 }
@@ -241,7 +241,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
   peers_[peer]->epoch = peer_epoch;
 
   bool checkpoint_done = true;
-  for (int i = 0; i < peers_.size(); ++i) {
+  for (size_t i = 0; i < peers_.size(); ++i) {
     if (peers_[i]->epoch != epoch_) {
       checkpoint_done = false;
       VLOG(1) << "Channel is out of date: " << i << " : " << MP(peers_[i]->epoch, epoch_);
@@ -291,7 +291,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
     epoch_marker.set_shard(-1);
     epoch_marker.set_done(true);
     epoch_marker.set_marker(epoch_);
-    for (int i = 0; i < peers_.size(); ++i) {
+    for (size_t i = 0; i < peers_.size(); ++i) {
       network_->Send(i + 1, MTYPE_PUT_REQUEST, epoch_marker);
     }
   }
@@ -308,7 +308,7 @@ void Worker::FinishCheckpoint() {
   active_checkpoint_ = CP_NONE;
   TableRegistry::Map &t = TableRegistry::Get()->tables();
 
-  for (int i = 0; i < peers_.size(); ++i) {
+  for (size_t i = 0; i < peers_.size(); ++i) {
     peers_[i]->epoch = epoch_;
   }
 

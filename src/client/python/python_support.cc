@@ -206,6 +206,7 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
 
 class PythonKernel: public DSMKernel {
 public:
+  virtual ~PythonKernel() {}
   PythonKernel() {
     try {
       object sys_module = import("sys");

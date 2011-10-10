@@ -145,6 +145,7 @@ static TypedGlobalTable<pos, PosSet> *next;
 
 class NBodyKernel : public DSMKernel {
 public:
+  virtual ~NBodyKernel() {}
   unordered_map<pos, PosSet> cache;
   PosSet scratch;
 

@@ -3,6 +3,7 @@
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
 
+
 #include <set>
 
 DEFINE_string(dead_workers, "", "For failure testing; comma delimited list of workers to pretend have died.");
@@ -147,7 +148,7 @@ struct WorkerState : private boost::noncopyable {
   }
 
 #define COUNT_TASKS(name, type)\
-  int num_ ## name() const {\
+  size_t num_ ## name() const {\
     int c = 0;\
     for (TaskMap::const_iterator i = work.begin(); i != work.end(); ++i)\
       if (i->second->status == TaskState::type) { ++c; }\
@@ -230,7 +231,7 @@ Master::Master(const ConfigData &conf) :
 
   vector<StringPiece> bits = StringPiece::split(FLAGS_dead_workers, ",");
 //  LOG(INFO) << "dead workers: " << FLAGS_dead_workers;
-  for (int i = 0; i < bits.size(); ++i) {
+  for (size_t i = 0; i < bits.size(); ++i) {
     LOG(INFO) << MP(i, bits[i].AsString());
     dead_workers.insert(strtod(bits[i].AsString().c_str(), NULL));
   }
@@ -240,10 +241,10 @@ Master::~Master() {
   LOG(INFO) << "Total runtime: " << runtime_.elapsed();
 
   LOG(INFO) << "Worker execution time:";
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     if (i % 10 == 0) {
-      fprintf(stderr, "\n%2d: ", i);
+      fprintf(stderr, "\n%zu: ", i);
     }
     fprintf(stderr, "%.3f ", w.total_runtime);
   }
@@ -280,7 +281,7 @@ void Master::start_checkpoint() {
     current_run_.checkpoint_type = CP_TASK_COMMIT;
   }
 
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
   }
 }
@@ -300,7 +301,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
   req.set_epoch(checkpoint_epoch_);
   req.set_checkpoint_type(r.checkpoint_type);
 
-  for (int i = 0; i < r.checkpoint_tables.size(); ++i) {
+  for (size_t i = 0; i < r.checkpoint_tables.size(); ++i) {
     req.add_table(r.checkpoint_tables[i]);
   }
 
@@ -325,7 +326,7 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
 }
 
 void Master::finish_checkpoint() {
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     finish_worker_checkpoint(i, current_run_);
     CHECK_EQ(workers_[i]->checkpointing, false);
   }
@@ -427,7 +428,7 @@ void Master::run_range(RunDescriptor r, vector<int> shards) {
 }
 
 WorkerState* Master::worker_for_shard(int table, int shard) {
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     if (workers_[i]->serves(Taskid(table, shard))) { return workers_[i]; }
   }
 
@@ -445,7 +446,7 @@ WorkerState* Master::assign_worker(int table, int shard) {
   }
 
   WorkerState* best = NULL;
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     if (w.alive() && (best == NULL || w.shards.size() < best->shards.size())) {
       best = workers_[i];
@@ -466,7 +467,7 @@ WorkerState* Master::assign_worker(int table, int shard) {
 void Master::send_table_assignments() {
   ShardAssignmentRequest req;
 
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     for (ShardSet::iterator j = w.shards.begin(); j != w.shards.end(); ++j) {
       ShardAssignment* s  = req.add_assign();
@@ -516,7 +517,7 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker,
   double move_cost = max(1.0,
                          2 * task->size * avg_completion_time / average_size);
   double eta = 0;
-  for (int i = 0; i < pending.size(); ++i) {
+  for (size_t i = 0; i < pending.size(); ++i) {
     TaskState *p = pending[i];
     eta += max(1.0, p->size * avg_completion_time / average_size);
   }
@@ -553,12 +554,12 @@ void Master::assign_tables() {
 }
 
 void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     w.clear_tasks(); //XXX: did not delete task state, memory leak
   }
 
-  for (int i = 0; i < shards.size(); ++i) {
+  for (size_t i = 0; i < shards.size(); ++i) {
     assign_worker(r.table->id(), shards[i]);
   }
 }
@@ -566,7 +567,7 @@ void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
 int Master::dispatch_work(const RunDescriptor& r) {
   int num_dispatched = 0;
   KernelRequest w_req;
-  for (int i = 0; i < workers_.size(); ++i) {
+  for (size_t i = 0; i < workers_.size(); ++i) {
     WorkerState& w = *workers_[i];
     if (w.num_pending() > 0 && w.num_active() == 0) {
       w.get_next(r, &w_req);
@@ -777,7 +778,8 @@ void Master::barrier() {
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
     VLOG(3) << "Sent flush broadcast to workers" << endl;
 
-    int flushed=0,applied=0;
+    size_t flushed = 0;
+    size_t applied = 0;
     FlushResponse done_msg;
     while (flushed < workers_.size()) {
 	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;

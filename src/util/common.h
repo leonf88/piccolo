@@ -75,9 +75,7 @@ private:
   volatile int d;
 };
 
-static double rand_double() {
-  return double(random()) / RAND_MAX;
-}
+double rand_double();
 
 // Simple wrapper around a string->double map.
 struct Stats {
@@ -106,6 +104,7 @@ struct MarshalBase {};
 
 template <class T, class Enable = void>
 struct Marshal : public MarshalBase {
+  virtual ~Marshal() {}
   virtual void marshal(const T& t, string* out) {
     GOOGLE_GLOG_COMPILE_ASSERT(std::tr1::is_pod<T>::value, Invalid_Value_Type);
     out->assign(reinterpret_cast<const char*>(&t), sizeof(t));
@@ -143,9 +142,7 @@ static vector<int> range(int from, int to, int step=1) {
   return out;
 }
 
-static vector<int> range(int to) {
-  return range(0, to);
-}
+vector<int> range(int to);
 }
 
 #define IN(container, item) (std::find(container.begin(), container.end(), item) != container.end())
