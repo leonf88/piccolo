@@ -432,7 +432,7 @@ REGISTER_METHOD(FCKernel, TrainIteration);
 REGISTER_METHOD(FCKernel, PerformanceCheck);
 REGISTER_METHOD(FCKernel, DisplayPerformance);
 
-int Faceclass(ConfigData& conf) {
+int Faceclass(const ConfigData& conf) {
   int i;
 
   int imageshards = ceil(FLAGS_total_ims / FLAGS_sharding);

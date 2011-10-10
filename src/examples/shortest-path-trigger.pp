@@ -88,7 +88,7 @@ static void BuildGraph(int shards, int nodes_record, int density) {
 	}
 }
 
-int ShortestPathTrigger(ConfigData& conf) {
+int ShortestPathTrigger(const ConfigData& conf) {
 	NUM_WORKERS = conf.num_workers();
 
 	distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Triggers<int,double>::NullTrigger);

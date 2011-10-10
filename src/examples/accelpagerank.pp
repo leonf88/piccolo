@@ -1,6 +1,6 @@
-// Accelerated PageRan k Runner for Oolong/Piccolo
+// Accelerated PageRank Runner for Oolong/Piccolo
 #include "examples/examples.h"
-#include "webgraph.h"
+#include "external/webgraph/webgraph.h"
 
 #include <algorithm>
 #include <libgen.h>
@@ -303,7 +303,7 @@ public:
 
 REGISTER_KERNEL(aprcp_kern);
 REGISTER_METHOD(aprcp_kern,aprcp_kern_cp);
-int AccelPagerank(ConfigData& conf) {
+int AccelPagerank(const ConfigData& conf) {
   site_sizes = InitSites();
 
   NUM_WORKERS = conf.num_workers();

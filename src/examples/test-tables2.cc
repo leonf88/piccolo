@@ -125,7 +125,7 @@ REGISTER_METHOD(TableKernel2, TestGetIterator2);
 REGISTER_METHOD(TableKernel2, TestGetLocal2);
 REGISTER_METHOD(TableKernel2, TestIterator2);
 
-static int TestTables2(ConfigData &conf) {
+static int TestTables2(const ConfigData &conf) {
   min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod,
       new Accumulators<int>::Min);
   max_hash = CreateTable(1, FLAGS_shards, new Sharding::Mod,

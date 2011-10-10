@@ -64,7 +64,7 @@ REGISTER_METHOD(SortKernel, Init);
 REGISTER_METHOD(SortKernel, Partition);
 REGISTER_METHOD(SortKernel, Sort);
 
-int IntegerSort(ConfigData& conf) {
+int IntegerSort(const ConfigData& conf) {
   dst = CreateTable(0, conf.num_workers(),
       new Sharding::UintMod, new BucketMerge);
 

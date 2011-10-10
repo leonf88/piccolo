@@ -213,26 +213,6 @@ struct MethodRegistrationHelper {
   }
 };
 
-class RunnerRegistry {
-public:
-  typedef int (*KernelRunner)(ConfigData&);
-  typedef map<string, KernelRunner> Map;
-
-  KernelRunner runner(const string& name) { return m_[name]; }
-  Map& runners() { return m_; }
-
-  static RunnerRegistry* Get();
-private:
-  RunnerRegistry() {}
-  Map m_;
-};
-
-struct RunnerRegistrationHelper {
-  RunnerRegistrationHelper(RunnerRegistry::KernelRunner k, const char* name) {
-    RunnerRegistry::Get()->runners().insert(make_pair(name, k));
-  }
-};
-
 #define REGISTER_KERNEL(klass)\
   static KernelRegistrationHelper<klass> k_helper_ ## klass(#klass);
 
@@ -240,7 +220,9 @@ struct RunnerRegistrationHelper {
   static MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
 
 #define REGISTER_RUNNER(r)\
-  static RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
+  int KernelRunner(const ConfigData& c) {\
+    return r(c);\
+  }\
 
 }
 #endif /* KERNELREGISTRY_H_ */

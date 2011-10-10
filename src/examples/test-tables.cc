@@ -79,7 +79,7 @@ REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
 REGISTER_METHOD(TableKernel, TestIterator);
 
-static int TestTables(ConfigData &conf) {
+static int TestTables(const ConfigData &conf) {
   min_hash = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Min);
   max_hash = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Max);
   sum_hash = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<int>::Sum);
