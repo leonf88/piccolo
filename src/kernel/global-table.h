@@ -72,6 +72,7 @@ public:
   virtual void SendUpdates(int* count) = 0;
   virtual void ApplyUpdates(const TableData& req) = 0;
   virtual void HandlePutRequests() = 0;
+  virtual void KernelFinalize() = 0;
 
   virtual int pending_write_bytes() = 0;
   virtual int clearUpdateQueue() = 0;
@@ -159,6 +160,7 @@ public:
   void SendUpdates();
   void SendUpdates(int* count);
   virtual void ApplyUpdates(const TableData& req) = 0;
+  virtual void KernelFinalize() = 0;
   void HandlePutRequests();
 
   int pending_write_bytes();
@@ -191,9 +193,13 @@ public:
   bool clearingUpdateQueue;
 
   //long trigger support
-  vector<K> retrigger_vector;	// which keys still
-										// request long triggers
-  int retrigger_mode;		// 0 = scan retrigger_vector for flags
+  void KernelFinalize();
+  int retrigger_threadcount_;    // number of long trigger threads for this table
+  vector<K> retrigger_vector_;	// which keys still request long triggers
+  vector<boost::thread::id> retrigger_threadids_; //IDs of retrigger threads, for future use
+  bool retrigger_terminate_;     // set to instruct retrigger threads to clear tables
+  bool retrigger_termthreads_;   // number of "terminated" threads
+  int retrigger_mode_;		// 0 = scan retrigger_vector for flags
 							// 1 = scan table for flags
 
   typedef TypedTableIterator<K, V> Iterator;
@@ -215,11 +221,14 @@ public:
 
 	//Clear the long/retrigger map, just in case, and
     //then start up the retrigger thread
+    retrigger_threadids_.clear();
+    retrigger_terminate_ = false;
+    retrigger_threadcount_ = retrigt_count;
     if (retrigt_count != 0) {
-      retrigger_vector.clear();
-	  retrigger_mode = RETRIGGER_MODE_EXPLICIT; //separate map to start
+      retrigger_vector_.clear();
+	  retrigger_mode_ = RETRIGGER_MODE_EXPLICIT; //separate map to start
       for (int i=0; i<retrigt_count; i++)
-        boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this));
+        retrigger_threadids_.push_back(boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this)).get_id());
     }
   }
 
@@ -237,8 +246,10 @@ public:
   int clearUpdateQueue();
 
   // Provide a mechanism to enable a long trigger / retrigger, as well as
-  // a function from which to create a retrigger thread
+  // a function from which to create a retrigger thread, and one to instruct
+  // retrigger threads to clear themselves of existing items.
   void enable_retrigger(K k);
+  void retrigger_stop(void);
   void retrigger_thread(void);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
@@ -543,13 +554,18 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 }
 
 template<class K, class V>
+void TypedGlobalTable<K, V>::KernelFinalize() {
+  retrigger_stop();
+}
+
+template<class K, class V>
 void TypedGlobalTable<K, V>::enable_retrigger(K k) {
   boost::mutex::scoped_lock sl(retrigger_mutex());
-  if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
+  if (retrigger_mode_ == RETRIGGER_MODE_EXPLICIT) {
     //insert or update item in retrigger map
 
     //Set new one
-    retrigger_vector.push_back(k);
+    retrigger_vector_.push_back(k);
   } else { //RETRIGGER_MODE_IMPLICIT
     //Set bit in table instead of in retrigger map
     LOG(FATAL) << "Retrigger mode 1 not yet implemented." << endl;
@@ -557,26 +573,48 @@ void TypedGlobalTable<K, V>::enable_retrigger(K k) {
 }
 
 template<class K, class V>
+void TypedGlobalTable<K, V>::retrigger_stop(void) {
+  if (!retrigger_threadcount_)
+    return;
+  {
+    boost::mutex::scoped_lock sl(retrigger_mutex());
+    retrigger_termthreads_ = 0;
+    retrigger_terminate_ = true;
+  }
+  while(retrigger_termthreads_ < retrigger_threadcount_)
+    Sleep(RETRIGGER_SCAN_INTERVAL);
+  return;
+}
+
+template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_thread(void) {
-  while(1) {
+  bool terminated = false;
+  while(!terminated) {
     {
  //     boost::mutex::scoped_lock sl(retrigger_mutex());
-      LOG(ERROR) << "Retrigger thread tick." << endl;
-      if (retrigger_mode == RETRIGGER_MODE_EXPLICIT) {
-        typename vector<K>::iterator it = retrigger_vector.begin();
+      if (retrigger_mode_ == RETRIGGER_MODE_EXPLICIT) {
+        typename vector<K>::iterator it = retrigger_vector_.begin();
         typename vector<K>::iterator oldit;
-        for(; it != retrigger_vector.end();) {
+        bool terminating = retrigger_terminate_;
+        for(; it != retrigger_vector_.end();) {
           bool retain = true;
-          retain = ((Trigger<K,V>*)info_.accum)->LongFire(*it);
+          retain = ((Trigger<K,V>*)info_.accum)->LongFire(*it,terminating);
           if (retain == false) {
             oldit = it;
             it++;
-            retrigger_vector.erase(oldit);
+            retrigger_vector_.erase(oldit);
           } else
             it++;
         }
+        terminated = terminating;
       } else { //RETRIGGER_MODE_IMPLICIT
         LOG(FATAL) << "Retrigger mode 1 not yet implemented!" << endl;
+      }
+      if (terminated && retrigger_vector_.size() > 0) {
+        boost::mutex::scoped_lock sl(retrigger_mutex());
+        retrigger_vector_.clear();
+        retrigger_termthreads_++;	//increment terminated thread count
+        terminated = false;
       }
     }
     Sleep(RETRIGGER_SCAN_INTERVAL);

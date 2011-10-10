@@ -120,7 +120,7 @@ struct Triggers {
       *doUpdate = true;
       return;
     }
-    bool LongFire(const K key) {
+    bool LongFire(const K key, bool lastrun) {
       return false;
     }
   };
@@ -130,7 +130,7 @@ struct Triggers {
       *doUpdate = false;
       return;
     }
-    bool LongFire(const K key) {
+    bool LongFire(const K key, bool lastrun) {
       return false;
     }
   };

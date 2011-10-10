@@ -21,7 +21,7 @@ static const char kTestPrefix[] = "testdata/pr-graph.rec";
 
 DEFINE_string(apr_graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(apr_nodes, 10000, "");
-DEFINE_double(apr_tol, 1e-4, "threshold for updates");
+DEFINE_double(apr_tol, 1.5e-8, "threshold for updates");
 DEFINE_double(apr_d, 0.85, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
 
@@ -90,7 +90,7 @@ bool operator==(const APageId& a, const APageId& b) {
 }
 
 struct AccelPRStruct {
-  int64_t L;				//number of outgoing links
+  int64_t L : 32;		//number of outgoing links
   float pr_int;			//internal pagerank
   float pr_ext;			//external pagerank
 };
@@ -173,32 +173,43 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
 
 static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
   WebGraph::URLReader *r = wgr->newURLReader();
+
+  map<string,struct APageId> hosts;
+  map<string,struct APageId>::iterator it;
   struct APageId pid = {-1, -1};
-  string prev, url;
-  int prevHostLen = 0;
+  string prev, url, host, prevhost;
   int i = 0;
+  int maxsite = 0;
 
   out->reserve(wgr->nodes);
 
   while (r->readURL(&url)) {
     if (i++ % 100000 == 0)
-      LOG(INFO) << "Reading URL " << i-1 << " of " << wgr->nodes;
+      LOG(INFO) << "Reading URL " << i+1 << " of " << wgr->nodes;
 
     // Get host part
     int hostLen = url.find('/', 8);
     CHECK(hostLen != url.npos) << "Failed to split host in URL " << url;
     ++hostLen;
 
-    if (prev.compare(0, prevHostLen, url, 0, hostLen) == 0) {
-      // Same site
-      ++pid.page;
+    host = url.substr(7,hostLen-7);
+
+    if (0 == host.compare(prevhost)) {
+      // Existing site.  Pid.site already set. it already set
+      pid.page = it->second.page++;
+    } else if ((it = hosts.find(host)) != hosts.end()) {
+      // Existing site
+      pid.page = it->second.page++;
+      pid.site = it->second.site;
     } else {
       // Different site
-      ++pid.site;
       pid.page = 0;
+      pid.site = maxsite;
+      struct APageId newpid = {maxsite++, 1};
+	  hosts.insert(pair<string, struct APageId>(host,newpid));
+      //LOG(INFO) << "Host " << host << " is new site # " << pid.site;
 
       swap(prev, url);
-      prevHostLen = hostLen;
     }
 
     out->push_back(pid);
@@ -206,7 +217,7 @@ static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
 
   delete r;
 
-  LOG(INFO) << pid.site+1 << " total sites read";
+  LOG(INFO) << "URLReader: " << maxsite << " total sites read containing " << i << " nodes";
 }
 
 static void ConvertGraph(string path, int nshards) {
@@ -250,33 +261,48 @@ namespace dsm {
 struct AccelPRTrigger : public Trigger<APageId, AccelPRStruct> {
   public:
     void Fire(const APageId* key, AccelPRStruct* value, const AccelPRStruct& newvalue, bool* doUpdate, bool isNew) {
-//      fprintf(stderr,"Trigger fired");
       *doUpdate = true;
       if (isNew) {
         value->L = newvalue.L;
-        value->pr_int = FLAGS_apr_d*newvalue.pr_ext;
+        value->pr_int = (float)FLAGS_apr_d*newvalue.pr_ext;
+        value->pr_ext = 0;
+        return;
       } else {
         value->pr_int += (FLAGS_apr_d*newvalue.pr_ext)/newvalue.L;
       }
-//      fprintf(stderr,"diff %f tol %f\n",abs(value->pr_int-value->pr_ext),FLAGS_apr_tol);
       if (abs(value->pr_int-value->pr_ext) >= FLAGS_apr_tol) {
-//        fprintf(stderr,"Propagating trigger for %ld-%ld\n",key->site,key->page);
+        // Get neighbors
         APageInfo p = apages->get(*key);
         struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int-value->pr_ext };
+
+        //Update our own external PR
+        value->pr_ext = value->pr_int;
+
+        //Tell everyone about our delta PR
         vector<APageId>::iterator it = p.adj.begin();
         for(; it != p.adj.end(); it++) {
           struct APageId neighbor = { it->site, it->page };
           prs->enqueue_update(neighbor,updval);
         }
-        value->pr_ext = value->pr_int;
       }
       return;
     }
-    bool LongFire(const APageId key) {
+    bool LongFire(const APageId key, bool lastrun) {
       return false;
     }
 }; };
 
+//fake kernel to force a checkpoint
+class aprcp_kern : public DSMKernel {
+public:
+  void aprcp_kern_cp() {
+    volatile int i=0;
+    i++;
+  }
+};
+
+REGISTER_KERNEL(aprcp_kern);
+REGISTER_METHOD(aprcp_kern,aprcp_kern_cp);
 int AccelPagerank(ConfigData& conf) {
   site_sizes = InitSites();
 
@@ -312,7 +338,14 @@ int AccelPagerank(ConfigData& conf) {
     return 0;
   }
 
-  m.restore();
+  PRunAll(prs, {
+    prs->swap_accumulator(new Triggers<APageId,AccelPRStruct>::NullTrigger);
+  });
+  bool restored = m.restore();			//Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
+  fprintf(stderr,"%successfully restore%s previous checkpoint.\n",(restored?"S":"Did not s"),(restored?"d":""));
+  PRunAll(prs, {
+    prs->swap_accumulator((Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
+  });
 
   PMap({n : pagedb}, {
     struct APageId p = { n.site(), n.id() };
@@ -322,25 +355,67 @@ int AccelPagerank(ConfigData& conf) {
       struct APageId neigh = { n.target_site(i), n.target_id(i) };
       info.adj.push_back(neigh);
     }
-    apages->update(p,info);
+    apages->update(p,info);	//some/all of these are wasteful when restoring from checkpoint
   });
 
+  struct timeval start_time, end_time;
+  gettimeofday(&start_time, NULL);
+
+  //Do initialization! But don't start processing yet, otherwise some of the vertices
+  //will exist because of trigger propagation before they get their initialization value.
   PRunAll(apages, {
     TypedTableIterator<APageId, APageInfo> *it =
       apages->get_typed_iterator(current_shard());
+    int i=0;
     for(; !it->done(); it->Next()) {
-      struct AccelPRStruct initval = { 1, 0, (1-FLAGS_apr_d)/(FLAGS_apr_nodes*FLAGS_apr_d) };
-      prs->update(it->key(),initval);
+      if (!prs->contains(it->key())) {
+        struct AccelPRStruct initval = { it->value().adj.size(), 0, (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d) };
+        prs->update(it->key(),initval);
+        i++;
+      }
     }
+    fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
   });
+
+  //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
+  PRunAll(prs, {
+    TypedTableIterator<APageId, AccelPRStruct> *it =
+      prs->get_typed_iterator(current_shard());
+    float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
+    int i=0;
+    for(; !it->done(); it->Next()) {
+      if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
+        struct AccelPRStruct initval = { 1, 0, 0 };
+        prs->update(it->key(),initval);
+        i++;
+      }
+    }
+    fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
+  });
+
+  gettimeofday(&end_time, NULL);
+  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+  cout << "Total PageRank time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
+
+  //Perform checkpoint
+  vector<int> cptables;
+  cptables.push_back(0);
+  cptables.push_back(1);
+  RunDescriptor cp_rd("aprcp_kern", "aprcp_kern_cp", prs, cptables);
+  m.run_all(cp_rd);
 
   PRunOne(prs, {
     fprintf(stdout,"PageRank complete, tabulating results...\n");
-    float pr_min = 1, pr_max = 0, pr_sum = 0;
+    float pr_min = 1, pr_max = -1, pr_sum = 0;
     struct APageId toplist[FLAGS_ashow_top];
     float topscores[FLAGS_ashow_top];
     int totalpages = 0;
 
+    //Initialize top scores
+    for(int i=0; i<FLAGS_ashow_top; i++)
+      topscores[i] = -999999.9999;
+
+    //Find top [FLAGS_ashow_top] pages
     for(int shard=0; shard < prs->num_shards(); shard++) {
       TypedTableIterator<APageId, AccelPRStruct> *it = prs->get_typed_iterator(shard,PREFETCH);
 
@@ -348,12 +423,14 @@ int AccelPagerank(ConfigData& conf) {
         totalpages++;
         if (it->value().pr_ext > pr_max)
           pr_max = it->value().pr_ext;
+        //If it's at least better than the worst of the top list, then replace the worst with
+        //this one, and propagate it upwards through the list until it's in place
         if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
           topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
           toplist[FLAGS_ashow_top-1] = it->key();
           for(int i=FLAGS_ashow_top-2; i>=0; i--) {
             if (topscores[i] < topscores[i+1]) {
-              float a = topscores[i];
+              float a = topscores[i];				//swap!
               struct APageId b = toplist[i];
               topscores[i] = topscores[i+1];
               toplist[i] = toplist[i+1];
@@ -370,7 +447,7 @@ int AccelPagerank(ConfigData& conf) {
       }
     }
     float pr_avg = pr_sum/totalpages;
-    fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
+    fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
     fprintf(stdout,"Top Pages:\n");
     for(int i=0;i<FLAGS_ashow_top;i++) {
       fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);

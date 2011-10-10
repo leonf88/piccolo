@@ -75,6 +75,10 @@ Worker::Worker(const ConfigData &c) {
                    new EmptyMessage, new EmptyMessage,
                    &Worker::HandleApply, this);
 
+  RegisterCallback(MTYPE_WORKER_FINALIZE,
+                   new EmptyMessage, new EmptyMessage,
+                   &Worker::HandleFinalize, this);
+
   RegisterCallback(MTYPE_RESTORE,
                    new StartRestore, new EmptyMessage,
                    &Worker::HandleStartRestore, this);
@@ -231,7 +235,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
       checkpoint_tables_.insert(make_pair(i->first, true));
     }
 
-    StartCheckpoint(peer_epoch, CP_ROLLING);
+    StartCheckpoint(peer_epoch, CP_INTERVAL);
   }
 
   peers_[peer]->epoch = peer_epoch;
@@ -280,7 +284,7 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
 
   // For rolling checkpoints, send out a marker to other workers indicating
   // that we have switched epochs.
-  if (type == CP_ROLLING) {
+  if (type == CP_INTERVAL) {
     TableData epoch_marker;
     epoch_marker.set_source(id());
     epoch_marker.set_table(-1);
@@ -363,8 +367,8 @@ void Worker::HandlePutRequest() {
     VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
 
     // Record messages from our peer channel up until they checkpointed.
-    if (active_checkpoint_ == CP_MASTER_CONTROLLED ||
-        (active_checkpoint_ == CP_ROLLING && put.epoch() < epoch_)) {
+    if (active_checkpoint_ == CP_TASK_COMMIT ||
+        (active_checkpoint_ == CP_INTERVAL && put.epoch() < epoch_)) {
       if (checkpoint_tables_.find(t->id()) != checkpoint_tables_.end()) {
         Checkpointable *ct = dynamic_cast<Checkpointable*>(t);
         ct->write_delta(put);
@@ -518,6 +522,26 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCI
 
   HandlePutRequest();
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
+}
+
+// For now, this only stops Long Trigger (aka retriggering).  Could be used for other
+// kernel finalization tasks too, though.
+void Worker::HandleFinalize(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc) {
+  Timer net;
+  VLOG(2) << "Finalize request received from master; performing finalization." << endl;
+
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+    if (t) {
+      t->KernelFinalize();	//just does retrigger_stop() for now
+    }
+  }
+
+  VLOG(2) << "Telling master: Finalized." << endl;
+  network_->Send(config_.master_id(), MTYPE_WORKER_FINALIZE_DONE, *resp);
+
+  stats_["network_time"] += net.elapsed();
 }
 
 /*

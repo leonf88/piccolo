@@ -70,7 +70,7 @@ void PythonTrigger<K, V>::Init(dsm::GlobalTable* thistable) {
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::LongFire(const K k) {
+bool PythonTrigger<K, V>::LongFire(const K k, bool lastrun) {
   string python_code = params_.get<string> ("python_code_long");
   PyObject *key, *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
@@ -85,7 +85,7 @@ bool PythonTrigger<K, V>::LongFire(const K k) {
   }
 
   V dummyv;
-  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, &dummyv, dummyv, true, false);
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, &dummyv, dummyv, true, lastrun); //hijack "isNew" for "lastrun"
   LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from long trigger";
   return rv;
 }
@@ -113,19 +113,24 @@ void PythonTrigger<K, V>::Fire(const K* k, V* value, const V& newvalue, bool* do
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isLongTrigger, bool isNew) {
+bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isLongTrigger, bool isNewOrLast) {
   LOG(FATAL) << "No such CallPythonTrigger for this key/value pair type!";
   exit(1);
 }
 
 template<>
-bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& newvalue, bool isLongTrigger, bool isNew) {
+bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& newvalue, bool isLongTrigger, bool isNewOrLast) {
   PyObjectPtr retval;
 
   //Handle LongTriggers
   if (isLongTrigger) {
+    PyObject* lastrun_obj = PyBool_FromLong((long)isNewOrLast);
+    if (lastrun_obj == NULL) {
+      LOG(ERROR) << "Failed to bootstrap <int,int> long trigger launch";
+      return true;
+    }
     try {
-      retval = PyObject_CallFunctionObjArgs(callable, key, NULL);
+      retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
       Py_DECREF(callable);
     } catch (error_already_set& e) {
       PyErr_Print();
@@ -136,10 +141,10 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
  
   PyObject* cur_obj = PyLong_FromLongLong(*value);
   PyObject* upd_obj = PyLong_FromLongLong(newvalue);
-  PyObject* isnew_obj = PyBool_FromLong((long)isNew);
+  PyObject* isnew_obj = PyBool_FromLong((long)isNewOrLast);
 
-  if (cur_obj == NULL || upd_obj == NULL) {
-    LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
+  if (cur_obj == NULL || upd_obj == NULL || isnew_obj == NULL) {
+    LOG(ERROR) << "Failed to bootstrap <int,int> trigger launch";
     return true;
   }
   try {
@@ -157,13 +162,18 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
 }
 
 template<>
-bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, string* value, const string& newvalue, bool isLongTrigger, bool isNew) {
+bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, string* value, const string& newvalue, bool isLongTrigger, bool isNewOrLast) {
   PyObjectPtr retval;
 
   //Handle LongTriggers
   if (isLongTrigger) {
+    PyObject* lastrun_obj = PyBool_FromLong((long)isNewOrLast);
+    if (lastrun_obj == NULL) {
+      LOG(ERROR) << "Failed to bootstrap <int,int> long trigger launch";
+      return true;
+    }
     try {
-      retval = PyObject_CallFunctionObjArgs(callable, key, NULL);
+      retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
       Py_DECREF(callable);
     } catch (error_already_set& e) {
       PyErr_Print();
@@ -174,9 +184,9 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
  
   PyObject* cur_obj = PyString_FromString(value->c_str());
   PyObject* upd_obj = PyString_FromString(newvalue.c_str());
-  PyObject* isnew_obj = PyBool_FromLong((long)isNew);
+  PyObject* isnew_obj = PyBool_FromLong((long)isNewOrLast);
 
-  if (cur_obj == NULL || upd_obj == NULL) {
+  if (cur_obj == NULL || upd_obj == NULL || isnew_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <string,string> trigger launch";
     return true;
   }

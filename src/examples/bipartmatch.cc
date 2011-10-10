@@ -164,37 +164,36 @@ public:
     }
   }
 
-  void BPMRoundCleanupLeft() {
-    int i = 0;
-    TypedTableIterator<int, int> *it = leftmatches->get_typed_iterator(
-        current_shard());
-    TypedTableIterator<int, int> *it2 = leftattemptmatches->get_typed_iterator(
-        current_shard());
-    TypedTableIterator<int, vector<int> > *it3 =
-        leftoutedges->get_typed_iterator(current_shard());
-    for (; !it->done() && !it2->done() && !it3->done();
-        it->Next(), it2->Next(), it3->Next()) {
-      CHECK_EQ(it->key(), it2->key());
-      CHECK_EQ(it2->key(), it3->key());
-      //tried to set but got denied
-      if (it->value() == -1 && it2->value() != -1) {
-        vector<int> v = it3->value();
-        vector<int>::iterator it = find(v.begin(), v.end(), it2->value());
-        if (it != v.end()) {
-          v.erase(it);
-          leftattemptmatches->update(it2->key(), -1);
-          leftoutedges->update(it3->key(), v);
-          i++;
-        } else
-          LOG(FATAL) << "Cleanup failed!" << endl;
-      }
-    }
-    VLOG(2) << "Cleaned up " << i << " left nodes." << endl;
-  }
+		void BPMRoundCleanupLeft() {
+			int i=0;
+			TypedTableIterator<int,int> *it =
+				 leftmatches->get_typed_iterator(current_shard());
+			TypedTableIterator<int,int> *it2 =
+				 leftattemptmatches->get_typed_iterator(current_shard());
+			TypedTableIterator<int,vector<int> > *it3 =
+				 leftoutedges->get_typed_iterator(current_shard());
+			for(; !it->done() && !it2->done() && !it3->done(); it->Next(), it2->Next(), it3->Next()) {
+				CHECK_EQ(it->key(),it2->key());
+				CHECK_EQ(it2->key(),it3->key());
+				//tried to set but got denied
+				if (it->value() == -1 && it2->value() != -1) {
+					vector<int> v = it3->value();
+					vector<int>::iterator it = find(v.begin(), v.end(), it2->value());
+					if (it != v.end()) {
+						v.erase(it);
+						leftattemptmatches->update(it2->key(),-1);
+						leftoutedges->update(it3->key(),v);
+						i++;
+					} else
+						LOG(FATAL) << "Cleanup failed!" << endl;
+				}
+			}
+			VLOG(2) << "Cleaned up " << i << " left nodes." << endl;
+		}
+			
 
-  void EvalPerformance() {
-    int left_matched = 0, right_matched = 0;
-    int rightset[FLAGS_right_vertices];
+		void EvalPerformance() {
+			int left_matched=0, right_matched=0;
 
     for (int i = 0; i < leftmatches->num_shards(); i++) {
       TypedTableIterator<int, int> *it = leftmatches->get_typed_iterator(

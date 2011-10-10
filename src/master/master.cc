@@ -278,7 +278,7 @@ void Master::start_checkpoint() {
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
 
   if (current_run_.checkpoint_type == CP_NONE) {
-    current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+    current_run_.checkpoint_type = CP_TASK_COMMIT;
   }
 
   for (size_t i = 0; i < workers_.size(); ++i) {
@@ -313,7 +313,7 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
 void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   CHECK_EQ(workers_[worker_id]->checkpointing, true);
 
-  if (r.checkpoint_type == CP_MASTER_CONTROLLED) {
+  if (r.checkpoint_type == CP_TASK_COMMIT) {
     EmptyMessage req;
     network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
@@ -690,7 +690,7 @@ void Master::run(RunDescriptor r) {
 }
 
 void Master::cp_barrier() {
-  current_run_.checkpoint_type = CP_MASTER_CONTROLLED;
+  current_run_.checkpoint_type = CP_TASK_COMMIT;
   barrier();
 }
 
@@ -718,7 +718,7 @@ void Master::barrier() {
           dump_stats();
         });
 
-    if (current_run_.checkpoint_type == CP_ROLLING &&
+    if (current_run_.checkpoint_type == CP_INTERVAL &&
         Now() - last_checkpoint_ > current_run_.checkpoint_interval) {
       checkpoint();
     }
@@ -744,7 +744,7 @@ void Master::barrier() {
                 }
               }
 
-              if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED &&
+              if (current_run_.checkpoint_type == CP_TASK_COMMIT &&
                   0.7 * current_run_.shards.size() < finished_ &&
                   w.idle_time() > 0 &&
                   !w.checkpointing) {
@@ -769,9 +769,10 @@ void Master::barrier() {
   VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_ << endl;
 
   bool quiescent;
+  EmptyMessage empty;
+  int worker_id = 0;
   do {
     quiescent = true;
-    EmptyMessage empty;
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
@@ -780,7 +781,6 @@ void Master::barrier() {
     size_t flushed = 0;
     size_t applied = 0;
     FlushResponse done_msg;
-    int worker_id = 0;
     while (flushed < workers_.size()) {
 	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
       if (network_->TryRead(MPI::ANY_SOURCE,
@@ -822,7 +822,22 @@ void Master::barrier() {
     }
   } while (!quiescent);
 
-  if (current_run_.checkpoint_type == CP_MASTER_CONTROLLED) {
+  // Finally, we can do some cleanup/finalization tasks.  For now, this only
+  // includes turning off any pending long triggers.
+  network_->Broadcast(MTYPE_WORKER_FINALIZE, empty);
+  VLOG(3) << "Sent finalize broadcast to workers" << endl;
+  int finalized = 0;
+  EmptyMessage finalize_msg;
+  while (finalized < workers_.size()) {
+    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_FINALIZE_DONE, &finalize_msg, &worker_id)) {
+      finalized++;
+      VLOG(3) << "Received finalize done " << finalized << " of " << workers_.size() << endl;
+    } else {
+      Sleep(FLAGS_sleep_time);
+    }
+  }
+
+  if (current_run_.checkpoint_type == CP_TASK_COMMIT) {
     if (!checkpointing_) {
       start_checkpoint();
     }
