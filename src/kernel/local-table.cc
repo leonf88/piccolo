@@ -36,23 +36,28 @@ void LocalTable::finish_checkpoint() {
 }
 
 void LocalTable::restore(const string& f) {
-  if (!File::Exists(f)) {
-    VLOG(1) << "Skipping restore of non-existent shard " << f;
-    return;
-  }
-
-  TableData p;
-
-  LocalTableCoder rf(f, "r");
   string k, v;
-  while (rf.ReadEntry(&k, &v)) {
-   update_str(k, v);
+  if (!File::Exists(f)) {
+    //this is no longer a return-able condition because there might
+    //be epochs that are just deltas for continuous checkpointing
+    VLOG(1) << "Skipping full restore of non-existent shard " << f;
+  } else {
+
+    //TableData p;
+    LocalTableCoder rf(f, "r");
+    while (rf.ReadEntry(&k, &v)) {
+      update_str(k, v);
+    }
   }
 
-  // Replay delta log.
-  LocalTableCoder df(f + ".delta", "r");
-  while (df.ReadEntry(&k, &v)) {
-    update_str(k, v);
+  if (!File::Exists(f + ".delta")) {
+    VLOG(1) << "Skipping full restore of non-existent shard " << f;
+  } else {
+    // Replay delta log.
+    LocalTableCoder df(f + ".delta", "r");
+    while (df.ReadEntry(&k, &v)) {
+      update_str(k, v);
+    }
   } 
 }
 
