@@ -334,14 +334,18 @@ void Worker::HandleStartRestore(const StartRestore& req,
   epoch_ = epoch;
 
   TableRegistry::Map &t = TableRegistry::Get()->tables();
-  for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-    Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
-    if (t) {
-      t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
-                              FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+  // CRM 2011-10-13: Look for latest and later epochs that might
+  // contain deltas.  Master will have sent the epoch number of the
+  // last FULL checkpoint
+  for(; epoch_++; File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_))) {
+    for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
+      Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
+      if (t) {
+        t->restore(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
+                                FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+      }
     }
   }
-
   LOG(INFO) << "State restored.";
 }
 
@@ -366,7 +370,7 @@ void Worker::HandlePutRequest() {
     t->ApplyUpdates(put);
     VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
 
-    // Record messages from our peer channel up until they checkpointed.
+    // Record messages from our peer channel up until they are checkpointed.
     if (active_checkpoint_ == CP_TASK_COMMIT ||
         (active_checkpoint_ == CP_INTERVAL && put.epoch() < epoch_)) {
       if (checkpoint_tables_.find(t->id()) != checkpoint_tables_.end()) {
