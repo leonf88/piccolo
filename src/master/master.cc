@@ -377,10 +377,22 @@ bool Master::restore() {
   }
 
   // Glob returns results in sorted order, so our last checkpoint will be the last.
-  const char* fname = matches.back().c_str();
+  // CRM 2011-10-13: Cycle backwards looking for full checkpoints for continuous, since
+  // zero or more last may be deltas.
   int epoch = -1;
-  CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
+  do {
+    const char* fname = matches.back().c_str();
+    CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "epoch_%05d/checkpoint.finished").c_str(), &epoch),
            1) << "Unexpected filename: " << fname;
+    //check if non-delta (full cps) exist here
+    string full_cp_pattern = StringPrintf("%s/epoch_%05d/?????-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
+    vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
+    if (full_cps.empty()) {
+      LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
+      matches.pop_back();
+      epoch = -1;
+    }
+  } while ((epoch == -1) && !(matches.empty()));
 
   LOG(INFO) << "Restoring from file: " << matches.back();
 
