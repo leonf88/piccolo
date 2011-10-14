@@ -226,6 +226,13 @@ bool Worker::has_incoming_data() const {
 void Worker::UpdateEpoch(int peer, int peer_epoch) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
   VLOG(1) << "Got peer marker: " << MP(peer, MP(epoch_, peer_epoch));
+
+  //continuous checkpointing behavior is a bit different
+  if (active_checkpoint_ == CP_CONTINUOUS) {
+    UpdateEpochContinuous(peer,peer_epoch);
+    return;
+  }
+
   if (epoch_ < peer_epoch) {
     LOG(INFO) << "Received new epoch marker from peer:" << MP(epoch_, peer_epoch);
 
@@ -235,7 +242,7 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
       checkpoint_tables_.insert(make_pair(i->first, true));
     }
 
-    StartCheckpoint(peer_epoch, CP_INTERVAL);
+    StartCheckpoint(peer_epoch, CP_INTERVAL,false);
   }
 
   peers_[peer]->epoch = peer_epoch;
@@ -250,11 +257,23 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
 
   if (checkpoint_done) {
     LOG(INFO) << "Finishing rolling checkpoint on worker " << id();
-    FinishCheckpoint();
+    FinishCheckpoint(false);
   }
 }
 
-void Worker::StartCheckpoint(int epoch, CheckpointType type) {
+void Worker::UpdateEpochContinuous(int peer, int peer_epoch) {
+  peers_[peer]->epoch = peer_epoch;
+  peers_[peer]->epoch = peer_epoch;
+  bool checkpoint_done = true;
+  for (size_t i = 0; i < peers_.size(); ++i) {
+    if (peers_[i]->epoch != epoch_) {
+      checkpoint_done = false;
+      VLOG(1) << "Channel is out of date: " << i << " : " << MP(peers_[i]->epoch, epoch_);
+    }
+  }
+}
+
+void Worker::StartCheckpoint(int epoch, CheckpointType type, bool deltaOnly) {
   boost::recursive_mutex::scoped_lock sl(state_lock_);
 
   if (epoch_ >= epoch) {
@@ -276,15 +295,16 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
 
       t->start_checkpoint(StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
                                                FLAGS_checkpoint_write_dir.c_str(),
-                                               epoch_, i->first));
+                                               epoch_, i->first),deltaOnly);
     }
   }
 
   active_checkpoint_ = type;
+  VLOG(1) << "Checkpointing active with type " << type;
 
   // For rolling checkpoints, send out a marker to other workers indicating
   // that we have switched epochs.
-  if (type == CP_INTERVAL) {
+  if (type == CP_INTERVAL) { // || type == CP_CONTINUOUS) {
     TableData epoch_marker;
     epoch_marker.set_source(id());
     epoch_marker.set_table(-1);
@@ -301,11 +321,11 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type) {
   VLOG(1) << "Starting delta logging... " << MP(id(), epoch_, epoch);
 }
 
-void Worker::FinishCheckpoint() {
-  VLOG(1) << "Worker " << id() << " flushing checkpoint.";
-  boost::recursive_mutex::scoped_lock sl(state_lock_);
+void Worker::FinishCheckpoint(bool deltaOnly) {
+  VLOG(1) << "Worker " << id() << " flushing checkpoint for epoch " << epoch_ << ".";
+  boost::recursive_mutex::scoped_lock sl(state_lock_);	//important! We won't lose state for continuous
 
-  active_checkpoint_ = CP_NONE;
+  active_checkpoint_ = (active_checkpoint_ == CP_CONTINUOUS)?CP_CONTINUOUS:CP_NONE;
   TableRegistry::Map &t = TableRegistry::Get()->tables();
 
   for (size_t i = 0; i < peers_.size(); ++i) {
@@ -323,6 +343,11 @@ void Worker::FinishCheckpoint() {
 
   EmptyMessage req;
   network_->Send(config_.master_id(), MTYPE_FINISH_CHECKPOINT_DONE, req);
+
+  if (active_checkpoint_ == CP_CONTINUOUS) {
+    VLOG(1) << "Continuous checkpointing starting epoch " << epoch_+1;
+    StartCheckpoint(epoch_+1,active_checkpoint_,deltaOnly);
+  }
 }
 
 void Worker::HandleStartRestore(const StartRestore& req,
@@ -330,14 +355,19 @@ void Worker::HandleStartRestore(const StartRestore& req,
                                      const RPCInfo& rpc) {
   int epoch = req.epoch();
   boost::recursive_mutex::scoped_lock sl(state_lock_);
-  LOG(INFO) << "Worker restoring state from epoch: " << epoch;
-  epoch_ = epoch;
+  LOG(INFO) << "Master instructing restore starting at epoch " << epoch;
 
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   // CRM 2011-10-13: Look for latest and later epochs that might
   // contain deltas.  Master will have sent the epoch number of the
   // last FULL checkpoint
-  for(; epoch_++; File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_))) {
+  epoch_ = epoch;
+  do {
+    VLOG(2) << "Worker restoring state from epoch: " << epoch_;
+    if (!File::Exists(StringPrintf("%s/epoch_%05d/checkpoint.finished",FLAGS_checkpoint_read_dir.c_str(),epoch_))) {
+      VLOG(2) << "Epoch " << epoch_ << " did not finish; restore process terminating normally.";
+      break;
+    }
     for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
       Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
       if (t) {
@@ -345,8 +375,9 @@ void Worker::HandleStartRestore(const StartRestore& req,
                                 FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
       }
     }
-  }
-  LOG(INFO) << "State restored.";
+    epoch_++;
+  } while(File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_)));
+  LOG(INFO) << "State restored. Current epoch is " << epoch_ << ".";
 }
 
 void Worker::HandlePutRequest() {
@@ -371,7 +402,7 @@ void Worker::HandlePutRequest() {
     VLOG(3) << "Finished ApplyUpdate from HandlePutRequest" << endl;
 
     // Record messages from our peer channel up until they are checkpointed.
-    if (active_checkpoint_ == CP_TASK_COMMIT ||
+    if (active_checkpoint_ == CP_TASK_COMMIT || active_checkpoint_ == CP_CONTINUOUS || 
         (active_checkpoint_ == CP_INTERVAL && put.epoch() < epoch_)) {
       if (checkpoint_tables_.find(t->id()) != checkpoint_tables_.end()) {
         Checkpointable *ct = dynamic_cast<Checkpointable*>(t);
@@ -542,6 +573,10 @@ void Worker::HandleFinalize(const EmptyMessage& req, EmptyMessage *resp, const R
     }
   }
 
+  if (active_checkpoint_ == CP_CONTINUOUS) {
+    active_checkpoint_ = CP_INTERVAL; //this will let it finalize properly
+  }
+
   VLOG(2) << "Telling master: Finalized." << endl;
   network_->Send(config_.master_id(), MTYPE_WORKER_FINALIZE_DONE, *resp);
 
@@ -576,12 +611,16 @@ void Worker::CheckForMasterUpdates() {
       checkpoint_tables_.insert(make_pair(checkpoint_msg.table(i), true));
     }
 
+    VLOG(1) << "Starting checkpoint type " << checkpoint_msg.checkpoint_type() << 
+      ", epoch " << checkpoint_msg.epoch();
     StartCheckpoint(checkpoint_msg.epoch(),
-                    (CheckpointType)checkpoint_msg.checkpoint_type());
+                    (CheckpointType)checkpoint_msg.checkpoint_type(),false);
   }
 
-  while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &empty)) {
-    FinishCheckpoint();
+  CheckpointFinishRequest checkpoint_finish_msg;
+  while (network_->TryRead(config_.master_id(), MTYPE_FINISH_CHECKPOINT, &checkpoint_finish_msg)) {
+    VLOG(1) << "Finishing checkpoint on master's instruction";
+    FinishCheckpoint(checkpoint_finish_msg.next_delta_only());
   }
 }
 

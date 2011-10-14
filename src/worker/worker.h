@@ -67,9 +67,10 @@ public:
   bool has_incoming_data() const;
 
 private:
-  void StartCheckpoint(int epoch, CheckpointType type);
-  void FinishCheckpoint();
+  void StartCheckpoint(int epoch, CheckpointType type, bool deltaOnly);
+  void FinishCheckpoint(bool deltaOnly);
   void UpdateEpoch(int peer, int peer_epoch);
+  void UpdateEpochContinuous(int peer, int peer_epoch);
 
   mutable boost::recursive_mutex state_lock_;
 

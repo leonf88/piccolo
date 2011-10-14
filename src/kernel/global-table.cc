@@ -122,12 +122,12 @@ void MutableGlobalTableBase::clear() {
 }
 
 
-void MutableGlobalTableBase::start_checkpoint(const string& f) {
+void MutableGlobalTableBase::start_checkpoint(const string& f, bool deltaOnly) {
   for (int i = 0; i < partitions_.size(); ++i) {
     LocalTable *t = partitions_[i];
 
     if (is_local_shard(i)) {
-      t->start_checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()));
+      t->start_checkpoint(f + StringPrintf(".%05d-of-%05d", i, partitions_.size()), deltaOnly);
     }
   }
 }

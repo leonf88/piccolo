@@ -126,3 +126,7 @@ message FlushResponse {
   required int32 updatesdone = 1;
 }
 
+message CheckpointFinishRequest {
+  required bool next_delta_only = 1;
+}
+

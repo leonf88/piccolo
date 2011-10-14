@@ -168,7 +168,7 @@ public:
   void clear();
   void resize(int64_t new_size);
 
-  void start_checkpoint(const string& f);
+  void start_checkpoint(const string& f, bool deltaOnly);
   void write_delta(const TableData& d);
   void finish_checkpoint();
   void restore(const string& f);
