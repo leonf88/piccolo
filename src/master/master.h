@@ -123,8 +123,9 @@ public:
 private:
   void start_checkpoint();
   void start_worker_checkpoint(int worker_id, const RunDescriptor& r);
-  void finish_worker_checkpoint(int worker_id, const RunDescriptor& r);
+  void finish_worker_checkpoint(int worker_id, const RunDescriptor& r, bool deltaOnly);
   void finish_checkpoint();
+  void finish_checkpoint_writefile(int epoch);
 
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -159,6 +160,10 @@ private:
 
   // Used for interval checkpointing.
   double last_checkpoint_;
+
+  //Used for continuous checkpointing.
+  double start_deltacheckpoint_;
+  double prev_ccp_full_;
 
   vector<WorkerState*> workers_;
 

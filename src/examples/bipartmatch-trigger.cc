@@ -376,33 +376,35 @@ int Bipartmatch_trigger(const ConfigData& conf) {
 //	m.enable_trigger(matchreqid,2,false);
 //	m.enable_trigger(lefttriggerid,1,false);
 
-  //Fill in all necessary keys
-  m.run_one("BPMTKernel", "InitTables", leftoutedges);
-  //Populate edges left<->right
-  m.run_all("BPMTKernel", "PopulateLeft", leftoutedges);
-  m.barrier();
+  if (!m.restore()) {
+    //Fill in all necessary keys
+    m.run_one("BPMTKernel", "InitTables", leftoutedges);
+    //Populate edges left<->right
+    m.run_all("BPMTKernel", "PopulateLeft", leftoutedges);
+    m.barrier();
 
-  //Enable triggers
-  m.run_all("BPMTKernel", "EnableTriggers", leftmatches);
-  //m.enable_trigger(matchreqid,2,true);
-  //m.enable_trigger(lefttriggerid,1,true);
-  m.barrier();
+    //Enable triggers
+    m.run_all("BPMTKernel", "EnableTriggers", leftmatches);
+    //m.enable_trigger(matchreqid,2,true);
+    //m.enable_trigger(lefttriggerid,1,true);
+    m.barrier();
 
-  struct timeval start_time, end_time;
-  gettimeofday(&start_time, NULL);
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
 
-  m.run_all("BPMTKernel", "BeginBPMT", leftoutedges);
+    RunDescriptor cp_rd("BPMTKernel", "BeginBPMT", leftoutedges);
+    cp_rd.checkpoint_type = CP_CONTINUOUS;
+    m.run_all(cp_rd);
 
-  gettimeofday(&end_time, NULL);
-  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
-      * 1000000 + (end_time.tv_usec - start_time.tv_usec);
-  cout << "Total matching time: " << ((double) (totaltime) / 1000000.0)
-      << " seconds" << endl;
+    gettimeofday(&end_time, NULL);
+    long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
+        * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+    cout << "Total matching time: " << ((double) (totaltime) / 1000000.0)
+        << " seconds" << endl;
 
-  //Disable triggers
-  m.run_all("BPMTKernel", "DisableTriggers", leftmatches);
-//	m.enable_trigger(matchreqid,2,false);
-//	m.enable_trigger(lefttriggerid,1,false);
+    //Disable triggers
+    m.run_all("BPMTKernel", "DisableTriggers", leftmatches);
+  }
 
   m.run_one("BPMTKernel", "EvalPerformance", leftmatches);
 

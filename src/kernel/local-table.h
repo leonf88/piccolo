@@ -18,7 +18,7 @@ public:
   virtual ~LocalTable() {}
   bool empty() { return size() == 0; }
 
-  void start_checkpoint(const string& f);
+  void start_checkpoint(const string& f, bool deltaOnly);
   void finish_checkpoint();
   void restore(const string& f);
   void write_delta(const TableData& put);

@@ -81,8 +81,8 @@ def configure(ctx):
   ctx.check(lib='boost_thread')
   ctx.check(lib='rt')
 
-  if not ctx.check(lib='lzo', uselib_store='LZO', mandatory=False):
-    ctx.check(lib='lzo2', uselib_store='LZO', mandatory=False)
+  if not ctx.check(lib='lzo2', uselib_store='LZO', mandatory=False):
+    ctx.check(lib='lzo', uselib_store='LZO', mandatory=False)
 
   ctx.env.append_unique('LIB',
                         os.popen('mpic++ -showme:libs').read().split())

@@ -474,7 +474,7 @@ private:
 // Checkpoint and restoration.
 class Checkpointable {
 public:
-  virtual void start_checkpoint(const string& f) = 0;
+  virtual void start_checkpoint(const string& f, bool deltaOnly) = 0;
   virtual void write_delta(const TableData& put) = 0;
   virtual void finish_checkpoint() = 0;
   virtual void restore(const string& f) = 0;

@@ -10,6 +10,8 @@ DEFINE_string(dead_workers, "", "For failure testing; comma delimited list of wo
 DEFINE_bool(work_stealing, true, "Enable work stealing to load-balance tasks between machines.");
 DEFINE_bool(checkpoint, false, "If true, enable checkpointing.");
 DEFINE_bool(restore, false, "If true, enable restore.");
+DEFINE_int32(mintime_ccp_delta, 10, "Minimum seconds for each continuous checkpoint delta to last");
+DEFINE_int32(mintime_ccp_full, 100, "Minimum interval for each continuous checkpoint full snapshot");
 
 DECLARE_string(checkpoint_write_dir);
 DECLARE_string(checkpoint_read_dir);
@@ -206,11 +208,15 @@ struct WorkerState : private boost::noncopyable {
 Master::Master(const ConfigData &conf) :
   tables_(TableRegistry::Get()->tables()){
   config_.CopyFrom(conf);
-  checkpoint_epoch_ = 0;
   kernel_epoch_ = 0;
   finished_ = dispatched_ = 0;
+
+  //Checkpointing
   last_checkpoint_ = Now();
+  prev_ccp_full_ = Now();
+  checkpoint_epoch_ = 0;
   checkpointing_ = false;
+
   network_ = NetworkThread::Get();
   shards_assigned_ = false;
 
@@ -308,13 +314,16 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
   network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
   EmptyMessage resp;
   network_->Read(1 + worker_id, MTYPE_START_CHECKPOINT_DONE, &resp);
+  if (r.checkpoint_type == CP_CONTINUOUS)
+    start_deltacheckpoint_ = Now();
 }
 
-void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
+void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r, bool deltaOnly) {
   CHECK_EQ(workers_[worker_id]->checkpointing, true);
 
-  if (r.checkpoint_type == CP_TASK_COMMIT) {
-    EmptyMessage req;
+  if (r.checkpoint_type == CP_TASK_COMMIT || r.checkpoint_type == CP_CONTINUOUS) {
+    CheckpointFinishRequest req;
+    req.set_next_delta_only(deltaOnly);
     network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
   }
 
@@ -322,22 +331,17 @@ void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r) {
   network_->Read(1 + worker_id, MTYPE_FINISH_CHECKPOINT_DONE, &resp);
 
   VLOG(1) << worker_id << " finished checkpointing.";
-  workers_[worker_id]->checkpointing = false;
+  if (r.checkpoint_type != CP_CONTINUOUS)
+    workers_[worker_id]->checkpointing = false;		//XXX continuous
 }
 
-void Master::finish_checkpoint() {
-  for (size_t i = 0; i < workers_.size(); ++i) {
-    finish_worker_checkpoint(i, current_run_);
-    CHECK_EQ(workers_[i]->checkpointing, false);
-  }
-
-  LOG(INFO) << "All workers finished checkpointing.  Flushing.";
-
+//write the checkpoint.finished file and its contents
+void Master::finish_checkpoint_writefile(int epoch) {
   Args *params = current_run_.params.ToMessage();
   Args *cp_vars = cp_vars_.ToMessage();
 
   RecordFile rf(StringPrintf("%s/epoch_%05d/checkpoint.finished",
-                            FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_), "w");
+                            FLAGS_checkpoint_write_dir.c_str(), epoch), "w");
 
   CheckpointInfo cinfo;
   cinfo.set_checkpoint_epoch(checkpoint_epoch_);
@@ -348,10 +352,47 @@ void Master::finish_checkpoint() {
   rf.write(*cp_vars);
   rf.sync();
 
-  checkpointing_ = false;
-  last_checkpoint_ = Now();
   delete params;
   delete cp_vars;
+}
+
+void Master::finish_checkpoint() {
+  //if continuous and we've recently done a full, just do deltas
+  bool deltaOnly = ((current_run_.checkpoint_type == CP_CONTINUOUS) && (!(prev_ccp_full_ + FLAGS_mintime_ccp_full < Now())));
+  for (size_t i = 0; i < workers_.size(); ++i) {
+    finish_worker_checkpoint(i, current_run_, deltaOnly);
+    if (current_run_.checkpoint_type != CP_CONTINUOUS) {
+      CHECK_EQ(workers_[i]->checkpointing, false);
+    }
+  }
+  //if continuous, assume we're at least starting a new set of deltas,
+  //and maybe a full snapshot too.
+  if (current_run_.checkpoint_type == CP_CONTINUOUS) {
+    start_deltacheckpoint_ = Now();
+    //if this was a full snapshot, then remember that.
+    if (!deltaOnly) {
+      prev_ccp_full_ = Now();
+    }
+  }
+
+  LOG(INFO) << "All workers finished checkpointing.  Flushing epoch " << checkpoint_epoch_ << ".";
+  finish_checkpoint_writefile(checkpoint_epoch_);
+
+  //if continuous, then finishing a checkpoint is the implicit
+  //start of a new checkpoint, but we don't want to send out
+  //separate start messages.
+  if (current_run_.checkpoint_type == CP_CONTINUOUS) {
+    checkpoint_epoch_ += 1;
+    checkpointing_ = true;
+
+    LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+
+    File::Mkdirs(StringPrintf("%s/epoch_%05d/",
+                              FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
+  } else {
+    checkpointing_ = false;
+  }
+  last_checkpoint_ = Now();
 }
 
 void Master::checkpoint() {
@@ -380,12 +421,19 @@ bool Master::restore() {
   // CRM 2011-10-13: Cycle backwards looking for full checkpoints for continuous, since
   // zero or more last may be deltas.
   int epoch = -1;
+  int lastepoch = -1; //the last finished epoch
+  string topfinishfile = ""; //where to restore vars and params from
   do {
     const char* fname = matches.back().c_str();
-    CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "epoch_%05d/checkpoint.finished").c_str(), &epoch),
+    CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
            1) << "Unexpected filename: " << fname;
+
+    //Remember the highest finished checkpoint
+    lastepoch = (epoch>lastepoch)?epoch:lastepoch;
+    if (topfinishfile == "") topfinishfile = matches.back();
+
     //check if non-delta (full cps) exist here
-    string full_cp_pattern = StringPrintf("%s/epoch_%05d/?????-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
+    string full_cp_pattern = StringPrintf("%s/epoch_%05d/*.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
     vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
     if (full_cps.empty()) {
       LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
@@ -394,9 +442,11 @@ bool Master::restore() {
     }
   } while ((epoch == -1) && !(matches.empty()));
 
-  LOG(INFO) << "Restoring from file: " << matches.back();
+  CHECK_EQ(matches.empty(),false) << "Ran out of non-delta-only checkpoints to start from!";
 
-  RecordFile rf(matches.back(), "r");
+  LOG(INFO) << "Restoring master state from file: " << topfinishfile << ", workers from epoch " << epoch << ".";
+
+  RecordFile rf(topfinishfile, "r");
   CheckpointInfo info;
   Args checkpoint_vars;
   Args params;
@@ -410,7 +460,8 @@ bool Master::restore() {
   cp_vars_.FromMessage(checkpoint_vars);
 
 
-  LOG(INFO) << "Restoring state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
+  LOG(INFO) << "Restored master state from checkpoint " << MP(info.kernel_epoch(), info.checkpoint_epoch());
+  LOG(INFO) << "Restoring worker state from epoch " << epoch << " forward.";
 
   // The next checkpoint should be committed to a separate epoch from the
   // restored checkpoint.
@@ -724,6 +775,12 @@ void Master::barrier() {
   MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
 
   VLOG(3) << "Starting barrier() with finished_=" << finished_ << endl;
+
+  if (current_run_.checkpoint_type == CP_CONTINUOUS && !checkpointing_) {
+    start_checkpoint();
+  } else if (current_run_.checkpoint_type == CP_CONTINUOUS) {
+    VLOG(1) << "Already performing continuous checkpoint";
+  }
   while (finished_ < current_run_.shards.size()) {
     PERIODIC(10, {
           DumpProfile();
@@ -771,6 +828,10 @@ void Master::barrier() {
 
           });
 
+      if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
+        finish_checkpoint();
+      }
+
       if (dispatched_ < current_run_.shards.size()) {
         dispatched_ += dispatch_work(current_run_);
       }
@@ -785,6 +846,15 @@ void Master::barrier() {
   int worker_id = 0;
   do {
     quiescent = true;
+
+    PERIODIC(10, {
+          DumpProfile();
+          dump_stats();
+        });
+
+    if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
+      finish_checkpoint();
+    }
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
@@ -836,6 +906,8 @@ void Master::barrier() {
 
   // Finally, we can do some cleanup/finalization tasks.  For now, this only
   // includes turning off any pending long triggers.
+  // Now it also turns all continuous checkpointing to interval so that it can
+  // be stopped be the finish_checkpoint() below.
   network_->Broadcast(MTYPE_WORKER_FINALIZE, empty);
   VLOG(3) << "Sent finalize broadcast to workers" << endl;
   int finalized = 0;
@@ -849,7 +921,11 @@ void Master::barrier() {
     }
   }
 
-  if (current_run_.checkpoint_type == CP_TASK_COMMIT) {
+  if (current_run_.checkpoint_type == CP_CONTINUOUS && checkpointing_) {
+    VLOG(2) << "Forcing continuous checkpointing to stop";
+    current_run_.checkpoint_type = CP_TASK_COMMIT; //don't let it trigger more cycles
+    finish_checkpoint();
+  } else if (current_run_.checkpoint_type == CP_TASK_COMMIT) {
     if (!checkpointing_) {
       start_checkpoint();
     }

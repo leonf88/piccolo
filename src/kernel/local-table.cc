@@ -15,12 +15,14 @@ struct LocalTableCoder : public TableCoder {
   RecordFile *f_;
 };
 
-void LocalTable::start_checkpoint(const string& f) {
+void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
   VLOG(1) << "Start checkpoint " << f;
   Timer t;
 
-  LocalTableCoder c(f, "w");
-  Serialize(&c);
+  if (!deltaOnly) {
+    LocalTableCoder c(f, "w");
+    Serialize(&c);
+  }
 
   delta_file_ = new LocalTableCoder(f + ".delta", "w");
   VLOG(1) << "Flushed to disk in: " << t.elapsed();
@@ -40,9 +42,10 @@ void LocalTable::restore(const string& f) {
   if (!File::Exists(f)) {
     //this is no longer a return-able condition because there might
     //be epochs that are just deltas for continuous checkpointing
-    VLOG(1) << "Skipping full restore of non-existent shard " << f;
+    VLOG(2) << "Skipping full restore of non-existent shard " << f;
   } else {
 
+    VLOG(2) << "Restoring full snapshot " << f;
     //TableData p;
     LocalTableCoder rf(f, "r");
     while (rf.ReadEntry(&k, &v)) {
@@ -51,7 +54,7 @@ void LocalTable::restore(const string& f) {
   }
 
   if (!File::Exists(f + ".delta")) {
-    VLOG(1) << "Skipping full restore of non-existent shard " << f;
+    VLOG(2) << "Skipping delta restore of missing delta " << f << ".delta";
   } else {
     // Replay delta log.
     LocalTableCoder df(f + ".delta", "r");
