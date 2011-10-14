@@ -9,6 +9,8 @@ import ppp_tool
 import proto_tool
 import swig
 from os.path import join
+from waflib import Utils
+from waflib.Tools.ccroot import link_task
 
 top = '.'
 out = os.path.abspath('../build')
@@ -18,6 +20,30 @@ PROTO_FILES = [
   'worker/worker.proto',
   'examples/examples.proto',
   ]
+
+class piccolo_program(link_task):
+  run_str = ' '.join(['${LINK_CXX}',
+                      '${LINKFLAGS}',
+                      '${CXXLNK_SRC_F}${SRC}',
+                      '${CXXLNK_TGT_F}${TGT[0].abspath()}',
+                      '${RPATH_ST:RPATH}',
+                      '${FRAMEWORKPATH_ST:FRAMEWORKPATH}',
+                      '${FRAMEWORK_ST:FRAMEWORK}',
+                      '${ARCH_ST:ARCH}',
+                      '-Wl,--start-group',
+                      '${STLIB_MARKER}',
+                      '${STLIBPATH_ST:STLIBPATH}',
+                      '${STLIB_ST:PICCOLO_STATIC}',
+                      '${SHLIB_MARKER}',
+                      '${LIBPATH_ST:LIBPATH}',
+                      '${LIB_ST:LIB}'
+                      '-Wl,--end-group',
+                      ])
+
+  vars = ['LINKDEPS']
+  ext_out = ['.bin']
+  inst_to = '${BINDIR}'
+  chmod = Utils.O755
 
 def options(ctx):
   ctx.load('compiler_cc')
@@ -58,14 +84,16 @@ def configure(ctx):
   if not ctx.check(lib='lzo', uselib_store='LZO', mandatory=False):
     ctx.check(lib='lzo2', uselib_store='LZO', mandatory=False)
 
-  ctx.env.append_unique('LIB', os.popen('mpic++ -showme:libs').read().split())
+  ctx.env.append_unique('LIB',
+                        os.popen('mpic++ -showme:libs').read().split())
 
-  ctx.env.append_unique('LIB', [ctx.env['LIB_PROTOBUF'][0],
-                                ctx.env['LIB_BOOST_THREAD'][0],
-                                ctx.env['LIB_BLAS'][0],
-                                ctx.env['LIB_UNWIND'][0],
-                                ctx.env['LIB_LZO'][0],
-                                ctx.env['LIB_RT'][0]])
+  ctx.env.append_unique('PICCOLO_STATIC',
+                        [ctx.env['LIB_PROTOBUF'][0],
+                     ctx.env['LIB_BOOST_THREAD'][0],
+                     ctx.env['LIB_BLAS'][0],
+                     ctx.env['LIB_UNWIND'][0],
+                     ctx.env['LIB_LZO'][0],
+                     ctx.env['LIB_RT'][0]])
 
   COMPILER_FLAGS = ['-fPIC',
                     '-Wall',
@@ -158,33 +186,33 @@ def build(bld):
   main_obj = bld.objects(target='example_main.o',
                          source=['examples/main.cc'])
 
-  def example_driver(target, sources, use=None):
+  def build_example(target, sources, use=None):
     if not use: use = []
     bld.program(target=target,
                 source=[join('examples', src) for src in sources],
-                features='cxxprogram cxx',
+                features='piccolo_program cxx',
                 use=use + ['example_main.o',
                            'piccolo_proto',
                            'worker', 'master', 'common', 'kernel',
                            'gflags', 'glog'])
 
-  example_driver('matmul', ['matmul.pp', ])
-  example_driver('k-means', ['k-means.pp', ])
-  example_driver('shortest-path', ['shortest-path.pp', ])
-  example_driver('shortest-path-trigger', ['shortest-path-trigger.pp', ])
+  build_example('matmul', ['matmul.pp', ])
+  build_example('k-means', ['k-means.pp', ])
+  build_example('shortest-path', ['shortest-path.pp', ])
+  build_example('shortest-path-trigger', ['shortest-path-trigger.pp', ])
 
-  example_driver('pagerank', ['pagerank.pp'], use=['webgraph'])
-  example_driver('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])
+  build_example('pagerank', ['pagerank.pp'], use=['webgraph'])
+  build_example('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])
 
-  example_driver('test-tables', ['test-tables.cc', ])
-  example_driver('test-tables2', ['test-tables2.cc', ])
-  example_driver('wordcount', ['wordcount.pp', ])
-  example_driver('faceclass', ['facedet/cpp/pgmimage.c',
+  build_example('test-tables', ['test-tables.cc', ])
+  build_example('test-tables2', ['test-tables2.cc', ])
+  build_example('wordcount', ['wordcount.pp', ])
+  build_example('faceclass', ['facedet/cpp/pgmimage.c',
                                'facedet/cpp/imagenet.cpp',
                                'facedet/cpp/backprop.cpp',
                                'faceclass.cc', ])
-  example_driver('nas/isort', ['nas/isort.cc', ])
-  example_driver('nas/n-body', ['nas/n-body.cc', ])
-  example_driver('bipartmatch', ['bipartmatch.cc'])
-  example_driver('bipartmatch-trigger', ['bipartmatch-trigger.cc', ])
+  build_example('nas/isort', ['nas/isort.cc', ])
+  build_example('nas/n-body', ['nas/n-body.cc', ])
+  build_example('bipartmatch', ['bipartmatch.cc'])
+  build_example('bipartmatch-trigger', ['bipartmatch-trigger.cc', ])
 
