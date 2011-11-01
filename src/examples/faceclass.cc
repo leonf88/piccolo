@@ -12,7 +12,7 @@ extern "C" {
 #include <algorithm>
 #include <libgen.h>
 
-using namespace dsm;
+using namespace piccolo;
 using namespace std;
 
 static int NUM_WORKERS = 2;
@@ -45,14 +45,14 @@ static TypedGlobalTable<int, double>* performance = NULL;
 //-----------------------------------------------
 // Marshalling for BPNN type
 //-----------------------------------------------
-namespace dsm {
+namespace piccolo {
 template<> struct Marshal<BPNN> : MarshalBase {
   static void marshal(const BPNN& t, string *out) {
     int sizes[3];
     int i;
     VLOG(1)
         << "Marshalling BPNN from " << t.input_n << ", " << t.hidden_n << ", "
-            << t.output_n << endl;
+            << t.output_n;
     sizes[0] = t.input_n;
     sizes[1] = t.hidden_n;
     sizes[2] = t.output_n;
@@ -65,7 +65,7 @@ template<> struct Marshal<BPNN> : MarshalBase {
       out->append((char*) t.hidden_weights[i],
           (1 + t.output_n) * sizeof(double));
     }
-    VLOG(1) << "Marshalled BPNN to string of size " << out->length() << endl;
+    VLOG(1) << "Marshalled BPNN to string of size " << out->length();
   }
   static void unmarshal(const StringPiece &s, BPNN* t) {
     BackProp bpnn;
@@ -83,7 +83,7 @@ template<> struct Marshal<BPNN> : MarshalBase {
           (1 + t->output_n) * sizeof(double));
       offset += (1 + t->output_n) * sizeof(double);
     }
-    VLOG(1) << "Unmarshalled BPNN from string" << endl;
+    VLOG(1) << "Unmarshalled BPNN from string";
   }
 };
 }
@@ -91,7 +91,7 @@ template<> struct Marshal<BPNN> : MarshalBase {
 //-----------------------------------------------
 // Marshalling for IMAGE* type
 //-----------------------------------------------
-namespace dsm {
+namespace piccolo {
 template<> struct Marshal<IMAGE> : MarshalBase {
   static void marshal(const IMAGE& t, string *out) {
     char sizes[4];
@@ -107,7 +107,7 @@ template<> struct Marshal<IMAGE> : MarshalBase {
     out->append((char*) (t.name), (int) sizes[0]);
     VLOG(3)
         << "Marshalled image " << t.name << " to string of size "
-            << out->length() << endl;
+            << out->length();
   }
   static void unmarshal(const StringPiece &s, IMAGE* t) {
     int r, c, sl;
@@ -127,7 +127,7 @@ template<> struct Marshal<IMAGE> : MarshalBase {
     }
     strncpy(t->name, s.data + 5 + sizeof(int) * r * c, sl);
     t->name[sl] = '\0';
-    VLOG(3) << "Unmarshalled image " << t->name << " from string" << endl;
+    VLOG(3) << "Unmarshalled image " << t->name << " from string";
   }
 };
 }
@@ -411,9 +411,9 @@ public:
      performance->update(1,-total_err);
      performance->SendUpdates();
      if (performance->get(0) != 0)
-     LOG(FATAL) << "!!BUG!! Correct image count not reset to zero" << endl;
+     LOG(FATAL) << "!!BUG!! Correct image count not reset to zero";
      if (performance->get(1) != 0)
-     LOG(FATAL) << "!!BUG!! Accumulated error not reset to zero" << endl;
+     LOG(FATAL) << "!!BUG!! Accumulated error not reset to zero";
      */
   }
 

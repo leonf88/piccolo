@@ -3,18 +3,23 @@
 
 #include "util/common.h"
 #include "util/file.h"
+#include "util/stats.h"
 #include "util/common.pb.h"
 
 #include <boost/thread.hpp>
 #include <boost/function.hpp>
 #include <google/protobuf/message.h>
-#include <mpi.h>
+
+#include <tr1/unordered_set>
 
 #include <deque>
-using std::deque;
-using std::string;
 
-namespace dsm {
+namespace MPI {
+  class Comm;
+}
+
+namespace piccolo {
+namespace rpc {
 
 typedef google::protobuf::Message Message;
 
@@ -26,6 +31,7 @@ struct RPCInfo {
   int tag;
 };
 
+extern int ANY_SOURCE;
 
 // Hackery to get around mpi's unhappiness with threads.  This thread
 // simply polls MPI continuously for any kind of update and adds it to
@@ -34,7 +40,7 @@ class NetworkThread {
 public:
   bool active() const;
   int64_t pending_bytes() const;
-  
+
   // Blocking read for the given source and message type.
   void Read(int desired_src, int type, Message* data, int *source=NULL);
   bool TryRead(int desired_src, int type, Message* data, int *source=NULL);
@@ -87,14 +93,14 @@ private:
   static const int kMaxHosts = 512;
   static const int kMaxMethods = 64;
 
-  typedef deque<string> Queue;
+  typedef std::deque<string> Queue;
 
   bool running;
 
   CallbackInfo* callbacks_[kMaxMethods];
 
-  vector<RPCRequest*> pending_sends_;
-  unordered_set<RPCRequest*> active_sends_;
+  std::vector<RPCRequest*> pending_sends_;
+  std::tr1::unordered_set<RPCRequest*> active_sends_;
 
   Queue requests[kMaxMethods][kMaxHosts];
   Queue replies[kMaxMethods][kMaxHosts];
@@ -124,7 +130,7 @@ void RegisterCallback(int req_type, Request *req, Response *resp, Function funct
 
 #endif
 
-
-}
+} // namespace rpc
+} // namespace piccolo
 
 #endif // UTIL_RPC_H

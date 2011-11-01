@@ -1,4 +1,4 @@
-package dsm;
+package piccolo;
 
 import "util/common.proto";
 option optimize_for = SPEED;

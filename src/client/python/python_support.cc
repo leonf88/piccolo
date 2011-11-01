@@ -10,7 +10,7 @@ DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
 DEFINE_bool(crawler_triggers, false, "Use trigger-based crawler (t/f).");
 static DSMKernel *the_kernel;
 
-namespace dsm {
+namespace piccolo {
 
 DSMKernel* kernel() {
   return the_kernel;
@@ -49,7 +49,7 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
 }
 
 template<class K, class V>
-PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& codeshort, const string& codelong) {
+PythonTrigger<K, V>::PythonTrigger(piccolo::GlobalTable* thistable, const string& codeshort, const string& codelong) {
   Init(thistable);
   params_.put("python_code_short", codeshort);
   params_.put("python_code_long", codelong);
@@ -57,7 +57,7 @@ PythonTrigger<K, V>::PythonTrigger(dsm::GlobalTable* thistable, const string& co
 }
 
 template<class K, class V>
-void PythonTrigger<K, V>::Init(dsm::GlobalTable* thistable) {
+void PythonTrigger<K, V>::Init(piccolo::GlobalTable* thistable) {
   try {
     object sys_module = import("sys");
     object sys_ns = sys_module.attr("__dict__");
@@ -236,7 +236,7 @@ public:
   }
 
   void swap_python_accumulator() {
-    LOG(FATAL) << "Swapping accumulators in Python not yet implemented." << endl;
+    LOG(FATAL) << "Swapping accumulators in Python not yet implemented.";
 //    the_kernel = this;
 //    string python_code = get_arg<string> ("python_accumulator");
 //    LOG(INFO) << "Swapping python accumulator: " << python_code;

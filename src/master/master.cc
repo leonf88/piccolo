@@ -1,10 +1,14 @@
-#include "master/master.h"
-#include "kernel/table.h"
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
-
+#include "kernel/table.h"
+#include "master/master.h"
+#include "util/static-initializers.h"
 
 #include <set>
+
+using std::map;
+using std::vector;
+using std::set;
 
 DEFINE_string(dead_workers, "", "For failure testing; comma delimited list of workers to pretend have died.");
 DEFINE_bool(work_stealing, true, "Enable work stealing to load-balance tasks between machines.");
@@ -17,9 +21,9 @@ DECLARE_string(checkpoint_write_dir);
 DECLARE_string(checkpoint_read_dir);
 DECLARE_double(sleep_time);
 
-namespace dsm {
+namespace piccolo {
 
-static unordered_set<int> dead_workers;
+static std::set<int> dead_workers;
 
 struct Taskid {
   int table;
@@ -217,7 +221,7 @@ Master::Master(const ConfigData &conf) :
   checkpoint_epoch_ = 0;
   checkpointing_ = false;
 
-  network_ = NetworkThread::Get();
+  network_ = rpc::NetworkThread::Get();
   shards_assigned_ = false;
 
   CHECK_GT(network_->size(), 1) << "At least one master and one worker required!";
@@ -229,7 +233,7 @@ Master::Master(const ConfigData &conf) :
   for (int i = 0; i < config_.num_workers(); ++i) {
     RegisterWorkerRequest req;
     int src = 0;
-    network_->Read(MPI::ANY_SOURCE, MTYPE_REGISTER_WORKER, &req, &src);
+    network_->Read(rpc::ANY_SOURCE, MTYPE_REGISTER_WORKER, &req, &src);
     VLOG(1) << "Registered worker " << src - 1 << "; " << config_.num_workers() - 1 - i << " remaining.";
   }
 
@@ -577,12 +581,12 @@ bool Master::steal_work(const RunDescriptor& r, int idle_worker,
   average_size /= r.table->num_shards();
 
   // Weight the cost of moving the table versus the time savings.
-  double move_cost = max(1.0,
+  double move_cost = std::max(1.0,
                          2 * task->size * avg_completion_time / average_size);
   double eta = 0;
   for (size_t i = 0; i < pending.size(); ++i) {
     TaskState *p = pending[i];
-    eta += max(1.0, p->size * avg_completion_time / average_size);
+    eta += std::max(1.0, p->size * avg_completion_time / average_size);
   }
 
 //  LOG(INFO) << "ETA: " << eta << " move cost: " << move_cost;
@@ -662,7 +666,7 @@ int Master::reap_one_task() {
   KernelDone done_msg;
   int w_id = 0;
 
-  if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
+  if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_KERNEL_DONE, &done_msg, &w_id)) {
 
     w_id -= 1;
 
@@ -774,7 +778,7 @@ void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
 void Master::barrier() {
   MethodStats &mstats = method_stats_[current_run_.kernel + ":" + current_run_.method];
 
-  VLOG(3) << "Starting barrier() with finished_=" << finished_ << endl;
+  VLOG(3) << "Starting barrier() with finished_=" << finished_;
 
   if (current_run_.checkpoint_type == CP_CONTINUOUS && !checkpointing_) {
     start_checkpoint();
@@ -839,7 +843,7 @@ void Master::barrier() {
 
   }
 
-  VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_ << endl;
+  VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_;
 
   bool quiescent;
   EmptyMessage empty;
@@ -858,14 +862,14 @@ void Master::barrier() {
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
-    VLOG(3) << "Sent flush broadcast to workers" << endl;
+    VLOG(3) << "Sent flush broadcast to workers";
 
     size_t flushed = 0;
     size_t applied = 0;
     FlushResponse done_msg;
     while (flushed < workers_.size()) {
-	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
-      if (network_->TryRead(MPI::ANY_SOURCE,
+	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)";
+      if (network_->TryRead(rpc::ANY_SOURCE,
                             MTYPE_FLUSH_RESPONSE,
                             &done_msg,
                             &worker_id)) {
@@ -877,7 +881,7 @@ void Master::barrier() {
         VLOG(3) << "Received flush response " << flushed
                 << " of " << workers_.size()
                 << " with " << done_msg.updatesdone()
-                << " updates done." << endl;
+                << " updates done.";
       } else {
         Sleep(FLAGS_sleep_time);
       }
@@ -886,7 +890,7 @@ void Master::barrier() {
     //2nd round-trip to make sure all workers have applied all updates
     //XXX: incorrect if MPI does not guarantee remote delivery
     network_->Broadcast(MTYPE_WORKER_APPLY, empty);
-    VLOG(3) << "Sent apply broadcast to workers" << endl;
+    VLOG(3) << "Sent apply broadcast to workers";
 
     //If we don't wait for Apply responses, then we will send more FLUSH messages
     //potentially even out of other with APPLY, which can easily cause deadlocks
@@ -894,10 +898,10 @@ void Master::barrier() {
 
     EmptyMessage apply_msg;
     while (applied < workers_.size()) {
-	  //VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
-      if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
+	  //VLOG(3) << "Waiting for apply responses (" << applied << " received)";
+      if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
         applied++;
-        VLOG(3) << "Received apply done " << applied << " of " << workers_.size() << endl;
+        VLOG(3) << "Received apply done " << applied << " of " << workers_.size();
       } else {
         Sleep(FLAGS_sleep_time);
       }
@@ -909,13 +913,13 @@ void Master::barrier() {
   // Now it also turns all continuous checkpointing to interval so that it can
   // be stopped be the finish_checkpoint() below.
   network_->Broadcast(MTYPE_WORKER_FINALIZE, empty);
-  VLOG(3) << "Sent finalize broadcast to workers" << endl;
+  VLOG(3) << "Sent finalize broadcast to workers";
   int finalized = 0;
   EmptyMessage finalize_msg;
   while (finalized < workers_.size()) {
-    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_WORKER_FINALIZE_DONE, &finalize_msg, &worker_id)) {
+    if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_WORKER_FINALIZE_DONE, &finalize_msg, &worker_id)) {
       finalized++;
-      VLOG(3) << "Received finalize done " << finalized << " of " << workers_.size() << endl;
+      VLOG(3) << "Received finalize done " << finalized << " of " << workers_.size();
     } else {
       Sleep(FLAGS_sleep_time);
     }

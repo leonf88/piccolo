@@ -2,7 +2,7 @@
 #include <SDL/SDL.h>
 #include <libgen.h>
 
-using namespace dsm;
+using namespace piccolo;
 
 DEFINE_int32(width, 800, "");
 DEFINE_int32(height, 600, "");

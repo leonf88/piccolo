@@ -95,7 +95,7 @@ class Scanner(object):
 HEADER = '''
 #include "client/client.h"
 
-using namespace dsm;
+using namespace piccolo;
 '''
 
 MAP_KERNEL = '''

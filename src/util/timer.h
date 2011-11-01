@@ -1,7 +1,7 @@
 #ifndef TIMER_H_
 #define TIMER_H_
 
-namespace dsm {
+namespace piccolo {
 static uint64_t rdtsc() {
   uint32_t hi, lo;
   __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));

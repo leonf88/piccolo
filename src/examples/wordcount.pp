@@ -1,7 +1,7 @@
 #include "client/client.h"
 
 using namespace std;
-using namespace dsm;
+using namespace piccolo;
 
 DEFINE_string(book_source, "/home/yavcular/books/520.txt", "");
 

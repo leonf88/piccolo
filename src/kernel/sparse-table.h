@@ -7,7 +7,7 @@
 #include "kernel/local-table.h"
 #include <boost/noncopyable.hpp>
 
-namespace dsm {
+namespace piccolo {
 
 static const double kLoadFactor = 0.8;
 
@@ -32,9 +32,6 @@ public:
     Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) {
       Next();
     }
-
-    Marshal<K>* kmarshal() { return parent_.kmarshal(); }
-    Marshal<V>* vmarshal() { return parent_.vmarshal(); }
 
     void Next() {
       do {
@@ -90,9 +87,6 @@ public:
   void Serialize(TableCoder *out);
   void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
 
-  Marshal<K>* kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
-  Marshal<V>* vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
-
 private:
   uint32_t bucket_idx(K k) {
     return hashobj_(k) % size_;
@@ -139,8 +133,8 @@ void SparseTable<K, V>::Serialize(TableCoder *out) {
   string k, v;
   while (!i->done()) {
     k.clear(); v.clear();
-    ((Marshal<K>*)info_.key_marshal)->marshal(i->key(), &k);
-    ((Marshal<V>*)info_.value_marshal)->marshal(i->value(), &v);
+    marshal(i->key(), &k);
+    marshal(i->value(), &v);
     out->WriteEntry(k, v);
     i->Next();
   }
@@ -156,8 +150,8 @@ void SparseTable<K, V>::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase
 
   it->clear();
   while (in->ReadEntry(&kt, &vt)) {
-    ((Marshal<K>*)info_.key_marshal)->unmarshal(kt, &k);
-    ((Marshal<V>*)info_.value_marshal)->unmarshal(vt, &v);
+    unmarshal(kt, &k);
+    unmarshal(vt, &v);
     it->append(k, v);
   }
   it->rewind();
@@ -208,12 +202,12 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
   int b = bucket_for_key(k);
 
   if (b != -1) {
-    if (info_.accum->accumtype == ACCUMULATOR) {
+    if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
-    } else if (info_.accum->accumtype == TRIGGER) {
+    } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
-//      LOG(INFO) << "Executing Trigger [sparse]" << endl;
+//      LOG(INFO) << "Executing Trigger [sparse]";
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
       if (doUpdate)
         buckets_[b].v = v2;
@@ -221,7 +215,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
     }
   } else {
-    if (info_.accum->accumtype == TRIGGER) {
+    if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       bool doUpdate = true;
       V v2 = v;
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true

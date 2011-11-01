@@ -4,7 +4,9 @@
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
 
-namespace dsm {
+#include "util/static-initializers.h"
+
+namespace piccolo {
 
 TableRegistry* TableRegistry::Get() {
   static TableRegistry* t = new TableRegistry;
@@ -27,4 +29,5 @@ MutableGlobalTable* TableRegistry::mutable_table(int id) {
 
 }
 
-REGISTER_INITIALIZER(CreateStatsTable, dsm::CreateStatsTable());
+REGISTER_INITIALIZER(CreateStatsTable,
+                     piccolo::CreateStatsTable());

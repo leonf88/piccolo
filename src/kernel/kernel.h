@@ -9,7 +9,9 @@
 #include <boost/function.hpp>
 #include <boost/lexical_cast.hpp>
 
-namespace dsm {
+#include <map>
+
+namespace piccolo {
 
 template <class K, class V>
 class TypedGlobalTable;
@@ -82,7 +84,7 @@ public:
 
   Args* ToMessage() const {
     Args* out = new Args;
-    for (unordered_map<string, MarshalledValue*>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
+    for (std::map<string, MarshalledValue*>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
       Arg *p = out->add_param();
       p->set_key(i->first);
       p->set_value(i->second->ToString());
@@ -100,8 +102,8 @@ public:
   }
 
 private:
-  mutable unordered_map<string, MarshalledValue*> p_;
-  mutable unordered_map<string, string> serialized_;
+  mutable std::map<string, MarshalledValue*> p_;
+  mutable std::map<string, string> serialized_;
 };
 #endif
 
@@ -165,7 +167,7 @@ struct KernelInfo {
 template <class C>
 struct KernelInfoT : public KernelInfo {
   typedef void (C::*Method)();
-  map<string, Method> methods_;
+  std::map<string, Method> methods_;
 
   KernelInfoT(const char* name) : KernelInfo(name) {}
 
@@ -186,7 +188,7 @@ struct KernelInfoT : public KernelInfo {
 class ConfigData;
 class KernelRegistry {
 public:
-  typedef map<string, KernelInfo*> Map;
+  typedef std::map<string, KernelInfo*> Map;
   Map& kernels() { return m_; }
   KernelInfo* kernel(const string& name) { return m_[name]; }
 
@@ -202,7 +204,7 @@ struct KernelRegistrationHelper {
     KernelRegistry::Map& kreg = KernelRegistry::Get()->kernels();
 
     CHECK(kreg.find(name) == kreg.end());
-    kreg.insert(make_pair(name, new KernelInfoT<C>(name)));
+    kreg.insert(std::make_pair(name, new KernelInfoT<C>(name)));
   }
 };
 

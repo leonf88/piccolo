@@ -13,7 +13,7 @@
 using namespace google::protobuf;
 using namespace std;
 
-namespace dsm {
+namespace piccolo {
 
 DSMKernel* kernel();
 
@@ -69,8 +69,8 @@ struct PythonMarshal : public Marshal<PyObjectPtr> {
 template<class K, class V>
 class PythonTrigger : public Trigger<K, V> {
 public:
-  PythonTrigger(dsm::GlobalTable* thistable, const string& codeshort, const string& codelong);
-  void Init(dsm::GlobalTable* thistable);
+  PythonTrigger(piccolo::GlobalTable* thistable, const string& codeshort, const string& codelong);
+  void Init(piccolo::GlobalTable* thistable);
   void Fire(const K* k, V* value, const V& newvalue, bool* doUpdate, bool isNew);
   bool LongFire(const K k, bool lastrun);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isLongFire, bool isNew);

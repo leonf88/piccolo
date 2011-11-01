@@ -2,7 +2,7 @@
 #include "util/file.h"
 
 using google::protobuf::Message;
-namespace dsm {
+namespace piccolo {
 
 struct RecordIterator : public TypedTableIterator<uint64_t, Message> {
   virtual ~RecordIterator () {}

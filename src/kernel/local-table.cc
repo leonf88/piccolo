@@ -1,7 +1,9 @@
-#include "table.h"
-#include "local-table.h"
+#include "kernel/table.h"
+#include "kernel/local-table.h"
+#include "util/stats.h"
+#include "util/timer.h"
 
-namespace dsm {
+namespace piccolo {
 
 // Encodes or decodes table entries, reading and writing from the
 // specified file.
@@ -61,7 +63,7 @@ void LocalTable::restore(const string& f) {
     while (df.ReadEntry(&k, &v)) {
       update_str(k, v);
     }
-  } 
+  }
 }
 
 //Dummy stub

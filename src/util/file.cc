@@ -4,7 +4,11 @@
 #include <stdio.h>
 #include <glob.h>
 
-namespace dsm {
+using std::min;
+using std::string;
+using std::vector;
+
+namespace piccolo {
 
 static const int kFileBufferSize = 4 * 1024 * 1024;
 
@@ -301,15 +305,15 @@ bool RecordFile::readChunk(string *s) {
 
 bool RecordFile::read(google::protobuf::Message *m) {
   if (!readChunk(&buf_)) {
-    return false; 
+    return false;
   }
 
   if (!m)
     return true;
 
-  CHECK(m->ParseFromString(buf_)) 
-    << "Failed to parse entry of size " << buf_.size() 
-    << " at position " << fp->tell() 
+  CHECK(m->ParseFromString(buf_))
+    << "Failed to parse entry of size " << buf_.size()
+    << " at position " << fp->tell()
     << " from RecordFile " << path_;
   return true;
 }

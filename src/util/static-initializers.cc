@@ -5,7 +5,7 @@
 
 using namespace std;
 
-namespace dsm {
+namespace piccolo {
 
 typedef Registry<InitHelper>::Map InitMap;
 typedef Registry<TestHelper>::Map TestMap;

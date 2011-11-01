@@ -1,11 +1,12 @@
 #ifndef LOCALTABLE_H_
 #define LOCALTABLE_H_
 
-#include "table.h"
+#include "kernel/table.h"
+#include "kernel/table-inl.h"
 #include "util/file.h"
 #include "util/rpc.h"
 
-namespace dsm {
+namespace piccolo {
 
 // Represents a single shard of a partitioned global table.
 class LocalTable :
