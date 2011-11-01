@@ -1,15 +1,28 @@
 #include "util/rpc.h"
 #include "util/common.h"
 #include "util/common.pb.h"
+#include "util/hash.h"
+#include "util/timer.h"
+#include "util/tuple.h"
+
+#include <mpi.h>
 #include <signal.h>
+
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
 
 DECLARE_bool(localtest);
 DECLARE_double(sleep_time);
 
-namespace dsm {
+using std::tr1::unordered_set;
+
+namespace piccolo {
+namespace rpc {
+
+int ANY_SOURCE = MPI::ANY_SOURCE;
 
 static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
-  static dsm::SpinLock l;
+  static piccolo::SpinLock l;
   l.lock();
 
   char buffer[1024];
@@ -138,7 +151,7 @@ void NetworkThread::Run() {
   while (running) {
     MPI::Status st;
 
-    if (world_->Iprobe(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
+    if (world_->Iprobe(rpc::ANY_SOURCE, MPI::ANY_TAG, st)) {
       int tag = st.Get_tag();
       int source = st.Get_source();
       int bytes = st.Get_count(MPI::BYTE);
@@ -250,7 +263,7 @@ void NetworkThread::Read(int desired_src, int type, Message* data, int *source) 
 }
 
 bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
-  if (src == MPI::ANY_SOURCE) {
+  if (src == rpc::ANY_SOURCE) {
     for (int i = 0; i < world_->Get_size(); ++i) {
       if (TryRead(i, type, data, source)) {
         return true;
@@ -369,5 +382,6 @@ void NetworkThread::Init() {
   atexit(&ShutdownMPI);
 }
 
-}
+} // namespace rpc
+} // namespace piccolo
 

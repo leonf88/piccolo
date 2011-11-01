@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <libgen.h>
 
-using namespace dsm;
+using namespace piccolo;
 using namespace std;
 
 static int NUM_WORKERS = 2;
@@ -24,7 +24,7 @@ static TypedGlobalTable<int, int>* rightmatches = NULL;
 static TypedGlobalTable<string, string>* StatsTable = NULL;
 
 //-----------------------------------------------
-namespace dsm {
+namespace piccolo {
 struct RightMatchSet: public Accumulator<int> {
   virtual ~RightMatchSet() {}
   void Accumulate(int *i, const int &j) {
@@ -143,7 +143,7 @@ public:
 
       VLOG(2)
           << "Attempted match: left " << it->key() << " <--> right " << j
-              << endl;
+             ;
 
       rightmatches->update(j, it->key());
       leftattemptmatches->update(it->key(), j);
@@ -151,7 +151,7 @@ public:
     StatsTable->update(qkey, (quiescent ? "t" : "f"));
     VLOG(2)
         << "Shard " << current_shard() << " is quiescent? "
-            << StatsTable->get(qkey).c_str() << endl;
+            << StatsTable->get(qkey).c_str();
   }
 
   void BPMRoundRight() {
@@ -185,10 +185,10 @@ public:
 						leftoutedges->update(it3->key(),v);
 						i++;
 					} else
-						LOG(FATAL) << "Cleanup failed!" << endl;
+						LOG(FATAL) << "Cleanup failed!";
 				}
 			}
-			VLOG(2) << "Cleaned up " << i << " left nodes." << endl;
+			VLOG(2) << "Cleaned up " << i << " left nodes.";
 		}
 			
 
@@ -270,12 +270,12 @@ int Bipartmatch(const ConfigData& conf) {
     invocations++;
   } while (unstable);
   cout << "---- Completed in " << invocations
-      << " triples of kernel invocations ----" << endl;
+      << " triples of kernel invocations ----";
   gettimeofday(&end_time, NULL);
   long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
       * 1000000 + (end_time.tv_usec - start_time.tv_usec);
   cout << "Total matching time: " << ((double) (totaltime) / 1000000.0)
-      << " seconds" << endl;
+      << " seconds";
 
   m.run_one("BPMKernel", "EvalPerformance", leftmatches);
 

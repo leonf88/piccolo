@@ -11,18 +11,21 @@
 #include "worker/worker.pb.h"
 
 #include <boost/thread.hpp>
+#include <map>
 #include <mpi.h>
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
 
 using boost::shared_ptr;
 
-namespace dsm {
+namespace piccolo {
 
 // If this node is the master, return false immediately.  Otherwise
 // start a worker and exit when the computation is finished.
 bool StartWorker(const ConfigData& conf);
 
-class Worker : public TableHelper, private boost::noncopyable {
-struct Stub;
+class Worker: public TableHelper, private boost::noncopyable {
+  struct Stub;
 public:
   Worker(const ConfigData &c);
   virtual ~Worker();
@@ -38,28 +41,43 @@ public:
   void CheckForMasterUpdates();
   void CheckNetwork();
 
-  void HandleGetRequest(const HashGet& get_req, TableData *get_resp, const RPCInfo& rpc);
-  void HandleSwapRequest(const SwapTable& req, EmptyMessage *resp, const RPCInfo& rpc);
-  void HandleClearRequest(const ClearTable& req, EmptyMessage *resp, const RPCInfo& rpc);
-  void HandleIteratorRequest(const IteratorRequest& iterator_req, IteratorResponse *iterator_resp, const RPCInfo& rpc);
-  void HandleShardAssignment(const ShardAssignmentRequest& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleGetRequest(const HashGet& get_req, TableData *get_resp,
+                        const rpc::RPCInfo& rpc);
+  void HandleSwapRequest(const SwapTable& req, EmptyMessage *resp,
+                         const rpc::RPCInfo& rpc);
+  void HandleClearRequest(const ClearTable& req, EmptyMessage *resp,
+                          const rpc::RPCInfo& rpc);
+  void HandleIteratorRequest(const IteratorRequest& iterator_req,
+                             IteratorResponse *iterator_resp,
+                             const rpc::RPCInfo& rpc);
+  void HandleShardAssignment(const ShardAssignmentRequest& req,
+                             EmptyMessage *resp, const rpc::RPCInfo& rpc);
 
   void HandlePutRequest();
 
   // Barrier: wait until all table data is transmitted.
-  void HandleFlush(const EmptyMessage& req, FlushResponse *resp, const RPCInfo& rpc);
-  void HandleApply(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
-  void HandleFinalize(const EmptyMessage& req, EmptyMessage *resp, const RPCInfo& rpc);
-  void HandleStartRestore(const StartRestore& req, EmptyMessage *resp, const RPCInfo& rpc);
+  void HandleFlush(const EmptyMessage& req, FlushResponse *resp,
+                   const rpc::RPCInfo& rpc);
+  void HandleApply(const EmptyMessage& req, EmptyMessage *resp,
+                   const rpc::RPCInfo& rpc);
+  void HandleFinalize(const EmptyMessage& req, EmptyMessage *resp,
+                      const rpc::RPCInfo& rpc);
+  void HandleStartRestore(const StartRestore& req, EmptyMessage *resp,
+                          const rpc::RPCInfo& rpc);
 
-/*
-  // Enable or disable triggers
-  void HandleEnableTrigger(const EnableTrigger& req, EmptyMessage* resp, const RPCInfo& rpc);
-*/
+  /*
+   // Enable or disable triggers
+   void HandleEnableTrigger(const EnableTrigger& req, EmptyMessage* resp, const rpc::RPCInfo& rpc);
+   */
 
   int peer_for_shard(int table_id, int shard) const;
-  int id() const { return config_.worker_id(); };
-  int epoch() const { return epoch_; }
+  int id() const {
+    return config_.worker_id();
+  }
+  ;
+  int epoch() const {
+    return epoch_;
+  }
 
   int64_t pending_kernel_bytes() const;
   bool network_idle() const;
@@ -83,20 +101,19 @@ private:
   bool handling_putreqs_;
   CheckpointType active_checkpoint_;
 
-  typedef unordered_map<int, bool> CheckpointMap;
+  typedef std::tr1::unordered_map<int, bool> CheckpointMap;
   CheckpointMap checkpoint_tables_;
-
 
   ConfigData config_;
 
   // The status of other workers.
-  vector<Stub*> peers_;
+  std::vector<Stub*> peers_;
 
-  NetworkThread *network_;
-  unordered_set<GlobalTable*> dirty_tables_;
+  rpc::NetworkThread *network_;
+  std::tr1::unordered_set<GlobalTable*> dirty_tables_;
 
   uint32_t iterator_id_;
-  unordered_map<uint32_t, TableIterator*> iterators_;
+  std::tr1::unordered_map<uint32_t, TableIterator*> iterators_;
 
   struct KernelId {
     string kname_;
@@ -104,7 +121,8 @@ private:
     int shard_;
 
     KernelId(string kname, int table, int shard) :
-      kname_(kname), table_(table), shard_(shard) {}
+        kname_(kname), table_(table), shard_(shard) {
+    }
 
 #define CMP_LESS(a, b, member)\
   if ((a).member < (b).member) { return true; }\
@@ -118,7 +136,7 @@ private:
     }
   };
 
-  map<KernelId, DSMKernel*> kernels_;
+  std::map<KernelId, DSMKernel*> kernels_;
 
   Stats stats_;
 };

@@ -3,7 +3,7 @@
 #include "kernel/kernel.h"
 #include "kernel/table-registry.h"
 
-namespace dsm {
+namespace piccolo {
 
 class Worker;
 void DSMKernel::initialize_internal(Worker* w, int table_id, int shard) {

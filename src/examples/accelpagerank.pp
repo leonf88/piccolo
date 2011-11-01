@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <libgen.h>
 
-using namespace dsm;
+using namespace piccolo;
 using namespace std;
 
 static float TOTALRANK = 0;
@@ -30,19 +30,19 @@ DEFINE_int32(ashow_top, 10, "number of top results to display");
 DEFINE_string(apr_convert_graph, "", "Path to WebGraph .graph.gz database to convert");
 
 static float powerlaw_random(float dmin, float dmax, float n) {
-  float r = (float)random() / RAND_MAX;
-  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0/n);
+  float r = (float) random() / RAND_MAX;
+  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0 / n);
 }
 
 static float random_restart_seed() {
-  return (1-kPropagationFactor)*(TOTALRANK/FLAGS_apr_nodes);
+  return (1 - kPropagationFactor) * (TOTALRANK / FLAGS_apr_nodes);
 }
 
 // I'd like to use a pair here, but for some reason they fail to count
 // as POD types according to C++.  Sigh.
 struct APageId {
-  int64_t site : 32;
-  int64_t page : 32;
+  int64_t site :32;
+  int64_t page :32;
 };
 
 struct APageInfo {
@@ -53,65 +53,68 @@ struct APageInfo {
 //-----------------------------------------------
 // Marshalling for APageInfo type
 //-----------------------------------------------
-namespace dsm {
-	template <> struct Marshal<APageInfo> : MarshalBase {
-		static void marshal(const APageInfo& t, string *out) {
-			int i;
-			struct APageId j;
-			int len = t.url.size();
-			out->append((char*)&len,sizeof(int));
-			out->append(t.url.c_str(),len);
-			len = t.adj.size();
-			out->append((char*)&len,sizeof(int));
-			for(i = 0; i < len; i++) {
-				j = t.adj[i];
-				out->append((char*)&j,sizeof(struct APageId));
-			}
-		}
-		static void unmarshal(const StringPiece &s, APageInfo* t) {
-			int i;
-			struct APageId j;
-			int len,len2;
-			memcpy(&len,s.data,sizeof(int));
-			t->url.clear();
-			t->url.append(s.data+1*sizeof(int),len);
-			t->adj.clear();
-			memcpy(&len2,s.data+1*sizeof(int)+len,sizeof(int));
-			for(i = 0; i < len2; i++) {
-				memcpy(&j,s.data+(2)*sizeof(int)+len+i*sizeof(struct APageId),sizeof(struct APageId));
-				t->adj.push_back(j);
-			}
-		}
-	};
+namespace piccolo {
+template<> struct Marshal<APageInfo> : MarshalBase {
+  static void marshal(const APageInfo& t, string *out) {
+    int i;
+    struct APageId j;
+    int len = t.url.size();
+    out->append((char*) &len, sizeof(int));
+    out->append(t.url.c_str(), len);
+    len = t.adj.size();
+    out->append((char*) &len, sizeof(int));
+    for (i = 0; i < len; i++) {
+      j = t.adj[i];
+      out->append((char*) &j, sizeof(struct APageId));
+    }
+  }
+  static void unmarshal(const StringPiece &s, APageInfo* t) {
+    int i;
+    struct APageId j;
+    int len, len2;
+    memcpy(&len, s.data, sizeof(int));
+    t->url.clear();
+    t->url.append(s.data + 1 * sizeof(int), len);
+    t->adj.clear();
+    memcpy(&len2, s.data + 1 * sizeof(int) + len, sizeof(int));
+    for (i = 0; i < len2; i++) {
+      memcpy(&j, s.data + (2) * sizeof(int) + len + i * sizeof(struct APageId),
+             sizeof(struct APageId));
+      t->adj.push_back(j);
+    }
+  }
+};
 }
-			
+
 bool operator==(const APageId& a, const APageId& b) {
   return a.site == b.site && a.page == b.page;
 }
 
 struct AccelPRStruct {
-  int64_t L : 32;		//number of outgoing links
-  float pr_int;			//internal pagerank
-  float pr_ext;			//external pagerank
+  int64_t L :32; //number of outgoing links
+  float pr_int; //internal pagerank
+  float pr_ext; //external pagerank
 };
 
-namespace std { namespace tr1 {
-template <>
+namespace std {
+namespace tr1 {
+template<>
 struct hash<APageId> {
   size_t operator()(const APageId& p) const {
-    return SuperFastHash((const char*)&p, sizeof p);
+    return SuperFastHash((const char*) &p, sizeof p);
   }
 };
-} }
+}
+}
 
-struct SiteSharding : public Sharder<APageId> {
+struct SiteSharding: public Sharder<APageId> {
   int operator()(const APageId& p, int nshards) {
     return p.site % nshards;
   }
 };
 
-struct APageIdBlockInfo : public BlockInfo<APageId> {
-  APageId start(const APageId& k, int block_size)  {
+struct APageIdBlockInfo: public BlockInfo<APageId> {
+  APageId start(const APageId& k, int block_size) {
     APageId p = { k.site, k.page - (k.page % block_size) };
     return p;
   }
@@ -128,9 +131,9 @@ DiskTable<uint64_t, Page> *pagedb;
 static vector<int> InitSites() {
   vector<int> site_sizes;
   srand(0);
-  for (int n = 0; n < FLAGS_apr_nodes; ) {
-    int c = powerlaw_random(1, min(50000,
-                                   (int)(100000. * FLAGS_apr_nodes / 100e6)), 0.001);
+  for (int n = 0; n < FLAGS_apr_nodes;) {
+    int c = powerlaw_random(
+        1, min(50000, (int) (100000. * FLAGS_apr_nodes / 100e6)), 0.001);
     site_sizes.push_back(c);
     n += c;
   }
@@ -143,7 +146,9 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   char* d = strdup(FLAGS_apr_graph_prefix.c_str());
   File::Mkdirs(dirname(d));
 
-  string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_apr_graph_prefix.c_str(), shard, nshards, nodes);
+  string target = StringPrintf("%s-%05d-of-%05d-N%05d",
+                               FLAGS_apr_graph_prefix.c_str(), shard, nshards,
+                               nodes);
 
   if (File::Exists(target)) {
     return;
@@ -154,14 +159,17 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
   RecordFile out(target, "w", RecordFile::NONE);
   // Only sites with site_id % nshards == shard are in this shard.
   for (int i = shard; i < site_sizes.size(); i += nshards) {
-    PERIODIC(1, LOG(INFO) << "Working: Shard -- " << shard << " of " << nshards 
-                          << "; site " << i << " of " << site_sizes.size());
+    PERIODIC(
+        1,
+        LOG(INFO) << "Working: Shard -- " << shard << " of " << nshards
+            << "; site " << i << " of " << site_sizes.size());
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
       n.set_site(i);
       n.set_id(j);
       for (int k = 0; k < density; k++) {
-        int target_site = (random() % 10 != 0) ? i : (random() % site_sizes.size());
+        int target_site =
+            (random() % 10 != 0) ? i : (random() % site_sizes.size());
         n.add_target_site(target_site);
         n.add_target_id(random() % site_sizes[target_site]);
       }
@@ -174,9 +182,9 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
 static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
   WebGraph::URLReader *r = wgr->newURLReader();
 
-  map<string,struct APageId> hosts;
-  map<string,struct APageId>::iterator it;
-  struct APageId pid = {-1, -1};
+  map<string, struct APageId> hosts;
+  map<string, struct APageId>::iterator it;
+  struct APageId pid = { -1, -1 };
   string prev, url, host, prevhost;
   int i = 0;
   int maxsite = 0;
@@ -185,14 +193,14 @@ static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
 
   while (r->readURL(&url)) {
     if (i++ % 100000 == 0)
-      LOG(INFO) << "Reading URL " << i+1 << " of " << wgr->nodes;
+      LOG(INFO) << "Reading URL " << i + 1 << " of " << wgr->nodes;
 
     // Get host part
     int hostLen = url.find('/', 8);
     CHECK(hostLen != url.npos) << "Failed to split host in URL " << url;
     ++hostLen;
 
-    host = url.substr(7,hostLen-7);
+    host = url.substr(7, hostLen - 7);
 
     if (0 == host.compare(prevhost)) {
       // Existing site.  Pid.site already set. it already set
@@ -205,8 +213,8 @@ static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
       // Different site
       pid.page = 0;
       pid.site = maxsite;
-      struct APageId newpid = {maxsite++, 1};
-	  hosts.insert(pair<string, struct APageId>(host,newpid));
+      struct APageId newpid = { maxsite++, 1 };
+      hosts.insert(pair<string, struct APageId>(host, newpid));
       //LOG(INFO) << "Host " << host << " is new site # " << pid.site;
 
       swap(prev, url);
@@ -217,7 +225,8 @@ static void WebGraphAPageIds(WebGraph::Reader *wgr, vector<APageId> *out) {
 
   delete r;
 
-  LOG(INFO) << "URLReader: " << maxsite << " total sites read containing " << i << " nodes";
+  LOG(INFO) << "URLReader: " << maxsite << " total sites read containing " << i
+      << " nodes";
 }
 
 static void ConvertGraph(string path, int nshards) {
@@ -230,7 +239,9 @@ static void ConvertGraph(string path, int nshards) {
 
   RecordFile *out[nshards];
   for (int i = 0; i < nshards; ++i) {
-    string target = StringPrintf("%s-%05d-of-%05d-N%05d", FLAGS_apr_graph_prefix.c_str(), i, nshards, r.nodes);
+    string target = StringPrintf("%s-%05d-of-%05d-N%05d",
+                                 FLAGS_apr_graph_prefix.c_str(), i, nshards,
+                                 r.nodes);
     out[i] = new RecordFile(target, "w", RecordFile::NONE);
   }
 
@@ -256,47 +267,50 @@ static void ConvertGraph(string path, int nshards) {
     delete out[i];
 }
 
-
-namespace dsm {
-struct AccelPRTrigger : public Trigger<APageId, AccelPRStruct> {
-  public:
-    void Fire(const APageId* key, AccelPRStruct* value, const AccelPRStruct& newvalue, bool* doUpdate, bool isNew) {
-      *doUpdate = true;
-      if (isNew) {
-        value->L = newvalue.L;
-        value->pr_int = (float)FLAGS_apr_d*newvalue.pr_ext;
-        value->pr_ext = 0;
-        return;
-      } else {
-        value->pr_int += (FLAGS_apr_d*newvalue.pr_ext)/newvalue.L;
-      }
-      if (abs(value->pr_int-value->pr_ext) >= FLAGS_apr_tol) {
-        // Get neighbors
-        APageInfo p = apages->get(*key);
-        struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int-value->pr_ext };
-
-        //Update our own external PR
-        value->pr_ext = value->pr_int;
-
-        //Tell everyone about our delta PR
-        vector<APageId>::iterator it = p.adj.begin();
-        for(; it != p.adj.end(); it++) {
-          struct APageId neighbor = { it->site, it->page };
-          prs->enqueue_update(neighbor,updval);
-        }
-      }
+namespace piccolo {
+struct AccelPRTrigger: public Trigger<APageId, AccelPRStruct> {
+public:
+  void Fire(const APageId* key, AccelPRStruct* value,
+            const AccelPRStruct& newvalue, bool* doUpdate, bool isNew) {
+    *doUpdate = true;
+    if (isNew) {
+      value->L = newvalue.L;
+      value->pr_int = (float) FLAGS_apr_d * newvalue.pr_ext;
+      value->pr_ext = 0;
       return;
+    } else {
+      value->pr_int += (FLAGS_apr_d * newvalue.pr_ext) / newvalue.L;
     }
-    bool LongFire(const APageId key, bool lastrun) {
-      return false;
+    if (abs(value->pr_int - value->pr_ext) >= FLAGS_apr_tol) {
+      // Get neighbors
+      APageInfo p = apages->get(*key);
+      struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int
+          - value->pr_ext };
+
+      //Update our own external PR
+      value->pr_ext = value->pr_int;
+
+      //Tell everyone about our delta PR
+      vector<APageId>::iterator it = p.adj.begin();
+      for (; it != p.adj.end(); it++) {
+        struct APageId neighbor = { it->site, it->page };
+        prs->enqueue_update(neighbor, updval);
+      }
     }
-}; };
+    return;
+  }
+  bool LongFire(const APageId key, bool lastrun) {
+    return false;
+  }
+};
+}
+;
 
 //fake kernel to force a checkpoint
-class aprcp_kern : public DSMKernel {
+class aprcp_kern: public DSMKernel {
 public:
   void aprcp_kern_cp() {
-    volatile int i=0;
+    volatile int i = 0;
     i++;
   }
 };
@@ -309,25 +323,28 @@ int AccelPagerank(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
   TOTALRANK = FLAGS_apr_nodes;
 
-  prs = CreateTable(0, FLAGS_shards, new SiteSharding, (Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
+  prs = CreateTable(0, FLAGS_shards, new SiteSharding,
+                    (Trigger<APageId, AccelPRStruct>*) new AccelPRTrigger);
 
   if (FLAGS_build_graph) {
-    if (NetworkThread::Get()->id() == 0) {
-      LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; " 
-                << FLAGS_apr_nodes << " nodes.";
+    if (rpc::NetworkThread::Get()->id() == 0) {
+      LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; "
+          << FLAGS_apr_nodes << " nodes.";
       for (int i = 0; i < FLAGS_shards; ++i) {
-         BuildGraph(i, FLAGS_shards, FLAGS_apr_nodes, 15);
+        BuildGraph(i, FLAGS_shards, FLAGS_apr_nodes, 15);
       }
     }
     return 0;
   }
 
   //no RecordTable option in this runner, MemoryTable only
-  apages = CreateTable(1, FLAGS_shards, new SiteSharding, new Accumulators<APageInfo>::Replace);
+  apages = CreateTable(1, FLAGS_shards, new SiteSharding,
+                       new Accumulators<APageInfo>::Replace);
 
   //Also need to load pages
   if (FLAGS_apr_convert_graph.empty()) {
-    pagedb = CreateRecordTable<Page>(2, FLAGS_apr_graph_prefix + "*", false);
+    pagedb = CreateRecordTable < Page
+        > (2, FLAGS_apr_graph_prefix + "*", false);
   }
 
   StartWorker(conf);
@@ -339,24 +356,25 @@ int AccelPagerank(const ConfigData& conf) {
   }
 
   PRunAll(prs, {
-    prs->swap_accumulator(new Triggers<APageId,AccelPRStruct>::NullTrigger);
-  });
-  bool restored = m.restore();			//Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
-  fprintf(stderr,"%successfully restore%s previous checkpoint.\n",(restored?"S":"Did not s"),(restored?"d":""));
+        prs->swap_accumulator(new Triggers<APageId,AccelPRStruct>::NullTrigger);
+      });
+  bool restored = m.restore(); //Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
+  fprintf(stderr, "%successfully restore%s previous checkpoint.\n",
+          (restored ? "S" : "Did not s"), (restored ? "d" : ""));
   PRunAll(prs, {
-    prs->swap_accumulator((Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
-  });
+        prs->swap_accumulator((Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
+      });
 
-  PMap({n : pagedb}, {
-    struct APageId p = { n.site(), n.id() };
-    struct APageInfo info;
-    info.adj.clear();
-    for(int i=0; i<n.target_site_size(); i++) {
-      struct APageId neigh = { n.target_site(i), n.target_id(i) };
-      info.adj.push_back(neigh);
-    }
-    apages->update(p,info);	//some/all of these are wasteful when restoring from checkpoint
-  });
+  PMap( {n : pagedb}, {
+        struct APageId p = {n.site(), n.id()};
+        struct APageInfo info;
+        info.adj.clear();
+        for(int i=0; i<n.target_site_size(); i++) {
+          struct APageId neigh = {n.target_site(i), n.target_id(i)};
+          info.adj.push_back(neigh);
+        }
+        apages->update(p,info); //some/all of these are wasteful when restoring from checkpoint
+      });
 
   struct timeval start_time, end_time;
   gettimeofday(&start_time, NULL);
@@ -364,38 +382,40 @@ int AccelPagerank(const ConfigData& conf) {
   //Do initialization! But don't start processing yet, otherwise some of the vertices
   //will exist because of trigger propagation before they get their initialization value.
   PRunAll(apages, {
-    TypedTableIterator<APageId, APageInfo> *it =
-      apages->get_typed_iterator(current_shard());
-    int i=0;
-    for(; !it->done(); it->Next()) {
-      if (!prs->contains(it->key())) {
-        struct AccelPRStruct initval = { it->value().adj.size(), 0, (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d) };
-        prs->update(it->key(),initval);
-        i++;
-      }
-    }
-    fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
-  });
+        TypedTableIterator<APageId, APageInfo> *it =
+        apages->get_typed_iterator(current_shard());
+        int i=0;
+        for(; !it->done(); it->Next()) {
+          if (!prs->contains(it->key())) {
+            struct AccelPRStruct initval = {it->value().adj.size(), 0, (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d)};
+            prs->update(it->key(),initval);
+            i++;
+          }
+        }
+        fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
+      });
 
   //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
   PRunAll(prs, {
-    TypedTableIterator<APageId, AccelPRStruct> *it =
-      prs->get_typed_iterator(current_shard());
-    float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
-    int i=0;
-    for(; !it->done(); it->Next()) {
-      if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
-        struct AccelPRStruct initval = { 1, 0, 0 };
-        prs->update(it->key(),initval);
-        i++;
-      }
-    }
-    fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
-  });
+        TypedTableIterator<APageId, AccelPRStruct> *it =
+        prs->get_typed_iterator(current_shard());
+        float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
+        int i=0;
+        for(; !it->done(); it->Next()) {
+          if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
+            struct AccelPRStruct initval = {1, 0, 0};
+            prs->update(it->key(),initval);
+            i++;
+          }
+        }
+        fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
+      });
 
   gettimeofday(&end_time, NULL);
-  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
-  cout << "Total PageRank time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
+  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
+      * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+  cout << "Total PageRank time: " << ((double) (totaltime) / 1000000.0)
+      << " seconds" << endl;
 
   //Perform checkpoint
   vector<int> cptables;
@@ -405,54 +425,54 @@ int AccelPagerank(const ConfigData& conf) {
   m.run_all(cp_rd);
 
   PRunOne(prs, {
-    fprintf(stdout,"PageRank complete, tabulating results...\n");
-    float pr_min = 1, pr_max = -1, pr_sum = 0;
-    struct APageId toplist[FLAGS_ashow_top];
-    float topscores[FLAGS_ashow_top];
-    int totalpages = 0;
+        fprintf(stdout,"PageRank complete, tabulating results...\n");
+        float pr_min = 1, pr_max = -1, pr_sum = 0;
+        struct APageId toplist[FLAGS_ashow_top];
+        float topscores[FLAGS_ashow_top];
+        int totalpages = 0;
 
-    //Initialize top scores
-    for(int i=0; i<FLAGS_ashow_top; i++)
-      topscores[i] = -999999.9999;
+        //Initialize top scores
+        for(int i=0; i<FLAGS_ashow_top; i++)
+        topscores[i] = -999999.9999;
 
-    //Find top [FLAGS_ashow_top] pages
-    for(int shard=0; shard < prs->num_shards(); shard++) {
-      TypedTableIterator<APageId, AccelPRStruct> *it = prs->get_typed_iterator(shard,PREFETCH);
+        //Find top [FLAGS_ashow_top] pages
+        for(int shard=0; shard < prs->num_shards(); shard++) {
+          TypedTableIterator<APageId, AccelPRStruct> *it = prs->get_typed_iterator(shard,PREFETCH);
 
-      for(; !it->done(); it->Next()) {
-        totalpages++;
-        if (it->value().pr_ext > pr_max)
-          pr_max = it->value().pr_ext;
-        //If it's at least better than the worst of the top list, then replace the worst with
-        //this one, and propagate it upwards through the list until it's in place
-        if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
-          topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
-          toplist[FLAGS_ashow_top-1] = it->key();
-          for(int i=FLAGS_ashow_top-2; i>=0; i--) {
-            if (topscores[i] < topscores[i+1]) {
-              float a = topscores[i];				//swap!
-              struct APageId b = toplist[i];
-              topscores[i] = topscores[i+1];
-              toplist[i] = toplist[i+1];
-              topscores[i+1] = a;
-              toplist[i+1] = b;
-            } else {
-              break;
+          for(; !it->done(); it->Next()) {
+            totalpages++;
+            if (it->value().pr_ext > pr_max)
+            pr_max = it->value().pr_ext;
+            //If it's at least better than the worst of the top list, then replace the worst with
+            //this one, and propagate it upwards through the list until it's in place
+            if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
+              topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
+              toplist[FLAGS_ashow_top-1] = it->key();
+              for(int i=FLAGS_ashow_top-2; i>=0; i--) {
+                if (topscores[i] < topscores[i+1]) {
+                  float a = topscores[i]; //swap!
+                  struct APageId b = toplist[i];
+                  topscores[i] = topscores[i+1];
+                  toplist[i] = toplist[i+1];
+                  topscores[i+1] = a;
+                  toplist[i+1] = b;
+                } else {
+                  break;
+                }
+              }
             }
+            if (it->value().pr_ext < pr_min)
+            pr_min = it->value().pr_ext;
+            pr_sum += it->value().pr_ext;
           }
         }
-        if (it->value().pr_ext < pr_min)
-          pr_min = it->value().pr_ext;
-        pr_sum += it->value().pr_ext;
-      }
-    }
-    float pr_avg = pr_sum/totalpages;
-    fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
-    fprintf(stdout,"Top Pages:\n");
-    for(int i=0;i<FLAGS_ashow_top;i++) {
-      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
-    }
-  });
+        float pr_avg = pr_sum/totalpages;
+        fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
+        fprintf(stdout,"Top Pages:\n");
+        for(int i=0;i<FLAGS_ashow_top;i++) {
+          fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+        }
+      });
 
   return 0;
 }

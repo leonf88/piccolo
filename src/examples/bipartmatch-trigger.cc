@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <libgen.h>
 
-using namespace dsm;
+using namespace piccolo;
 using namespace std;
 
 static int NUM_WORKERS = 2;
@@ -25,7 +25,7 @@ static TypedGlobalTable<int, int>* rightmatches = NULL;
 static TypedGlobalTable<int, int>* rightcosts = NULL;
 
 //-----------------------------------------------
-namespace dsm {
+namespace piccolo {
 template<> struct Marshal<vector<int> > : MarshalBase {
   static void marshal(const vector<int>& t, string *out) {
     int i, j;
@@ -41,7 +41,7 @@ template<> struct Marshal<vector<int> > : MarshalBase {
     int len;
     memcpy(&len, s.data, sizeof(int));
     if (len < 0)
-      LOG(FATAL) << "Unmarshalled vector of size < 0" << endl;
+      LOG(FATAL) << "Unmarshalled vector of size < 0";
     t->clear();
     for (i = 0; i < len; i++) {
       memcpy(&j, s.data + (i + 1) * sizeof(int), sizeof(int));
@@ -74,7 +74,7 @@ public:
     }
     if (*value != -1) {
 #ifdef DEBUGOUT
-      cout << "Denying match on " << *key << " from " << newvalue << endl;
+      cout << "Denying match on " << *key << " from " << newvalue;
 #endif
       leftmatches->enqueue_update(newvalue, -1);
       *doUpdate = false;
@@ -83,7 +83,7 @@ public:
     } else {
       //Else this match is acceptable.  Set new cost.
 #ifdef DEBUGOUT
-      cout << "Accepting match on " << *key << " from " << newvalue << endl;
+      cout << "Accepting match on " << *key << " from " << newvalue;
 #endif
       rightcosts->enqueue_update(*key, newcost);
       leftmatches->enqueue_update(newvalue, *key);
@@ -129,7 +129,7 @@ public:
       vector<int>::iterator it = v.begin();
 
 #ifdef DEBUGOUT
-      cout << "Match on " << *key << " denied from " << *(v.end()-1) << endl;
+      cout << "Match on " << *key << " denied from " << *(v.end()-1);
 #endif
 
       v.erase(v.end() - 1);
@@ -151,7 +151,7 @@ public:
 
       if (v.size() == 0) { //forget it if no more candidates
 #ifdef DEBUGOUT
-          cout << "Ran out of right candidates for " << *key << endl;
+          cout << "Ran out of right candidates for " << *key;
 #endif
         *value = newvalue;
         *doUpdate = true;
@@ -162,7 +162,7 @@ public:
       rightmatches->enqueue_update(j, *key);
       *value = j;
 #ifdef DEBUGOUT
-      cout << "Re-attempting from " << *key << " to " << j << endl;
+      cout << "Re-attempting from " << *key << " to " << j;
 #endif
       *doUpdate = false;
       return;
@@ -172,7 +172,7 @@ public:
     //It was not a denial; store it.
     *value = newvalue;
 #ifdef DEBUGOUT
-    cout << "Storing accepting match on left " << *key << " from right " << value << endl;
+    cout << "Storing accepting match on left " << *key << " from right " << value;
 #endif
     *doUpdate = true;
     return;
@@ -226,7 +226,7 @@ public:
     for (; !it->done() && !it2->done(); it->Next(), it2->Next()) {
 
       if (leftmatches->get(it->key()) != -1) {
-        LOG(FATAL) << "Uninitialized left match found!" << endl;
+        LOG(FATAL) << "Uninitialized left match found!";
       }
 
       vector<int> v = it->value();
@@ -302,7 +302,7 @@ public:
 
       int j = *(v.end() - 1);
 #ifdef DEBUGOUT
-      cout << "Attempted match: left " << it->key() << " <--> right " << j << endl;
+      cout << "Attempted match: left " << it->key() << " <--> right " << j;
 #endif
       rightmatches->update(j, it->key());
       //leftmatches->update(it->key(),j);
@@ -400,7 +400,7 @@ int Bipartmatch_trigger(const ConfigData& conf) {
     long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
         * 1000000 + (end_time.tv_usec - start_time.tv_usec);
     cout << "Total matching time: " << ((double) (totaltime) / 1000000.0)
-        << " seconds" << endl;
+        << " seconds";
 
     //Disable triggers
     m.run_all("BPMTKernel", "DisableTriggers", leftmatches);

@@ -1,13 +1,17 @@
 #ifndef GLOBALTABLE_H_
 #define GLOBALTABLE_H_
 
-#include "table.h"
-#include "local-table.h"
+#include "kernel/table-inl.h"
+#include "kernel/local-table.h"
 
 #include "util/file.h"
+#include "util/marshal.h"
 #include "util/rpc.h"
+#include "util/timer.h"
+#include "util/tuple.h"
 
 #include <queue>
+#include <tr1/unordered_map>
 
 //#define GLOBAL_TABLE_USE_SCOPEDLOCK
 
@@ -15,13 +19,13 @@
 #define RETRIGGER_MODE_IMPLICIT 1
 #define RETRIGGER_SCAN_INTERVAL 0.2
 
-namespace dsm {
+namespace piccolo {
 
 class Worker;
 class Master;
 
 // Encodes table entries using the passed in TableData protocol buffer.
-struct ProtoTableCoder : public TableCoder {
+struct ProtoTableCoder: public TableCoder {
   ProtoTableCoder(const TableData* in);
   virtual void WriteEntry(StringPiece k, StringPiece v);
   virtual bool ReadEntry(string* k, string *v);
@@ -30,20 +34,23 @@ struct ProtoTableCoder : public TableCoder {
   TableData *t_;
 };
 
-
 struct PartitionInfo {
-  PartitionInfo() : dirty(false), tainted(false) {}
+  PartitionInfo() :
+      dirty(false), tainted(false) {
+  }
   bool dirty;
   bool tainted;
   ShardInfo sinfo;
 };
 
-class GlobalTable : virtual public TableBase {
+class GlobalTable: virtual public TableBase {
 public:
-  virtual ~GlobalTable() {}
+  virtual ~GlobalTable() {
+  }
 
   virtual void UpdatePartitions(const ShardInfo& sinfo) = 0;
-  virtual TableIterator* get_iterator(int shard,unsigned int fetch_num = FETCH_NUM) = 0;
+  virtual TableIterator* get_iterator(int shard, unsigned int fetch_num =
+                                          FETCH_NUM) = 0;
 
   virtual bool is_local_shard(int shard) = 0;
   virtual bool is_local_key(const StringPiece &k) = 0;
@@ -63,9 +70,11 @@ protected:
   virtual int64_t shard_size(int shard) = 0;
 };
 
-class MutableGlobalTable : virtual public GlobalTable {
+class MutableGlobalTable: virtual public GlobalTable {
 public:
-  MutableGlobalTable(): applyingupdates(false) {}
+  MutableGlobalTable() :
+      applyingupdates(false) {
+  }
 
   // Handle updates from the master or other workers.
   virtual void SendUpdates() = 0;
@@ -89,7 +98,7 @@ protected:
   bool applyingupdates;
 };
 
-class GlobalTableBase : virtual public GlobalTable {
+class GlobalTableBase: virtual public GlobalTable {
 public:
   virtual ~GlobalTableBase();
 
@@ -97,7 +106,8 @@ public:
 
   void UpdatePartitions(const ShardInfo& sinfo);
 
-  virtual TableIterator* get_iterator(int shard, unsigned int fetch_num = FETCH_NUM) = 0;
+  virtual TableIterator* get_iterator(int shard, unsigned int fetch_num =
+                                          FETCH_NUM) = 0;
 
   virtual bool is_local_shard(int shard);
   virtual bool is_local_key(const StringPiece &k);
@@ -107,11 +117,19 @@ public:
   // Fill in a response from a remote worker for the given key.
   void handle_get(const HashGet& req, TableData* resp);
 
-  PartitionInfo* get_partition_info(int shard) { return &partinfo_[shard]; }
-  LocalTable* get_partition(int shard) { return partitions_[shard]; }
+  PartitionInfo* get_partition_info(int shard) {
+    return &partinfo_[shard];
+  }
+  LocalTable* get_partition(int shard) {
+    return partitions_[shard];
+  }
 
-  bool tainted(int shard) { return get_partition_info(shard)->tainted; }
-  int owner(int shard) { return get_partition_info(shard)->sinfo.owner(); }
+  bool tainted(int shard) {
+    return get_partition_info(shard)->tainted;
+  }
+  int owner(int shard) {
+    return get_partition_info(shard)->sinfo.owner();
+  }
 protected:
   virtual int shard_for_key_str(const StringPiece& k) = 0;
 
@@ -125,37 +143,44 @@ protected:
 
   // partitions_ for buffering remote writes to non-Trigger tables,
   // or writebufs_ for Trigger tables
-  vector<LocalTable*> partitions_;
-  vector<TableData*> writebufs_;
-  vector<ProtoTableCoder*> writebufcoders_;
+  std::vector<LocalTable*> partitions_;
+  std::vector<TableData*> writebufs_;
+  std::vector<ProtoTableCoder*> writebufcoders_;
 
-  vector<LocalTable*> cache_;
+  std::vector<LocalTable*> cache_;
 
-  boost::recursive_mutex& mutex() { return m_; }
+  boost::recursive_mutex& mutex() {
+    return m_;
+  }
   boost::recursive_mutex m_;
 
-  boost::recursive_mutex& trigger_mutex() { return m_trig_; }
+  boost::recursive_mutex& trigger_mutex() {
+    return m_trig_;
+  }
   boost::recursive_mutex m_trig_;
 
-  boost::mutex& retrigger_mutex() { return m_retrig_; }
+  boost::mutex& retrigger_mutex() {
+    return m_retrig_;
+  }
   boost::mutex m_retrig_;
 
-  vector<PartitionInfo> partinfo_;
+  std::vector<PartitionInfo> partinfo_;
 
   struct CacheEntry {
     double last_read_time;
     string value;
   };
 
-  unordered_map<StringPiece, CacheEntry> remote_cache_;
+  std::tr1::unordered_map<StringPiece, CacheEntry> remote_cache_;
 };
 
-class MutableGlobalTableBase :
-  virtual public GlobalTableBase,
-  virtual public MutableGlobalTable,
-  virtual public Checkpointable {
+class MutableGlobalTableBase: virtual public GlobalTableBase,
+    virtual public MutableGlobalTable,
+    virtual public Checkpointable {
 public:
-  MutableGlobalTableBase() : pending_writes_(0) {}
+  MutableGlobalTableBase() :
+      pending_writes_(0) {
+  }
 
   void SendUpdates();
   void SendUpdates(int* count);
@@ -180,27 +205,27 @@ protected:
   void local_swap(GlobalTable *b);
 };
 
-template <class K, class V>
-class TypedGlobalTable :
-  virtual public GlobalTable,
-  public MutableGlobalTableBase,
-  public TypedTable<K, V>,
-  private boost::noncopyable {
+template<class K, class V>
+class TypedGlobalTable: virtual public GlobalTable,
+    public MutableGlobalTableBase,
+    public TypedTable<K, V>
+    ,
+    private boost::noncopyable {
 public:
   //update queuing support
-  typedef pair<K, V> KVPair;
-  deque<KVPair> update_queue;
+  typedef std::pair<K, V> KVPair;
+  std::deque<KVPair> update_queue;
   bool clearingUpdateQueue;
 
   //long trigger support
   void KernelFinalize();
-  int retrigger_threadcount_;    // number of long trigger threads for this table
-  vector<K> retrigger_vector_;	// which keys still request long triggers
-  vector<boost::thread::id> retrigger_threadids_; //IDs of retrigger threads, for future use
-  bool retrigger_terminate_;     // set to instruct retrigger threads to clear tables
-  bool retrigger_termthreads_;   // number of "terminated" threads
-  int retrigger_mode_;		// 0 = scan retrigger_vector for flags
-							// 1 = scan table for flags
+  int retrigger_threadcount_; // number of long trigger threads for this table
+  std::vector<K> retrigger_vector_; // which keys still request long triggers
+  std::vector<boost::thread::id> retrigger_threadids_; //IDs of retrigger threads, for future use
+  bool retrigger_terminate_; // set to instruct retrigger threads to clear tables
+  bool retrigger_termthreads_; // number of "terminated" threads
+  int retrigger_mode_; // 0 = scan retrigger_vector for flags
+  // 1 = scan table for flags
 
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
@@ -214,21 +239,23 @@ public:
       writebufs_[i] = new TableData;
       writebufcoders_[i] = new ProtoTableCoder(writebufs_[i]);
     }
-    
+
     //Clear the update queue, just in case
     clearingUpdateQueue = false;
     update_queue.clear();
 
-	//Clear the long/retrigger map, just in case, and
+    //Clear the long/retrigger map, just in case, and
     //then start up the retrigger thread
     retrigger_threadids_.clear();
     retrigger_terminate_ = false;
     retrigger_threadcount_ = retrigt_count;
     if (retrigt_count != 0) {
       retrigger_vector_.clear();
-	  retrigger_mode_ = RETRIGGER_MODE_EXPLICIT; //separate map to start
-      for (int i=0; i<retrigt_count; i++)
-        retrigger_threadids_.push_back(boost::thread(boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this)).get_id());
+      retrigger_mode_ = RETRIGGER_MODE_EXPLICIT; //separate map to start
+      for (int i = 0; i < retrigt_count; i++)
+        retrigger_threadids_.push_back(
+            boost::thread(
+                boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this)).get_id());
     }
   }
 
@@ -242,7 +269,7 @@ public:
   void update(const K &k, const V &v);
   void enqueue_update(K k, V v);
   void swap_accumulator(Accumulator<V>* newaccum);
-  void swap_accumulator(Trigger<K,V>* newaccum);
+  void swap_accumulator(Trigger<K, V>* newaccum);
   int clearUpdateQueue();
 
   // Provide a mechanism to enable a long trigger / retrigger, as well as
@@ -258,43 +285,42 @@ public:
   void remove(const K &k);
   TableIterator* get_iterator(int shard, unsigned int fetch_num = FETCH_NUM);
   TypedTable<K, V>* partition(int idx) {
-    return dynamic_cast<TypedTable<K, V>* >(partitions_[idx]);
+    return dynamic_cast<TypedTable<K, V>*>(partitions_[idx]);
   }
   ProtoTableCoder* writebufcoder(int idx) {
     return writebufcoders_[idx];
   }
 
-  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard,unsigned int fetch_num = FETCH_NUM) {
-    return static_cast<TypedTableIterator<K, V>* >(get_iterator(shard,fetch_num));
+  virtual TypedTableIterator<K, V>* get_typed_iterator(int shard,
+                                                       unsigned int fetch_num =
+                                                           FETCH_NUM) {
+    return static_cast<TypedTableIterator<K, V>*>(get_iterator(shard, fetch_num));
   }
 
-  void ApplyUpdates(const dsm::TableData& req) {
+  void ApplyUpdates(const piccolo::TableData& req) {
     boost::recursive_mutex::scoped_lock sl(mutex());
     if (applyingupdates == true) {
-      VLOG(2) << "Avoiding recursive ApplyUpdate()." << endl;
-      return;						//prevent recursive applyupdates
+      VLOG(2) << "Avoiding recursive ApplyUpdate().";
+      return; //prevent recursive applyupdates
     }
 
     applyingupdates = true;
-    VLOG(3) << "Performing non-recursive ApplyUpdate()." << endl;
+    VLOG(3) << "Performing non-recursive ApplyUpdate().";
     if (!is_local_shard(req.shard())) {
       LOG_EVERY_N(INFO, 1000)
-          << "Forwarding push request from: " << MP(id(), req.shard())
-          << " to " << owner(req.shard());
+        << "Forwarding push request from: " << MP(id(), req.shard()) << " to "
+            << owner(req.shard());
     }
 
     // Changes to support locality of triggers <CRM>
     ProtoTableCoder c(&req);
     UpdateDecoder it;
     partitions_[req.shard()]->DecodeUpdates(&c, &it);
-    for(;!it.done(); it.Next()) {
-      update(it.key(),it.value());
+    for (; !it.done(); it.Next()) {
+      update(it.key(), it.value());
     }
     applyingupdates = false;
   }
-
-  Marshal<K> *kmarshal() { return ((Marshal<K>*)info_.key_marshal); }
-  Marshal<V> *vmarshal() { return ((Marshal<V>*)info_.value_marshal); }
 
 protected:
   int shard_for_key_str(const StringPiece& k);
@@ -305,23 +331,28 @@ protected:
 static const int kWriteFlushCount = 1000000;
 
 template<class K, class V>
-class RemoteIterator : public TypedTableIterator<K, V> {
+class RemoteIterator: public TypedTableIterator<K, V> {
 public:
-  RemoteIterator(TypedGlobalTable<K, V> *table, int shard, unsigned int fetch_num = FETCH_NUM) :
-    owner_(table), shard_(shard), done_(false), fetch_num_(fetch_num) {
+  RemoteIterator(TypedGlobalTable<K, V> *table, int shard
+                 , unsigned int fetch_num = FETCH_NUM) :
+      owner_(table), shard_(shard), done_(false), fetch_num_(fetch_num) {
     request_.set_table(table->id());
     request_.set_shard(shard_);
     request_.set_row_count(fetch_num_);
     int target_worker = table->owner(shard);
 
     // << CRM 2011-01-18 >>
-    while (!cached_results.empty()) cached_results.pop();
+    while (!cached_results.empty())
+      cached_results.pop();
 
-    VLOG(3) << "Created RemoteIterator on table " << table->id() << ", shard " << shard <<" @" << this << endl;
-    NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
-    for(size_t i=1; i<=response_.row_count(); i++) {
-      pair<string, string> row;
-      row = make_pair(response_.key(i-1),response_.value(i-1));
+    VLOG(3)
+        << "Created RemoteIterator on table " << table->id() << ", shard "
+            << shard << " @" << this;
+    rpc::NetworkThread::Get()->Call(target_worker + 1, MTYPE_ITERATOR, request_,
+                                    &response_);
+    for (size_t i = 1; i <= response_.row_count(); i++) {
+      std::pair<string, string> row;
+      row = make_pair(response_.key(i - 1), response_.value(i - 1));
       cached_results.push(row);
     }
 
@@ -330,16 +361,14 @@ public:
 
   void key_str(string *out) {
     if (!cached_results.empty())
-		VLOG(4) << "Pulling first of " << cached_results.size() << " results" << endl;
-    if (!cached_results.empty())
-        *out = cached_results.front().first;
+    VLOG(4) << "Pulling first of " << cached_results.size() << " results";
+    if (!cached_results.empty()) *out = cached_results.front().first;
   }
 
   void value_str(string *out) {
     if (!cached_results.empty())
-		VLOG(4) << "Pulling first of " << cached_results.size() << " results" << endl;
-    if (!cached_results.empty())
-        *out = cached_results.front().second;
+    VLOG(4) << "Pulling first of " << cached_results.size() << " results";
+    if (!cached_results.empty()) *out = cached_results.front().second;
   }
 
   bool done() {
@@ -350,34 +379,36 @@ public:
     int target_worker = dynamic_cast<GlobalTable*>(owner_)->owner(shard_);
     if (!cached_results.empty()) cached_results.pop();
     if (cached_results.empty()) {
-      if (response_.done())								//if the last response indicated no more
-        return;											//data and now no cache, don't try.
-      NetworkThread::Get()->Call(target_worker+1, MTYPE_ITERATOR, request_, &response_);
+      if (response_.done()) {
+        return;
+      }
+      rpc::NetworkThread::Get()->Call(target_worker + 1, MTYPE_ITERATOR,
+                                      request_, &response_);
       if (response_.row_count() < 1 && !response_.done())
-        LOG(ERROR) << "Call to server requesting " << request_.row_count() <<
-			" rows returned " << response_.row_count() << " rows." << endl;
-      for(size_t i=1; i<=response_.row_count(); i++) {
-        pair<string, string> row;
-		row = make_pair(response_.key(i-1),response_.value(i-1));
+        LOG(ERROR) << "Call to server requesting " << request_.row_count()
+            << " rows returned " << response_.row_count() << " rows.";
+      for (size_t i = 1; i <= response_.row_count(); i++) {
+        std::pair<string, string> row;
+        row = make_pair(response_.key(i - 1), response_.value(i - 1));
         cached_results.push(row);
       }
     } else {
-      VLOG(4) << "[PREFETCH] Using cached key for Next()" << endl;
+      VLOG(4) << "[PREFETCH] Using cached key for Next()";
     }
     ++index_;
   }
 
   const K& key() {
     if (cached_results.empty())
-      LOG(FATAL) << "Cache miss on key!" << endl;
-    ((Marshal<K>*)(owner_->info().key_marshal))->unmarshal((cached_results.front().first), &key_);
+    LOG(FATAL) << "Cache miss on key!";
+    unmarshal<K>(cached_results.front().first, &key_);
     return key_;
   }
 
   V& value() {
     if (cached_results.empty())
-      LOG(FATAL) << "Cache miss on key!" << endl;
-    ((Marshal<V>*)(owner_->info().value_marshal))->unmarshal((cached_results.front().second), &value_);
+    LOG(FATAL) << "Cache miss on key!";
+    unmarshal<V>((cached_results.front().second), &value_);
     return value_;
   }
 
@@ -394,17 +425,16 @@ private:
   bool done_;
 
   // << CRM 2011-01-18 >>
-  queue<pair<string, string> > cached_results;
+  std::queue<std::pair<string, string> > cached_results;
   unsigned int fetch_num_;
 };
-
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::get_shard(const K& k) {
   DCHECK(this != NULL);
   DCHECK(this->info().sharder != NULL);
 
-  Sharder<K> *sharder = (Sharder<K>*)(this->info().sharder);
+  Sharder<K> *sharder = (Sharder<K>*) (this->info().sharder);
   int shard = (*sharder)(k, this->info().num_shards);
   DCHECK_GE(shard, 0);
   DCHECK_LT(shard, this->num_shards());
@@ -413,7 +443,7 @@ int TypedGlobalTable<K, V>::get_shard(const K& k) {
 
 template<class K, class V>
 int TypedGlobalTable<K, V>::shard_for_key_str(const StringPiece& k) {
-  return get_shard(unmarshal(static_cast<Marshal<K>* >(this->info().key_marshal), k));
+  return get_shard(unmarshal<K>(k));
 }
 
 template<class K, class V>
@@ -434,7 +464,7 @@ void TypedGlobalTable<K, V>::put(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
 #ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
-    boost::recursive_mutex::scoped_lock sl(mutex());
+  boost::recursive_mutex::scoped_lock sl(mutex());
 #endif
   partition(shard)->put(k, v);
 
@@ -454,52 +484,52 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
   int shard = this->get_shard(k);
 
 #ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
-    boost::mutex::scoped_lock sl(trigger_mutex());
-    boost::recursive_mutex::scoped_lock sl(mutex());
+  boost::mutex::scoped_lock sl(trigger_mutex());
+  boost::recursive_mutex::scoped_lock sl(mutex());
 #endif
 
   if (is_local_shard(shard)) {
 
-/*
-    // invoke any registered triggers.
-    bool doUpdate = true;
-    V v2 = v;
-    V v1;
+    /*
+     // invoke any registered triggers.
+     bool doUpdate = true;
+     V v2 = v;
+     V v1;
 
-    boost::recursive_mutex::scoped_lock sl(trigger_mutex());
+     boost::recursive_mutex::scoped_lock sl(trigger_mutex());
 
-    if (partition(shard)->contains(k))
-      v1 = partition(shard)->get(k);
+     if (partition(shard)->contains(k))
+     v1 = partition(shard)->get(k);
 
-    for (int i = 0; i < num_triggers(); ++i) {
-      if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
-        doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, v1, v2);
-      }
-      //for now, let NACKS disallow chained triggers (?)
-      if (!doUpdate) break;
-    }
+     for (int i = 0; i < num_triggers(); ++i) {
+     if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
+     doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, v1, v2);
+     }
+     //for now, let NACKS disallow chained triggers (?)
+     if (!doUpdate) break;
+     }
 
-    sl.unlock();
+     sl.unlock();
 
-    // Only update if no triggers NACKed
-    if (doUpdate) {
-*/
-      partition(shard)->update(k, v);
+     // Only update if no triggers NACKed
+     if (doUpdate) {
+     */
+    partition(shard)->update(k, v);
 //    }
 
     //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   } else {
 
-    if (this->info().accum->accumtype != TRIGGER) {
+    if (this->info().accum->type() != AccumulatorBase::TRIGGER) {
       //No triggers, remote accumulation is OK
       partition(shard)->update(k, v);
 
     } else {
       //Triggers, no remote accumulation allowed
       string sk, sv;
-      ((Marshal<K>*)(info_.key_marshal))->marshal((k), &sk);
-      ((Marshal<V>*)(info_.value_marshal))->marshal((v), &sv);
-      writebufcoder(shard)->WriteEntry(sk,sv);
+      marshal(k, &sk);
+      marshal(v, &sv);
+      writebufcoder(shard)->WriteEntry(sk, sv);
 
     }
     ++pending_writes_;
@@ -517,13 +547,12 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 template<class K, class V>
 int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 
-  int i=0;
-  deque<KVPair> removed_items;
+  int i = 0;
+  std::deque<KVPair> removed_items;
   {
     boost::recursive_mutex::scoped_lock sl(mutex());
-	if (clearingUpdateQueue)
-		return 0;
-	clearingUpdateQueue = true;		//turn recursion into iteration
+    if (clearingUpdateQueue) return 0;
+    clearingUpdateQueue = true; //turn recursion into iteration
 
   }
   int lastqueuesize = 0;
@@ -531,24 +560,28 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     {
       boost::recursive_mutex::scoped_lock sl(mutex());
       //Swap queue with an empty queue so we don't recurse way down
-      VLOG(3) << "clearing update queue for table " << this->id() << " of " << update_queue.size() << " items" << endl;
+      VLOG(3)
+          << "clearing update queue for table " << this->id() << " of "
+              << update_queue.size() << " items";
 
       removed_items.clear();
       update_queue.swap(removed_items);
       lastqueuesize = removed_items.size();
     }
 
-    while(!removed_items.empty()) {
+    while (!removed_items.empty()) {
       KVPair thispair(removed_items.front());
-      VLOG(3) << "Removed pair (" << (i-removed_items.size()) << " of " << i << ")" << endl;
-      update(thispair.first,thispair.second);
+      VLOG(3)
+          << "Removed pair (" << (i - removed_items.size()) << " of " << i
+              << ")";
+      update(thispair.first, thispair.second);
       removed_items.pop_front();
       i++;
     }
-  } while(lastqueuesize != 0);
+  } while (lastqueuesize != 0);
   {
     boost::recursive_mutex::scoped_lock sl(mutex());
-	clearingUpdateQueue = false;		//turn recursion into iteration
+    clearingUpdateQueue = false; //turn recursion into iteration
   }
   return i;
 }
@@ -568,20 +601,19 @@ void TypedGlobalTable<K, V>::enable_retrigger(K k) {
     retrigger_vector_.push_back(k);
   } else { //RETRIGGER_MODE_IMPLICIT
     //Set bit in table instead of in retrigger map
-    LOG(FATAL) << "Retrigger mode 1 not yet implemented." << endl;
+    LOG(FATAL) << "Retrigger mode 1 not yet implemented.";
   }
 }
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_stop(void) {
-  if (!retrigger_threadcount_)
-    return;
+  if (!retrigger_threadcount_) return;
   {
     boost::mutex::scoped_lock sl(retrigger_mutex());
     retrigger_termthreads_ = 0;
     retrigger_terminate_ = true;
   }
-  while(retrigger_termthreads_ < retrigger_threadcount_)
+  while (retrigger_termthreads_ < retrigger_threadcount_)
     Sleep(RETRIGGER_SCAN_INTERVAL);
   return;
 }
@@ -589,31 +621,30 @@ void TypedGlobalTable<K, V>::retrigger_stop(void) {
 template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_thread(void) {
   bool terminated = false;
-  while(!terminated) {
+  while (!terminated) {
     {
- //     boost::mutex::scoped_lock sl(retrigger_mutex());
+      //     boost::mutex::scoped_lock sl(retrigger_mutex());
       if (retrigger_mode_ == RETRIGGER_MODE_EXPLICIT) {
-        typename vector<K>::iterator it = retrigger_vector_.begin();
-        typename vector<K>::iterator oldit;
+        typename std::vector<K>::iterator it = retrigger_vector_.begin();
+        typename std::vector<K>::iterator oldit;
         bool terminating = retrigger_terminate_;
-        for(; it != retrigger_vector_.end();) {
+        for (; it != retrigger_vector_.end();) {
           bool retain = true;
-          retain = ((Trigger<K,V>*)info_.accum)->LongFire(*it,terminating);
+          retain = ((Trigger<K, V>*) info_.accum)->LongFire(*it, terminating);
           if (retain == false) {
             oldit = it;
             it++;
             retrigger_vector_.erase(oldit);
-          } else
-            it++;
+          } else it++;
         }
         terminated = terminating;
       } else { //RETRIGGER_MODE_IMPLICIT
-        LOG(FATAL) << "Retrigger mode 1 not yet implemented!" << endl;
+        LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
       }
       if (terminated && retrigger_vector_.size() > 0) {
         boost::mutex::scoped_lock sl(retrigger_mutex());
         retrigger_vector_.clear();
-        retrigger_termthreads_++;	//increment terminated thread count
+        retrigger_termthreads_++; //increment terminated thread count
         terminated = false;
       }
     }
@@ -625,23 +656,27 @@ template<class K, class V>
 void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
   boost::recursive_mutex::scoped_lock sl(mutex());
 
-  const KVPair thispair(k,v);
+  const KVPair thispair(k, v);
   update_queue.push_back(thispair);
-  VLOG(2) << "Enqueing table id " << this->id() << " update (" << update_queue.size() << " pending pairs)" << endl;
+  VLOG(2)
+      << "Enqueing table id " << this->id() << " update ("
+          << update_queue.size() << " pending pairs)";
 }
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::swap_accumulator(Accumulator<V>* newaccum) {
-  this->mutable_info().swap_accumulator((AccumulatorBase*)newaccum);
+  this->mutable_info()->swap_accumulator((AccumulatorBase*) newaccum);
   for (int i = 0; i < partitions_.size(); ++i) {
-    partitions_[i]->info_.swap_accumulator((AccumulatorBase*)newaccum);
+    partitions_[i]->mutable_info()->swap_accumulator(
+        (AccumulatorBase*) newaccum);
   }
 }
 template<class K, class V>
-void TypedGlobalTable<K, V>::swap_accumulator(Trigger<K,V>* newaccum) {
-  this->mutable_info().swap_accumulator((AccumulatorBase*)newaccum);
+void TypedGlobalTable<K, V>::swap_accumulator(Trigger<K, V>* newaccum) {
+  this->mutable_info()->swap_accumulator((AccumulatorBase*) newaccum);
   for (size_t i = 0; i < partitions_.size(); ++i) {
-    partitions_[i]->info_.swap_accumulator((AccumulatorBase*)newaccum);
+    partitions_[i]->mutable_info()->swap_accumulator(
+        (AccumulatorBase*) newaccum);
   }
 }
 
@@ -669,16 +704,14 @@ V TypedGlobalTable<K, V>::get(const K &k) {
 
   if (is_local_shard(shard)) {
 #ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
-        boost::recursive_mutex::scoped_lock sl(mutex());
+    boost::recursive_mutex::scoped_lock sl(mutex());
 #endif
     return partition(shard)->get(k);
   }
 
   string v_str;
-  get_remote(shard,
-             marshal(static_cast<Marshal<K>* >(this->info().key_marshal), k),
-             &v_str);
-  return unmarshal(static_cast<Marshal<V>* >(this->info().value_marshal), v_str);
+  get_remote(shard, marshal(k), &v_str);
+  return unmarshal<V>(v_str);
 }
 
 template<class K, class V>
@@ -702,13 +735,13 @@ bool TypedGlobalTable<K, V>::contains(const K &k) {
 
   if (is_local_shard(shard)) {
 #ifdef GLOBAL_TABLE_USE_SCOPEDLOCK
-        boost::recursive_mutex::scoped_lock sl(mutex());
+    boost::recursive_mutex::scoped_lock sl(mutex());
 #endif
     return partition(shard)->contains(k);
   }
 
   string v_str;
-  return get_remote(shard, marshal(static_cast<Marshal<K>* >(info_.key_marshal), k), &v_str);
+  return get_remote(shard, marshal(k), &v_str);
 }
 
 template<class K, class V>
@@ -720,14 +753,15 @@ template<class K, class V>
 LocalTable* TypedGlobalTable<K, V>::create_local(int shard) {
   TableDescriptor *linfo = new TableDescriptor(info());
   linfo->shard = shard;
-  LocalTable* t = (LocalTable*)info_.partition_factory->New();
+  LocalTable* t = (LocalTable*) info_.partition_factory->New();
   t->Init(linfo);
 
   return t;
 }
 
 template<class K, class V>
-TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard, unsigned int fetch_num) {
+TableIterator* TypedGlobalTable<K, V>::get_iterator(int shard,
+                                                    unsigned int fetch_num) {
   if (this->is_local_shard(shard)) {
     return (TypedTableIterator<K, V>*) partitions_[shard]->get_iterator();
   } else {

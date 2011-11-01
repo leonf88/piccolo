@@ -7,7 +7,7 @@
 #include <gflags/gflags.h>
 
 using std::tr1::unordered_map;
-using namespace dsm;
+using namespace piccolo;
 
 int optimizer_hack;
 

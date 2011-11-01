@@ -5,21 +5,21 @@
 
 #include "util/common.h"
 #include "util/file.h"
+#include "util/marshal.h"
 #include "worker/worker.pb.h"
 #include <boost/thread.hpp>
 
-namespace dsm {
+namespace piccolo {
 
-struct TableBase;
 struct Table;
+struct TableBase;
 
 class TableData;
+class TableDescriptor;
 
 // This interface is used by global tables to communicate with the outside
 // world and determine the current state of a computation.
 struct TableHelper {
-  virtual ~TableHelper() {
-  }
   virtual int id() const = 0;
   virtual int epoch() const = 0;
   virtual int peer_for_shard(int table, int shard) const = 0;
@@ -28,14 +28,19 @@ struct TableHelper {
 
 struct SharderBase {
 };
-enum AccumulatorType {
-  ACCUMULATOR, TRIGGER
-};
+
 struct AccumulatorBase {
-  AccumulatorType accumtype;
+  enum Type {
+    ACCUMULATOR, TRIGGER
+  };
+
+  virtual Type type() = 0;
 };
 
 struct BlockInfoBase {
+};
+
+struct DecodeIteratorBase {
 };
 
 typedef int TriggerID;
@@ -47,67 +52,45 @@ struct TriggerBase {
   TriggerBase() {
     enabled_ = true;
   }
-  virtual void enable(bool enabled__) {
-    enabled_ = enabled__;
+
+  virtual void enable(bool enabled) {
+    enabled_ = enabled;
   }
+
   virtual bool enabled() {
     return enabled_;
   }
 
-  virtual ~TriggerBase() {
-  }
 private:
   bool enabled_;
 };
 
-// Triggers are registered at table initialization time, and
-// are executed in response to changes to a table.s
-//
-// When firing, triggers are activated in the order specified at
-// initialization time.
-/*
- template <class K, class V>
- struct Trigger : public TriggerBase {
- virtual bool Fire(const K& k, const V& current, V& update) = 0;
- virtual bool LongFire(const K& k) = 0;
- };
- */
-
-//#ifdef SWIGPYTHON
-//template <class K, class V> class TriggerDescriptor : public Trigger;
-//#endif
 #ifndef SWIG
 
 // Each table is associated with a single accumulator.  Accumulators are
 // applied whenever an update is supplied for an existing key-value cell.
 template<class V>
 struct Accumulator: public AccumulatorBase {
-  virtual ~Accumulator() {}
-  Accumulator() {
-    accumtype = ACCUMULATOR;
+  Type type() {
+    return AccumulatorBase::ACCUMULATOR;
   }
   virtual void Accumulate(V* a, const V& b) = 0;
 };
 
-// <<CRM 2011-06-09
 template<class K, class V>
 struct Trigger: public AccumulatorBase {
-  virtual ~Trigger() {
+  Type type() {
+    return AccumulatorBase::ACCUMULATOR;
   }
-  Trigger() {
-    accumtype = TRIGGER;
-  }
+
   virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
-      bool isNew) = 0;
+                    bool isNew) = 0;
   virtual bool LongFire(const K key, bool) = 0;
 };
-// CRM 2001-06-09>>
 
 template<class K>
 struct Sharder: public SharderBase {
   virtual int operator()(const K& k, int shards) = 0;
-  virtual ~Sharder() {
-  }
 };
 
 // Commonly-used trigger operators.
@@ -115,7 +98,7 @@ template<class K, class V>
 struct Triggers {
   struct NullTrigger: public Trigger<K, V> {
     void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
-        bool isNew) {
+              bool isNew) {
       *value = updateval;
       *doUpdate = true;
       return;
@@ -126,7 +109,7 @@ struct Triggers {
   };
   struct ReadOnlyTrigger: public Trigger<K, V> {
     void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
-        bool isNew) {
+              bool isNew) {
       *doUpdate = false;
       return;
     }
@@ -187,90 +170,21 @@ struct Sharding {
 
 struct TableFactory {
   virtual TableBase* New() = 0;
-  virtual ~TableFactory() {}
-};
-
-struct TableDescriptor {
-public:
-  TableDescriptor() {
-    Reset();
-  }
-
-  TableDescriptor(int id, int shards) {
-    Reset();
-    table_id = id;
-    num_shards = shards;
-  }
-
-  void Reset() {
-    table_id = -1;
-    num_shards = -1;
-    block_size = 500;
-    max_stale_time = 0.;
-    helper = NULL;
-    partition_factory = NULL;
-    block_info = NULL;
-    key_marshal = value_marshal = NULL;
-    accum = NULL;
-    sharder = NULL;
-    //triggers.clear();
-  }
-
-  void swap_accumulator(AccumulatorBase* newaccum) {
-    //delete accum;
-    accum = newaccum;
-    return;
-  }
-
-  int table_id;
-  int num_shards;
-
-  // For local tables, the shard of the global table they represent.
-  int shard;
-  int default_shard_size;
-
-//  vector<TriggerBase*> triggers;
-
-  AccumulatorBase *accum;
-  SharderBase *sharder;
-
-  MarshalBase *key_marshal;
-  MarshalBase *value_marshal;
-
-  // For global tables, factory for constructing new partitions.
-  TableFactory *partition_factory;
-
-  // For dense tables, information on block layout and size.
-  int block_size;
-  BlockInfoBase *block_info;
-
-  // For global tables, the maximum amount of time to cache remote values
-  double max_stale_time;
-
-  // For global tables, reference to the local worker.  Used for passing
-  // off remote access requests.
-  TableHelper *helper;
 };
 
 class TableIterator;
 
 struct Table {
   virtual const TableDescriptor& info() const = 0;
-  virtual TableDescriptor& mutable_info() = 0;
+  virtual TableDescriptor* mutable_info() = 0;
   virtual int id() const = 0;
   virtual int num_shards() const = 0;
-
-  virtual ~Table() {
-  }
 };
 
 struct UntypedTable {
   virtual bool contains_str(const StringPiece& k) = 0;
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
-
-  virtual ~UntypedTable() {
-  }
 };
 
 struct TableIterator {
@@ -278,69 +192,6 @@ struct TableIterator {
   virtual void value_str(string *out) = 0;
   virtual bool done() = 0;
   virtual void Next() = 0;
-
-  virtual ~TableIterator() {
-  }
-};
-
-// Methods common to both global and local table views.
-class TableBase: public Table {
-public:
-  typedef TableIterator Iterator;
-  virtual void Init(const TableDescriptor * info) {
-    info_ = *info;
-    CHECK(info_.key_marshal != NULL);
-    CHECK(info_.value_marshal != NULL);
-  }
-
-  const TableDescriptor & info() const {
-    return info_;
-  }
-  TableDescriptor& mutable_info() {
-    return info_;
-  }
-  int id() const {
-    return info().table_id;
-  }
-  int num_shards() const {
-    return info().num_shards;
-  }
-
-  TableHelper *helper() {
-    return info().helper;
-  }
-  int helper_id() {
-    return helper()->id();
-  }
-
-  //int num_triggers() { return info_.triggers.size(); }
-  //TriggerBase *trigger(int idx) { return info_.triggers[idx]; }
-
-  /*
-   TriggerID register_trigger(TriggerBase *t) {
-   if (helper()) {
-   t->helper = helper();
-   }
-   t->table = this;
-   t->triggerid = info_.triggers.size();
-
-   info_.triggers.push_back(t);
-   return t->triggerid;
-   }
-   */
-
-  void set_helper(TableHelper *w) {
-    /*
-     for (int i = 0; i < info_.triggers.size(); ++i) {
-     trigger(i)->helper = w;
-     }
-     */
-
-    info_.helper = w;
-  }
-
-//protected:
-  TableDescriptor info_;
 };
 
 // Key/value typed interface.
@@ -355,33 +206,20 @@ public:
 
   // Default specialization for untyped methods
   virtual bool contains_str(const StringPiece& s) {
-    K k;
-    kmarshal()->unmarshal(s, &k);
-    return contains(k);
+    return contains(unmarshal<K>(s));
   }
 
   virtual string get_str(const StringPiece &s) {
-    K k;
-    string out;
-
-    kmarshal()->unmarshal(s, &k);
-    vmarshal()->marshal(get(k), &out);
-    return out;
+    return marshal(get(unmarshal<K>(s)));
   }
 
   virtual void update_str(const StringPiece& kstr, const StringPiece &vstr) {
-    K k;
-    V v;
-    kmarshal()->unmarshal(kstr, &k);
-    vmarshal()->unmarshal(vstr, &v);
-    update(k, v);
+    update(unmarshal<K>(kstr), unmarshal<V>(vstr));
   }
 
   virtual ~TypedTable() {
   }
 protected:
-  virtual Marshal<K> *kmarshal() = 0;
-  virtual Marshal<V> *vmarshal() = 0;
 };
 
 template<class K, class V>
@@ -390,86 +228,21 @@ struct TypedTableIterator: public TableIterator {
   virtual V& value() = 0;
 
   virtual void key_str(string *out) {
-    kmarshal()->marshal(key(), out);
+    marshal<K>(key(), out);
   }
   virtual void value_str(string *out) {
-    vmarshal()->marshal(value(), out);
+    marshal<V>(value(), out);
   }
 
   virtual ~TypedTableIterator() {
   }
 
 protected:
-  virtual Marshal<K> *kmarshal() {
-    static Marshal<K> m;
-    return &m;
-  }
-
-  virtual Marshal<V> *vmarshal() {
-    static Marshal<V> m;
-    return &m;
-  }
 };
 
 template<class K, class V> struct TypedTableIterator;
 template<class K, class V> struct Trigger;
 template<class K, class V> struct PythonTrigger;
-
-struct DecodeIteratorBase {
-};
-
-// Added for the sake of triggering on remote updates/puts <CRM>
-template<typename K, typename V>
-struct DecodeIterator: public TypedTableIterator<K, V>
-    , public DecodeIteratorBase {
-
-  Marshal<K>* kmarshal() {
-    return NULL;
-  }
-  Marshal<V>* vmarshal() {
-    return NULL;
-  }
-
-  DecodeIterator() {
-    clear();
-    rewind();
-  }
-  void append(K k, V v) {
-    kvpair thispair(k, v);
-    decodedeque.push_back(thispair);
-  }
-  void clear() {
-    decodedeque.clear();
-  }
-  void rewind() {
-    intit = decodedeque.begin();
-  }
-  bool done() {
-    return intit == decodedeque.end();
-  }
-  void Next() {
-    intit++;
-  }
-  const K& key() {
-    static K k2;
-    if (intit != decodedeque.end()) {
-      k2 = intit->first;
-    }
-    return k2;
-  }
-  V& value() {
-    static V v2;
-    if (intit != decodedeque.end()) {
-      v2 = intit->second;
-    }
-    return v2;
-  }
-
-private:
-  typedef std::pair<K, V> kvpair;
-  std::vector<kvpair> decodedeque;
-  typename std::vector<kvpair>::iterator intit;
-};
 
 // Checkpoint and restoration.
 class Checkpointable {
@@ -478,27 +251,18 @@ public:
   virtual void write_delta(const TableData& put) = 0;
   virtual void finish_checkpoint() = 0;
   virtual void restore(const string& f) = 0;
-
-  virtual ~Checkpointable() {
-  }
 };
 
 // Interface for serializing tables, either to disk or for transmitting via RPC.
 struct TableCoder {
   virtual void WriteEntry(StringPiece k, StringPiece v) = 0;
   virtual bool ReadEntry(string* k, string *v) = 0;
-
-  virtual ~TableCoder() {
-  }
 };
 
 class Serializable {
 public:
   virtual void DecodeUpdates(TableCoder *in, DecodeIteratorBase *it) = 0;
   virtual void Serialize(TableCoder* out) = 0;
-
-  virtual ~Serializable() {
-  }
 };
 }
 

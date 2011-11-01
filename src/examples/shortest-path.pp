@@ -1,7 +1,10 @@
 #include "examples/examples.h"
 #include "kernel/disk-table.h"
 
-using namespace dsm;
+using std::vector;
+
+using namespace piccolo;
+
 DEFINE_int32(num_nodes, 10000, "");
 DEFINE_bool(dump_output, false, "");
 
@@ -13,7 +16,8 @@ static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
-    out[i] = new RecordFile(StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
+    out[i] = new RecordFile(
+        StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
   fprintf(stderr, "Building graph: ");
@@ -27,7 +31,9 @@ static void BuildGraph(int shards, int nodes, int density) {
     }
 
     out[i % shards]->write(n);
-    if (i % (nodes / 50) == 0) { fprintf(stderr, "."); }
+    if (i % (nodes / 50) == 0) {
+      fprintf(stderr, ".");
+    }
   }
   fprintf(stderr, "\n");
 
@@ -39,8 +45,9 @@ static void BuildGraph(int shards, int nodes, int density) {
 int ShortestPath(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
-  distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Min);
-  nodes = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
+  distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod,
+                             new Accumulators<double>::Min);
+  nodes = CreateRecordTable < PathNode > (1, "testdata/sp-graph.rec*", false);
 
   StartWorker(conf);
   Master m(conf);
@@ -71,23 +78,24 @@ int ShortestPath(const ConfigData& conf) {
     });
   }
 
-  //Finish the timer!
+//Finish the timer!
   gettimeofday(&end_time, NULL);
-  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec) * 1000000 + (end_time.tv_usec - start_time.tv_usec);
-  cout << "Total SSSP time: " << ((double)(totaltime)/1000000.0) << " seconds" << endl;
+  long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
+      * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+  fprintf(stderr, "Total SSSP time: %.3f seconds\n", totaltime / 1000000.0);
 
   if (FLAGS_dump_output) {
     PRunOne(distance_map, {
-      for (int i = 0; i < FLAGS_num_nodes; ++i) {
-        if (i % 30 == 0) {
-          fprintf(stderr, "\n%5d: ", i);
-        }
+        for (int i = 0; i < FLAGS_num_nodes; ++i) {
+          if (i % 30 == 0) {
+            fprintf(stderr, "\n%5d: ", i);
+          }
 
-        int d = (int)distance_map->get(i);
-        if (d >= 1000) { d = -1; }
-        fprintf(stderr, "%3d ", d);
-      }
-      fprintf(stderr, "\n");
+          int d = (int)distance_map->get(i);
+          if (d >= 1000) {d = -1;}
+          fprintf(stderr, "%3d ", d);
+        }
+        fprintf(stderr, "\n");
     });
   }
   return 0;

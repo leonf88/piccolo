@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
   /* Set up the MPI_COMM_WORLD and CARTESIAN TOPOLOGY */
   SetUp_Mesh(&grid);
 
-  dsm::Timer t;
+  piccolo::Timer t;
 
   /* Reading Input */
   if (grid.MyRank == Root) {

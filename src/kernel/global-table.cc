@@ -1,9 +1,6 @@
 #include "kernel/global-table.h"
 
-static const int kMaxNetworkPending = 1 << 26;
-static const int kMaxNetworkChunk = 1 << 20;
-
-namespace dsm {
+namespace piccolo {
 
 void GlobalTableBase::UpdatePartitions(const ShardInfo& info) {
   partinfo_[info.shard()].sinfo.CopyFrom(info);
@@ -22,7 +19,7 @@ TableIterator* GlobalTableBase::get_iterator(int shard, unsigned int fetch_num) 
 }
 
 bool GlobalTableBase::is_local_shard(int shard) {
-  if (!helper()) 
+  if (!helper())
     return false;
   return owner(shard) == helper_id();
 }
@@ -57,9 +54,9 @@ void MutableGlobalTableBase::resize(int64_t new_size) {
 
 bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   {
-	VLOG(3) << "Entering get_remote" << endl;
+	VLOG(3) << "Entering get_remote";
     boost::recursive_mutex::scoped_lock sl(mutex());
-	VLOG(3) << "Entering get_remote and locked" << endl;
+	VLOG(3) << "Entering get_remote and locked";
     if (remote_cache_.find(k) != remote_cache_.end()) {
       CacheEntry& c = remote_cache_[k];
       if ((Now() - c.last_read_time) < info().max_stale_time) {
@@ -79,14 +76,14 @@ bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {
   req.set_shard(shard);
 
   if (!helper())
-	LOG(FATAL) << "get_remote() failed: helper() undefined." << endl;
+	LOG(FATAL) << "get_remote() failed: helper() undefined.";
   int peer = helper()->peer_for_shard(info().table_id, shard);
 
   DCHECK_GE(peer, 0);
-  DCHECK_LT(peer, MPI::COMM_WORLD.Get_size() - 1);
+  DCHECK_LT(peer, rpc::NetworkThread::Get()->size() - 1);
 
   VLOG(2) << "Sending get request to: " << MP(peer, shard);
-  NetworkThread::Get()->Call(peer + 1, MTYPE_GET, req, &resp);
+  rpc::NetworkThread::Get()->Call(peer + 1, MTYPE_GET, req, &resp);
 
   if (resp.missing_key()) {
     return false;
@@ -109,7 +106,7 @@ void MutableGlobalTableBase::swap(GlobalTable *b) {
   req.set_table_b(b->id());
   VLOG(2) << StringPrintf("Sending swap request (%d <--> %d)", req.table_a(), req.table_b());
 
-  NetworkThread::Get()->SyncBroadcast(MTYPE_SWAP_TABLE, req);
+  rpc::NetworkThread::Get()->SyncBroadcast(MTYPE_SWAP_TABLE, req);
 }
 
 void MutableGlobalTableBase::clear() {
@@ -118,7 +115,7 @@ void MutableGlobalTableBase::clear() {
   req.set_table(this->id());
   VLOG(2) << StringPrintf("Sending clear request (%d)", req.table());
 
-  NetworkThread::Get()->SyncBroadcast(MTYPE_CLEAR_TABLE, req);
+  rpc::NetworkThread::Get()->SyncBroadcast(MTYPE_CLEAR_TABLE, req);
 }
 
 
@@ -228,12 +225,12 @@ void MutableGlobalTableBase::SendUpdates(int* count) {
         put.Clear();
 
         if (!t->empty()) {
-          VLOG(3) << "Sending update from non-trigger table " << endl;
+          VLOG(3) << "Sending update from non-trigger table ";
           ProtoTableCoder c(&put);
           t->Serialize(&c);
           t->clear();
         } else {
-          VLOG(3) << "Sending update from trigger table with " << ptc->t_->kv_data_size() << " pairs." << endl;
+          VLOG(3) << "Sending update from trigger table with " << ptc->t_->kv_data_size() << " pairs.";
           put.CopyFrom(*(ptc->t_));
           ptc->t_->Clear();
         }
@@ -247,7 +244,7 @@ void MutableGlobalTableBase::SendUpdates(int* count) {
         VLOG(3) << "Sending update for " << MP(t->id(), t->shard()) << " to " << owner(i) << " size " << put.kv_data_size();
 
         *count += put.kv_data_size();
-        NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
+        rpc::NetworkThread::Get()->Send(owner(i) + 1, MTYPE_PUT_REQUEST, put);
       } while(!t->empty());
 
       VLOG(3) << "Done with update for " << MP(t->id(), t->shard());

@@ -1,10 +1,31 @@
 #ifndef TUPLE_H_
 #define TUPLE_H_
 
-#include <vector>
-#ifndef SWIG
+// Defines utility functions for creating N-tuples, extensions of std::pair for
+// more then 2 values.
 
-namespace dsm {
+#include "util/hash.h"
+#include <vector>
+
+#define IN(container, item) (\
+    std::find(container.begin(), container.end(), item) != container.end()\
+  )
+
+#ifndef SWIG
+namespace piccolo {
+
+inline std::vector<int> range(int from, int to) {
+  std::vector<int> out;
+  for (int i = from; i < to; ++i) {
+    out.push_back(i);
+  }
+  return out;
+}
+
+inline std::vector<int> range(int to) {
+  return range(0, to);
+}
+
 template <class A, class B>
 struct tuple2 {
   A a_; B b_;
@@ -42,29 +63,29 @@ inline tuple4<A, B, C, D> MP(A x, B y, C z, D a) {
 }
 
 template<class A>
-inline vector<A> MakeVector(const A&x) {
-  vector<A> out;
+inline std::vector<A> MakeVector(const A&x) {
+  std::vector<A> out;
   out.push_back(x);
   return out;
 }
 
 template<class A>
-inline vector<A> MakeVector(const A&x, const A&y) {
-  vector<A> out;
+inline std::vector<A> MakeVector(const A&x, const A&y) {
+  std::vector<A> out;
   out.push_back(x);
   out.push_back(y);
   return out;
 }
 
 template<class A>
-inline vector<A> MakeVector(const A&x, const A&y, const A &z) {
-  vector<A> out;
+inline std::vector<A> MakeVector(const A&x, const A&y, const A &z) {
+  std::vector<A> out;
   out.push_back(x);
   out.push_back(y);
   out.push_back(z);
   return out;
 }
-}
+} // namespace piccolo
 
 namespace std { namespace tr1 {
 template <class A, class B>
@@ -78,29 +99,29 @@ struct hash<pair<A, B> > : public unary_function<pair<A, B> , size_t> {
 };
 
 template <class A, class B>
-struct hash<dsm::tuple2<A, B> > : public unary_function<dsm::tuple2<A, B> , size_t> {
+struct hash<piccolo::tuple2<A, B> > : public unary_function<piccolo::tuple2<A, B> , size_t> {
   hash<A> ha;
   hash<B> hb;
 
-  size_t operator()(const dsm::tuple2<A, B> & k) const {
+  size_t operator()(const piccolo::tuple2<A, B> & k) const {
     size_t res[] = { ha(k.a_), hb(k.b_) };
-    return dsm::SuperFastHash((char*)&res, sizeof(res));
+    return piccolo::SuperFastHash((char*)&res, sizeof(res));
   }
 };
 
 template <class A, class B, class C>
-struct hash<dsm::tuple3<A, B, C> > : public unary_function<dsm::tuple3<A, B, C> , size_t> {
+struct hash<piccolo::tuple3<A, B, C> > : public unary_function<piccolo::tuple3<A, B, C> , size_t> {
   hash<A> ha;
   hash<B> hb;
   hash<C> hc;
 
-  size_t operator()(const dsm::tuple3<A, B, C> & k) const {
+  size_t operator()(const piccolo::tuple3<A, B, C> & k) const {
     size_t res[] = { ha(k.a_), hb(k.b_), hc(k.c_) };
-    return dsm::SuperFastHash((char*)&res, sizeof(res));
+    return piccolo::SuperFastHash((char*)&res, sizeof(res));
   }
 };
 
-} }
+} } // namespace std::tr1
 
 namespace std {
 template <class A, class B>
@@ -110,23 +131,25 @@ static ostream & operator<< (ostream &out, const std::pair<A, B> &p) {
 }
 
 template <class A, class B>
-static ostream & operator<< (ostream &out, const dsm::tuple2<A, B> &p) {
+static ostream & operator<< (ostream &out, const piccolo::tuple2<A, B> &p) {
   out << "(" << p.a_ << "," << p.b_ << ")";
   return out;
 }
 
 template <class A, class B, class C>
-static ostream & operator<< (ostream &out, const dsm::tuple3<A, B, C> &p) {
+static ostream & operator<< (ostream &out, const piccolo::tuple3<A, B, C> &p) {
   out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << ")";
   return out;
 }
 
 template <class A, class B, class C, class D>
-static ostream & operator<< (ostream &out, const dsm::tuple4<A, B, C, D> &p) {
+static ostream & operator<< (ostream &out, const piccolo::tuple4<A, B, C, D> &p) {
   out << "(" << p.a_ << "," << p.b_ << "," << p.c_ << "," << p.d_ << ")";
   return out;
 }
-}
 
-#endif
+} // namespace std
+
+
+#endif /* SWIG */
 #endif /* TUPLE_H_ */

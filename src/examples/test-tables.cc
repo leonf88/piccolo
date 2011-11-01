@@ -1,6 +1,6 @@
 #include "client/client.h"
 
-using namespace dsm;
+using namespace piccolo;
 
 DEFINE_int32(table_size, 100000, "");
 

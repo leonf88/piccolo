@@ -1,5 +1,5 @@
 option optimize_for=SPEED;
-package dsm;
+package piccolo;
 
 //shortest-path.cc
 message PathNode {

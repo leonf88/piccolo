@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-namespace dsm {
+namespace piccolo {
 
 using std::string;
 
@@ -78,8 +78,8 @@ string ToString(StringPiece);
 
 namespace std { namespace tr1 {
 template <>
-struct hash<dsm::StringPiece> : public unary_function<dsm::StringPiece, size_t> {
-  size_t operator()(const dsm::StringPiece& k) const {
+struct hash<piccolo::StringPiece> : public unary_function<piccolo::StringPiece, size_t> {
+  size_t operator()(const piccolo::StringPiece& k) const {
     return k.hash();
   }
 };

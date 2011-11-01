@@ -2,7 +2,7 @@
 #include "examples/examples.h"
 #include <algorithm>
 
-using namespace dsm;
+using namespace piccolo;
 typedef uint32_t KeyType;
 typedef Bucket ValueType;
 
@@ -24,7 +24,7 @@ struct KeyGen {
   uint64_t a_;
 };
 
-static vector<int> src;
+static std::vector<int> src;
 static TypedGlobalTable<KeyType, ValueType> *dst = NULL;
 
 DEFINE_int64(sort_size, 1000000, "");

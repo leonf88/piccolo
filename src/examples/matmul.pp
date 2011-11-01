@@ -1,7 +1,7 @@
 #include "examples/examples.h"
 #include <cblas.h>
 
-using namespace dsm;
+using namespace piccolo;
 
 static int bRows = -1;
 static int bCols = -1;
@@ -22,7 +22,7 @@ struct Block {
   ~Block() { delete [] d; }
 };
 
-namespace dsm {
+namespace piccolo {
 template <>
 struct Marshal<Block> : MarshalBase {
   void marshal(const Block& t, string *out) {
