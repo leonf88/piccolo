@@ -64,7 +64,7 @@ public:
   }
 };
 
-static void BuildGraph(int shards, int nodes_record, int density) {
+static void BuildGraph(int shards, int nodes, int density) {
   vector<RecordFile*> out(shards);
   File::Mkdirs("testdata/");
   for (int i = 0; i < shards; ++i) {
@@ -72,18 +72,19 @@ static void BuildGraph(int shards, int nodes_record, int density) {
         StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
+	srandom(nodes);	//repeatable graphs
   fprintf(stderr, "Building graph: ");
 
-  for (int i = 0; i < nodes_record; i++) {
+	for (int i = 0; i < nodes; i++) {
     PathNode n;
     n.set_id(i);
 
     for (int j = 0; j < density; j++) {
-      n.add_target(random() % nodes_record);
+			n.add_target(random() % nodes);
     }
 
     out[i % shards]->write(n);
-    if (i % (nodes_record / 50) == 0) {
+		if (i % (nodes / 50) == 0) { fprintf(stderr, "."); }
       fprintf(stderr, ".");
     }
   }
@@ -94,13 +95,26 @@ static void BuildGraph(int shards, int nodes_record, int density) {
   }
 }
 
+class ssspt_kern : public DSMKernel {
+public:
+  void ssspt_driver() {
+    if (current_shard() == 0) {
+      distance_map->update(0, 0);
+    }
+  }
+};
+
+REGISTER_KERNEL(ssspt_kern);
+REGISTER_METHOD(ssspt_kern,ssspt_driver);
+
 int ShortestPathTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
   distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod,
                              new Triggers<int, double>::NullTrigger);
-  nodes_record = CreateRecordTable < PathNode
-      > (1, "testdata/sp-graph.rec*", false);
+    if (!FLAGS_build_graph) {
+  	  nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
+    }
   nodes = CreateTable(2, FLAGS_shards, new Sharding::Mod,
                       new Accumulators<vector<double> >::Replace);
   //TriggerID trigid = distance_map->register_trigger(new SSSPTrigger);
@@ -113,46 +127,49 @@ int ShortestPathTrigger(const ConfigData& conf) {
     return 0;
   }
 
-  PRunOne(distance_map, {
-    for (int i = 0; i < FLAGS_tnum_nodes; ++i) {
-      distance_map->update(i, 1e9);
-    }
-
-  });
-
-  //Start all vectors with empty adjacency lists
-  PRunOne(nodes, {
+    if (!m.restore()) {
+		distance_map->resize(FLAGS_tnum_nodes);
+		nodes->resize(FLAGS_tnum_nodes);
+			PRunAll(distance_map, {
     vector<double> v;
     v.clear();
+				for(int i=current_shard();i<FLAGS_tnum_nodes;i+=FLAGS_shards) {
+					distance_map->update(i, 1e9);	//Initialize all distances to very large.
+					nodes->update(i,v);	//Start all vectors with empty adjacency lists
+				}
+				});
 
-    nodes->resize(FLAGS_tnum_nodes);
-    for(int i=0; i<FLAGS_tnum_nodes; i++)
-    nodes->update(i,v);
-  });
 
-  //Build adjacency lists by appending RecordTables' contents
-  PMap( {n: nodes_record}, {
-      vector<double> v=nodes->get(n.id());
-
+		//Build adjacency lists by appending RecordTables' contents
+		PMap({n: nodes_record}, {
+				vector<double> v=nodes->get(n.id());
+				for(int i=0; i < n.target_size(); i++)
       for(int i=0; i < n.target_size(); i++) {
-        v.push_back(n.target(i));
-      }
-      nodes->update(n.id(), v);
-  });
+				v.push_back(n.target(i));
+				//cout << "writing node " << n.id() << endl;
+				nodes->update(n.id(),v);
+				});
 
-  PRunAll(distance_map, {
-    distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
-  });
+		PRunAll(distance_map, {
+				distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
+				});
+    }
 
   //Start the timer!
   struct timeval start_time, end_time;
   gettimeofday(&start_time, NULL);
 
-  PRunOne(distance_map, {
-    // Initialize a root node.
-    // and enable the trigger.
-    distance_map->update(0, 0);
-  });
+    //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
+    vector<int> cptables;
+	cptables.clear();	
+	cptables.push_back(0);
+	cptables.push_back(2);
+
+    RunDescriptor pr_rd("ssspt_kern", "ssspt_driver", distance_map, cptables);
+
+    //Switched to a RunDescriptor so that checkpointing can be used.
+    pr_rd.checkpoint_type = CP_CONTINUOUS;
+    m.run_all(pr_rd);
 
   PRunAll(distance_map, {
     distance_map->swap_accumulator(new Triggers<int,double>::NullTrigger);

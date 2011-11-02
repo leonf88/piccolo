@@ -112,6 +112,7 @@ public:
 
 
   void barrier();
+  void barriertasks();
   void cp_barrier();
 
   // Blocking.  Instruct workers to save table and kernel state.

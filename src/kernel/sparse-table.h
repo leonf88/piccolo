@@ -95,19 +95,24 @@ private:
   int bucket_for_key(const K& k) {
     int start = bucket_idx(k);
     int b = start;
+    int tries = 0;
 
     do {
+      ++tries;
       if (buckets_[b].in_use) {
         if (buckets_[b].k == k) {
+//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
           return b;
         }
       } else {
+//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
         return -1;
       }
 
        b = (b + 1) % size_;
     } while (b != start);
 
+//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
     return -1;
   }
 
@@ -167,7 +172,7 @@ void SparseTable<K, V>::resize(int64_t size) {
   std::vector<Bucket> old_b = buckets_;
   int old_entries = entries_;
 
-//  LOG(INFO) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
+  //VLOG(2) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
 
   buckets_.resize(size);
   size_ = size;
@@ -178,6 +183,8 @@ void SparseTable<K, V>::resize(int64_t size) {
       put(old_b[i].k, old_b[i].v);
     }
   }
+
+  //VLOG(2) << "Rehashed " << entries_ << " : " << size_ << " -> " << size;
 
   CHECK_EQ(old_entries, entries_);
 }

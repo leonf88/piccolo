@@ -282,7 +282,7 @@ void Master::start_checkpoint() {
   checkpoint_epoch_ += 1;
   checkpointing_ = true;
 
-  LOG(INFO) << "Starting new checkpoint: " << checkpoint_epoch_;
+  LOG(INFO) << "Starting new checkpoint: epoch" << checkpoint_epoch_;
 
   File::Mkdirs(StringPrintf("%s/epoch_%05d/",
                             FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
@@ -294,6 +294,23 @@ void Master::start_checkpoint() {
   for (size_t i = 0; i < workers_.size(); ++i) {
     start_worker_checkpoint(i, current_run_);
   }
+  int finished = 0;
+  EmptyMessage resp;
+  int worker_id = 0;
+  while(finished < workers_.size()) {
+    VLOG(3) << "Waiting for checkpoint started responses (" << finished << " received)" << endl;
+    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_START_CHECKPOINT_DONE, &resp, &worker_id)) {
+      finished++;
+      VLOG(3) << "Received checkpoint start done " << finished << " of " << workers_.size() << endl;
+
+      workers_[worker_id-1]->checkpointing = true;//(current_run_.checkpoint_type == CP_CONTINUOUS || 
+                                              //current_run_.checkpoint_type == CP_INTERVAL);
+    } else {
+      Sleep(FLAGS_sleep_time);
+    }
+  }
+  if (current_run_.checkpoint_type == CP_CONTINUOUS)
+    start_deltacheckpoint_ = Now();
 }
 
 void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
@@ -315,28 +332,22 @@ void Master::start_worker_checkpoint(int worker_id, const RunDescriptor &r) {
     req.add_table(r.checkpoint_tables[i]);
   }
 
-  network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
-  EmptyMessage resp;
-  network_->Read(1 + worker_id, MTYPE_START_CHECKPOINT_DONE, &resp);
-  if (r.checkpoint_type == CP_CONTINUOUS)
-    start_deltacheckpoint_ = Now();
+  if (r.checkpoint_type == CP_CONTINUOUS) {
+    network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT_ASYNC, req);
+  } else {
+    network_->Send(1 + worker_id, MTYPE_START_CHECKPOINT, req);
+  }
 }
 
 void Master::finish_worker_checkpoint(int worker_id, const RunDescriptor& r, bool deltaOnly) {
   CHECK_EQ(workers_[worker_id]->checkpointing, true);
+  VLOG(1) << " Instructing worker " << worker_id << " to finish checkpoint.";
 
   if (r.checkpoint_type == CP_TASK_COMMIT || r.checkpoint_type == CP_CONTINUOUS) {
     CheckpointFinishRequest req;
     req.set_next_delta_only(deltaOnly);
-    network_->Send(1 + worker_id, MTYPE_FINISH_CHECKPOINT, req);
+    network_->Send(1 + worker_id, (r.checkpoint_type == CP_CONTINUOUS)?MTYPE_FINISH_CHECKPOINT_ASYNC:MTYPE_FINISH_CHECKPOINT, req);
   }
-
-  EmptyMessage resp;
-  network_->Read(1 + worker_id, MTYPE_FINISH_CHECKPOINT_DONE, &resp);
-
-  VLOG(1) << worker_id << " finished checkpointing.";
-  if (r.checkpoint_type != CP_CONTINUOUS)
-    workers_[worker_id]->checkpointing = false;		//XXX continuous
 }
 
 //write the checkpoint.finished file and its contents
@@ -365,13 +376,34 @@ void Master::finish_checkpoint() {
   bool deltaOnly = ((current_run_.checkpoint_type == CP_CONTINUOUS) && (!(prev_ccp_full_ + FLAGS_mintime_ccp_full < Now())));
   for (size_t i = 0; i < workers_.size(); ++i) {
     finish_worker_checkpoint(i, current_run_, deltaOnly);
+  }
+
+  int finished = 0;
+  EmptyMessage resp;
+  int worker_id;
+  while(finished < workers_.size()) {
+    VLOG(3) << "Waiting for checkpoint finished responses (" << finished << " received)" << endl;
+    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_FINISH_CHECKPOINT_DONE, &resp, &worker_id)) {
+      finished++;
+      VLOG(3) << "Received checkpoint finish done " << finished << " of " << workers_.size() << endl;
+
+      if (current_run_.checkpoint_type != CP_CONTINUOUS)
+        workers_[worker_id-1]->checkpointing = false;
+    } else {
+      Sleep(FLAGS_sleep_time);
+    }
+  }
+
+  for (size_t i = 0; i < workers_.size(); ++i) {
     if (current_run_.checkpoint_type != CP_CONTINUOUS) {
       CHECK_EQ(workers_[i]->checkpointing, false);
     }
   }
+
   //if continuous, assume we're at least starting a new set of deltas,
   //and maybe a full snapshot too.
   if (current_run_.checkpoint_type == CP_CONTINUOUS) {
+    LOG(INFO) << "Beginning new checkpoint epoch with deltaOnly=" << deltaOnly;
     start_deltacheckpoint_ = Now();
     //if this was a full snapshot, then remember that.
     if (!deltaOnly) {
@@ -395,6 +427,7 @@ void Master::finish_checkpoint() {
                               FLAGS_checkpoint_write_dir.c_str(), checkpoint_epoch_));
   } else {
     checkpointing_ = false;
+    current_run_.checkpoint_type = CP_NONE;
   }
   last_checkpoint_ = Now();
 }
@@ -427,24 +460,14 @@ bool Master::restore() {
   int epoch = -1;
   int lastepoch = -1; //the last finished epoch
   string topfinishfile = ""; //where to restore vars and params from
-  do {
-    const char* fname = matches.back().c_str();
-    CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
-           1) << "Unexpected filename: " << fname;
+  
+  const char* fname = matches.back().c_str();
+  CHECK_EQ(sscanf(fname, (FLAGS_checkpoint_read_dir + "/epoch_%05d/checkpoint.finished").c_str(), &epoch),
+         1) << "Unexpected filename: " << fname;
 
-    //Remember the highest finished checkpoint
-    lastepoch = (epoch>lastepoch)?epoch:lastepoch;
-    if (topfinishfile == "") topfinishfile = matches.back();
-
-    //check if non-delta (full cps) exist here
-    string full_cp_pattern = StringPrintf("%s/epoch_%05d/*.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
-    vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
-    if (full_cps.empty()) {
-      LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
-      matches.pop_back();
-      epoch = -1;
-    }
-  } while ((epoch == -1) && !(matches.empty()));
+  //Remember the highest finished checkpoint
+  lastepoch = (epoch>lastepoch)?epoch:lastepoch;
+  if (topfinishfile == "") topfinishfile = matches.back();
 
   CHECK_EQ(matches.empty(),false) << "Ran out of non-delta-only checkpoints to start from!";
 
@@ -614,6 +637,9 @@ void Master::assign_tables() {
   // Assign workers for all table shards, to ensure every shard has an owner.
   TableRegistry::Map &tables = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tables.begin(); i != tables.end(); ++i) {
+    if (!i->second->num_shards()) {
+	  VLOG(2) << "Note: assigning tables; table " << i->first << " has no shards.";
+    }
     for (int j = 0; j < i->second->num_shards(); ++j) {
       assign_worker(i->first, j);
     }
@@ -832,18 +858,19 @@ void Master::barrier() {
 
           });
 
-      if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
-        finish_checkpoint();
-      }
-
       if (dispatched_ < current_run_.shards.size()) {
         dispatched_ += dispatch_work(current_run_);
       }
     }
 
+    if ((current_run_.checkpoint_type == CP_CONTINUOUS) && (Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta)) {
+      finish_checkpoint();
+    }
+
   }
 
   VLOG(3) << "All kernels finished in barrier() with finished_=" << finished_;
+  VLOG(1) << "Kernels finished, in flush/apply phase";
 
   bool quiescent;
   EmptyMessage empty;
@@ -851,24 +878,16 @@ void Master::barrier() {
   do {
     quiescent = true;
 
-    PERIODIC(10, {
-          DumpProfile();
-          dump_stats();
-        });
-
-    if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
-      finish_checkpoint();
-    }
 
     //1st round-trip to make sure all workers have flushed everything
     network_->Broadcast(MTYPE_WORKER_FLUSH, empty);
-    VLOG(3) << "Sent flush broadcast to workers";
+    VLOG(2) << "Sent flush broadcast to workers" << endl;
 
     size_t flushed = 0;
     size_t applied = 0;
     FlushResponse done_msg;
     while (flushed < workers_.size()) {
-	  //VLOG(3) << "Waiting for flush responses (" << flushed << " received)";
+	  VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
       if (network_->TryRead(rpc::ANY_SOURCE,
                             MTYPE_FLUSH_RESPONSE,
                             &done_msg,
@@ -885,12 +904,14 @@ void Master::barrier() {
       } else {
         Sleep(FLAGS_sleep_time);
       }
+      barriertasks();
+
     }
 
     //2nd round-trip to make sure all workers have applied all updates
     //XXX: incorrect if MPI does not guarantee remote delivery
     network_->Broadcast(MTYPE_WORKER_APPLY, empty);
-    VLOG(3) << "Sent apply broadcast to workers";
+    VLOG(2) << "Sent apply broadcast to workers" << endl;
 
     //If we don't wait for Apply responses, then we will send more FLUSH messages
     //potentially even out of other with APPLY, which can easily cause deadlocks
@@ -898,13 +919,14 @@ void Master::barrier() {
 
     EmptyMessage apply_msg;
     while (applied < workers_.size()) {
-	  //VLOG(3) << "Waiting for apply responses (" << applied << " received)";
+	  VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
       if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
         applied++;
         VLOG(3) << "Received apply done " << applied << " of " << workers_.size();
       } else {
         Sleep(FLAGS_sleep_time);
       }
+      barriertasks();
     }
   } while (!quiescent);
 
@@ -938,6 +960,19 @@ void Master::barrier() {
 
   mstats.set_total_time(mstats.total_time() + Now() - current_run_start_);
   LOG(INFO) << "Kernel '" << current_run_.method << "' finished in " << Now() - current_run_start_;
+}
+
+void Master::barriertasks() {
+  PERIODIC(10, {
+    DumpProfile();
+    dump_stats();
+  });
+
+  //need to keep checkpointing alive
+  if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
+	finish_checkpoint();
+  }
+
 }
 
 static void TestTaskSort() {

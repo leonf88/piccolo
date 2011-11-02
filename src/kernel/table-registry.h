@@ -33,10 +33,10 @@ private:
 };
 
 template <class T>
-static RecordTable<T>* CreateRecordTable(int id, StringPiece file_pattern, bool split_large_files=true) {
+static RecordTable<T>* CreateRecordTable(int id, StringPiece file_pattern, bool split_large_files=true, int num_shards=-1) {
   RecordTable<T>* t = new RecordTable<T>(file_pattern, split_large_files);
-  TableDescriptor *info = new TableDescriptor(id, -1);
-  info->num_shards = -1;
+  TableDescriptor *info = new TableDescriptor(id, num_shards);
+  //info->num_shards = num_shards;
   info->table_id = id;
 
   t->Init(info);

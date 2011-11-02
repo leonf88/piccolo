@@ -13,7 +13,7 @@ static int NUM_WORKERS = 2;
 
 static const float kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
-static const char kTestPrefix[] = "testdata/pr-graph.rec";
+static const char kTestPrefix[] = "/scratch/kerm/pr-graph.rec";
 
 DEFINE_bool(memory_graph, false,
     "If true, the web graph will be generated on-demand.");
@@ -354,7 +354,7 @@ int Pagerank(const ConfigData& conf) {
     pages = new InMemoryTable(FLAGS_shards);
     TableRegistry::Get()->tables().insert(make_pair(2, pages));
   } else if (FLAGS_convert_graph.empty()) {
-    pages = CreateRecordTable < Page > (2, FLAGS_graph_prefix + "*", false);
+    pages = CreateRecordTable<Page>(2, FLAGS_graph_prefix + "*", false, FLAGS_shards);
   } //else we're doing a conversion
 
   maxtol = CreateTable(3, FLAGS_shards, new Sharding::Mod,

@@ -79,8 +79,19 @@ Worker::Worker(const ConfigData &c) {
   rpc::RegisterCallback(MTYPE_WORKER_FINALIZE, new EmptyMessage,
                         new EmptyMessage, &Worker::HandleFinalize, this);
 
+  rpc::RegisterCallback(MTYPE_START_CHECKPOINT_ASYNC, new CheckpointRequest,
+                        new EmptyMessage, &Worker::HandleStartCheckpointAsync,
+                        this);
+
+  rpc::RegisterCallback(MTYPE_FINISH_CHECKPOINT_ASYNC,
+                        new CheckpointFinishRequest, new EmptyMessage,
+                        &Worker::HandleFinishCheckpointAsync, this);
+
   rpc::RegisterCallback(MTYPE_RESTORE, new StartRestore, new EmptyMessage,
-                        &Worker::HandleStartRestore, this);
+                   &Worker::HandleStartRestore, this);
+
+
+
 
   /*
    rpc::RegisterCallback(MTYPE_ENABLE_TRIGGER,
@@ -126,6 +137,7 @@ void Worker::KernelLoop() {
       if (!running_) {
         return;
       }
+
     }
     krunning_ = true; //a kernel is running
     stats_["idle_time"] += idle.elapsed();
@@ -298,12 +310,17 @@ void Worker::StartCheckpoint(int epoch, CheckpointType type, bool deltaOnly) {
           << "Starting checkpoint... " << MP(id(), epoch_, epoch) << " : "
               << i->first;
       Checkpointable *t = dynamic_cast<Checkpointable*>(i->second);
-      CHECK(t != NULL) << "Tried to checkpoint a read-only table?";
+      if (t == NULL && type == CP_INTERVAL) {
+        VLOG(1) << "Removing read-only table from INTERVAL list";
+        checkpoint_tables_.erase(checkpoint_tables_.find(i->first));
+      } else {
+        CHECK(t != NULL) << "Tried to checkpoint a read-only table? " << checkpoint_tables_.size() << " tables marked";
 
       t->start_checkpoint(
           StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
                        FLAGS_checkpoint_write_dir.c_str(), epoch_, i->first),
           deltaOnly);
+      }
     }
   }
 
@@ -348,7 +365,7 @@ void Worker::FinishCheckpoint(bool deltaOnly) {
     if (t) {
       t->finish_checkpoint();
     } else {
-      LOG(INFO) << "Skipping finish checkpoint for " << i->second->id();
+      VLOG(2) << "Skipping finish checkpoint for " << i->second->id();
     }
   }
 
@@ -365,7 +382,22 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
                                 const rpc::RPCInfo& rpc) {
   int epoch = req.epoch();
   boost::recursive_mutex::scoped_lock sl(state_lock_);
-  LOG(INFO) << "Master instructing restore starting at epoch " << epoch;
+  LOG(INFO) << "Master instructing restore starting at epoch " << epoch << " (and possibly backwards)";
+
+  int foundfull = false;
+  int finalepoch = epoch;
+  do {
+    //check if non-delta (full cps) exist here
+    string full_cp_pattern = StringPrintf("%s/epoch_%05d/*.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
+    vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
+    if (full_cps.empty()) {
+      LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
+      epoch--;
+    } else foundfull = true;
+  } while (epoch > 0 && !foundfull);
+
+  CHECK_EQ(foundfull,true) << "Ran out of non-delta-only checkpoints to start from!";
+
 
   TableRegistry::Map &t = TableRegistry::Get()->tables();
   // CRM 2011-10-13: Look for latest and later epochs that might
@@ -373,15 +405,11 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
   // last FULL checkpoint
   epoch_ = epoch;
   do {
-    VLOG(2) << "Worker restoring state from epoch: " << epoch_;
-    if (!File::Exists(
-        StringPrintf("%s/epoch_%05d/checkpoint.finished",
-                     FLAGS_checkpoint_read_dir.c_str(), epoch_))) {
-      VLOG(2)
-          << "Epoch " << epoch_
-              << " did not finish; restore process terminating normally.";
-      break;
-    }
+    LOG(INFO) << "Worker restoring state from epoch: " << epoch_;
+//    if (!File::Exists(StringPrintf("%s/epoch_%05d/checkpoint.finished",FLAGS_checkpoint_read_dir.c_str(),epoch_))) {
+//      VLOG(2) << "Epoch " << epoch_ << " did not finish; restore process terminating normally.";
+//      break;
+//    }
     for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
       Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
       if (t) {
@@ -391,7 +419,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
       }
     }
     epoch_++;
-  } while (File::Exists(
+  } while(finalepoch >= epoch_ && File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_)));
       StringPrintf("%s/epoch_%05d", FLAGS_checkpoint_read_dir.c_str(), epoch_)));
   LOG(INFO) << "State restored. Current epoch is " << epoch_ << ".";
 }
@@ -654,6 +682,24 @@ void Worker::CheckForMasterUpdates() {
     VLOG(1) << "Finishing checkpoint on master's instruction";
     FinishCheckpoint(checkpoint_finish_msg.next_delta_only());
   }
+}
+
+void Worker::HandleStartCheckpointAsync(const CheckpointRequest& req,
+                                        EmptyMessage* resp,
+                                        const RPCInfo& rpc) {
+  VLOG(1) << "Async order for checkpoint received.";  
+  checkpoint_tables_.clear();
+  for (int i = 0; i < req.table_size(); ++i) {
+    checkpoint_tables_.insert(make_pair(req.table(i), true));
+  }
+  StartCheckpoint(req.epoch(),(CheckpointType)req.checkpoint_type(),false);
+} 
+
+void Worker::HandleFinishCheckpointAsync(const CheckpointFinishRequest& req,
+										 EmptyMessage *resp,
+										 const RPCInfo& rpc) {
+  VLOG(1) << "Async order for checkpoint finish received.";
+  FinishCheckpoint(req.next_delta_only());
 }
 
 bool StartWorker(const ConfigData& conf) {

@@ -13,7 +13,7 @@ static int NUM_WORKERS = 2;
 
 static const float kPropagationFactor = 0.8;
 static const int kBlocksize = 1000;
-static const char kTestPrefix[] = "testdata/pr-graph.rec";
+static const char kTestPrefix[] = "/scratch/kerm/pr-graph.rec";
 
 //Not an option for this runner
 //DEFINE_bool(apr_memory_graph, false,
@@ -24,6 +24,7 @@ DEFINE_int32(apr_nodes, 10000, "");
 DEFINE_double(apr_tol, 1.5e-8, "threshold for updates");
 DEFINE_double(apr_d, 0.85, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
+DEFINE_int32(machines, 1, "number of physical filesystem(s), assuming round-robin MPI schedulinG");
 
 #define PREFETCH 1024
 
@@ -101,6 +102,7 @@ namespace tr1 {
 template<>
 struct hash<APageId> {
   size_t operator()(const APageId& p) const {
+    //EVERY_N(100000, fprintf(stderr, "Hashing %d, %d\n", p.site, p.page));
     return SuperFastHash((const char*) &p, sizeof p);
   }
 };
@@ -142,23 +144,25 @@ static vector<int> InitSites() {
 
 static vector<int> site_sizes;
 
-static void BuildGraph(int shard, int nshards, int nodes, int density) {
+static void BuildGraph(int oldshard, int nshards, int nodes, int density) {
   char* d = strdup(FLAGS_apr_graph_prefix.c_str());
   File::Mkdirs(dirname(d));
 
-  string target = StringPrintf("%s-%05d-of-%05d-N%05d",
-                               FLAGS_apr_graph_prefix.c_str(), shard, nshards,
-                               nodes);
+  if (oldshard >= FLAGS_machines) return;
+  for (int shard = 0; shard < nshards; shard += 1) {
+    string target = StringPrintf("%s-%05d-of-%05d-N%05d", 
+                                 FLAGS_apr_graph_prefix.c_str(), shard, nshards,
+                                 nodes);
 
-  if (File::Exists(target)) {
-    return;
-  }
+    if (File::Exists(target)) {
+      continue;
+    }
 
-  srand(shard);
-  Page n;
-  RecordFile out(target, "w", RecordFile::NONE);
-  // Only sites with site_id % nshards == shard are in this shard.
-  for (int i = shard; i < site_sizes.size(); i += nshards) {
+    srand(shard);
+    Page n;
+    RecordFile out(target, "w", RecordFile::NONE);
+
+    for (int i = shard; i < site_sizes.size(); i += nshards) {
     PERIODIC(
         1,
         LOG(INFO) << "Working: Shard -- " << shard << " of " << nshards
@@ -174,7 +178,8 @@ static void BuildGraph(int shard, int nshards, int nodes, int density) {
         n.add_target_id(random() % site_sizes[target_site]);
       }
 
-      out.write(n);
+        out.write(n);
+      }
     }
   }
 }
@@ -281,7 +286,7 @@ public:
     } else {
       value->pr_int += (FLAGS_apr_d * newvalue.pr_ext) / newvalue.L;
     }
-    if (abs(value->pr_int - value->pr_ext) >= FLAGS_apr_tol) {
+    if (abs(value->pr_int-value->pr_ext) >= FLAGS_apr_tol || newvalue.pr_ext == 0.0) {
       // Get neighbors
       APageInfo p = apages->get(*key);
       struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int
@@ -326,46 +331,52 @@ int AccelPagerank(const ConfigData& conf) {
   prs = CreateTable(0, FLAGS_shards, new SiteSharding,
                     (Trigger<APageId, AccelPRStruct>*) new AccelPRTrigger);
 
-  if (FLAGS_build_graph) {
-    if (rpc::NetworkThread::Get()->id() == 0) {
-      LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; "
-          << FLAGS_apr_nodes << " nodes.";
-      for (int i = 0; i < FLAGS_shards; ++i) {
-        BuildGraph(i, FLAGS_shards, FLAGS_apr_nodes, 15);
-      }
-    }
-    return 0;
-  }
-
   //no RecordTable option in this runner, MemoryTable only
   apages = CreateTable(1, FLAGS_shards, new SiteSharding,
                        new Accumulators<APageInfo>::Replace);
 
   //Also need to load pages
-  if (FLAGS_apr_convert_graph.empty()) {
-    pagedb = CreateRecordTable < Page
-        > (2, FLAGS_apr_graph_prefix + "*", false);
+  if (FLAGS_apr_convert_graph.empty() && !FLAGS_build_graph) {
+    LOG(INFO) << "Loading page database";
+    pagedb = CreateRecordTable<Page>(2, FLAGS_apr_graph_prefix + "*", false, FLAGS_shards);
   }
 
   StartWorker(conf);
   Master m(conf);
+  
 
+  //Graph construction functions
   if (!FLAGS_apr_convert_graph.empty()) {
-    ConvertGraph(FLAGS_apr_convert_graph, FLAGS_shards);
+    ConvertGraph(FLAGS_apr_convert_graph, FLAGS_shards);					//convert a real graph
+    return 0;
+  } else if (FLAGS_build_graph) {
+    LOG(INFO) << "Building graph with " << FLAGS_shards << " shards; "		//build a simulated graph
+              << FLAGS_apr_nodes << " nodes.";
+    PRunAll(prs, {
+         BuildGraph(current_shard(), FLAGS_shards, FLAGS_apr_nodes, 15);
+    });
     return 0;
   }
 
   PRunAll(prs, {
         prs->swap_accumulator(new Triggers<APageId,AccelPRStruct>::NullTrigger);
       });
+
   bool restored = m.restore(); //Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
   fprintf(stderr, "%successfully restore%s previous checkpoint.\n",
           (restored ? "S" : "Did not s"), (restored ? "d" : ""));
   PRunAll(prs, {
         prs->swap_accumulator((Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
+    //prs->swap_accumulator(new Accumulators<AccelPRStruct>::Replace);
       });
 
-  PMap( {n : pagedb}, {
+	PRunAll(pagedb, {
+	  apages->resize(FLAGS_apr_nodes);
+	  prs->resize(FLAGS_apr_nodes);
+      RecordTable<Page>::Iterator *it =
+      pagedb->get_typed_iterator(current_shard());
+      for(; !it->done(); it->Next()) {
+        Page n = it->value();
         struct APageId p = {n.site(), n.id()};
         struct APageInfo info;
         info.adj.clear();
@@ -374,6 +385,7 @@ int AccelPagerank(const ConfigData& conf) {
           info.adj.push_back(neigh);
         }
         apages->update(p,info); //some/all of these are wasteful when restoring from checkpoint
+      }
       });
 
   struct timeval start_time, end_time;
@@ -381,14 +393,21 @@ int AccelPagerank(const ConfigData& conf) {
 
   //Do initialization! But don't start processing yet, otherwise some of the vertices
   //will exist because of trigger propagation before they get their initialization value.
-  PRunAll(apages, {
-        TypedTableIterator<APageId, APageInfo> *it =
-        apages->get_typed_iterator(current_shard());
-        int i=0;
+  PRunAll(pagedb, {
+
+    RecordTable<Page>::Iterator *it =
+      pagedb->get_typed_iterator(current_shard());
+    int i=0;
+
         for(; !it->done(); it->Next()) {
-          if (!prs->contains(it->key())) {
-            struct AccelPRStruct initval = {it->value().adj.size(), 0, (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d)};
-            prs->update(it->key(),initval);
+      Page n = it->value();
+      struct APageId p = { n.site(), n.id() };
+      if (!prs->contains(p)) {
+        struct AccelPRStruct initval = { 
+           n.target_site_size(), 
+	       0, 
+           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d) };
+        prs->update(p, initval);
             i++;
           }
         }
@@ -397,19 +416,19 @@ int AccelPagerank(const ConfigData& conf) {
 
   //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
   PRunAll(prs, {
-        TypedTableIterator<APageId, AccelPRStruct> *it =
-        prs->get_typed_iterator(current_shard());
-        float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
-        int i=0;
-        for(; !it->done(); it->Next()) {
-          if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
-            struct AccelPRStruct initval = {1, 0, 0};
-            prs->update(it->key(),initval);
-            i++;
-          }
-        }
-        fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
-      });
+    TypedTableIterator<APageId, AccelPRStruct> *it =
+      prs->get_typed_iterator(current_shard());
+    float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
+    int i=0;
+    for(; !it->done(); it->Next()) {
+      if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
+        struct AccelPRStruct initval = { 1, 0, 0 };
+        prs->update(it->key(),initval);
+        i++;
+      }
+    }
+    fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
+  });
 
   gettimeofday(&end_time, NULL);
   long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
@@ -425,54 +444,54 @@ int AccelPagerank(const ConfigData& conf) {
   m.run_all(cp_rd);
 
   PRunOne(prs, {
-        fprintf(stdout,"PageRank complete, tabulating results...\n");
-        float pr_min = 1, pr_max = -1, pr_sum = 0;
-        struct APageId toplist[FLAGS_ashow_top];
-        float topscores[FLAGS_ashow_top];
-        int totalpages = 0;
+    fprintf(stdout,"PageRank complete, tabulating results...\n");
+    float pr_min = 1, pr_max = -1, pr_sum = 0;
+    struct APageId toplist[FLAGS_ashow_top];
+    float topscores[FLAGS_ashow_top];
+    int totalpages = 0;
 
-        //Initialize top scores
-        for(int i=0; i<FLAGS_ashow_top; i++)
-        topscores[i] = -999999.9999;
+    //Initialize top scores
+    for(int i=0; i<FLAGS_ashow_top; i++)
+      topscores[i] = -999999.9999;
 
-        //Find top [FLAGS_ashow_top] pages
-        for(int shard=0; shard < prs->num_shards(); shard++) {
-          TypedTableIterator<APageId, AccelPRStruct> *it = prs->get_typed_iterator(shard,PREFETCH);
+    //Find top [FLAGS_ashow_top] pages
+    for(int shard=0; shard < prs->num_shards(); shard++) {
+      TypedTableIterator<APageId, AccelPRStruct> *it = prs->get_typed_iterator(shard,PREFETCH);
 
-          for(; !it->done(); it->Next()) {
-            totalpages++;
-            if (it->value().pr_ext > pr_max)
-            pr_max = it->value().pr_ext;
-            //If it's at least better than the worst of the top list, then replace the worst with
-            //this one, and propagate it upwards through the list until it's in place
-            if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
-              topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
-              toplist[FLAGS_ashow_top-1] = it->key();
-              for(int i=FLAGS_ashow_top-2; i>=0; i--) {
-                if (topscores[i] < topscores[i+1]) {
-                  float a = topscores[i]; //swap!
-                  struct APageId b = toplist[i];
-                  topscores[i] = topscores[i+1];
-                  toplist[i] = toplist[i+1];
-                  topscores[i+1] = a;
-                  toplist[i+1] = b;
-                } else {
-                  break;
-                }
-              }
+      for(; !it->done(); it->Next()) {
+        totalpages++;
+        if (it->value().pr_ext > pr_max)
+          pr_max = it->value().pr_ext;
+        //If it's at least better than the worst of the top list, then replace the worst with
+        //this one, and propagate it upwards through the list until it's in place
+        if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
+          topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
+          toplist[FLAGS_ashow_top-1] = it->key();
+          for(int i=FLAGS_ashow_top-2; i>=0; i--) {
+            if (topscores[i] < topscores[i+1]) {
+              float a = topscores[i];				//swap!
+              struct APageId b = toplist[i];
+              topscores[i] = topscores[i+1];
+              toplist[i] = toplist[i+1];
+              topscores[i+1] = a;
+              toplist[i+1] = b;
+            } else {
+              break;
             }
-            if (it->value().pr_ext < pr_min)
-            pr_min = it->value().pr_ext;
-            pr_sum += it->value().pr_ext;
           }
         }
-        float pr_avg = pr_sum/totalpages;
-        fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
-        fprintf(stdout,"Top Pages:\n");
-        for(int i=0;i<FLAGS_ashow_top;i++) {
-          fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
-        }
-      });
+        if (it->value().pr_ext < pr_min)
+          pr_min = it->value().pr_ext;
+        pr_sum += it->value().pr_ext;
+      }
+    }
+    float pr_avg = pr_sum/totalpages;
+    fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
+    fprintf(stdout,"Top Pages:\n");
+    for(int i=0;i<FLAGS_ashow_top;i++) {
+      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+    }
+  });
 
   return 0;
 }

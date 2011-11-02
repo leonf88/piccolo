@@ -12,6 +12,7 @@ enum CheckpointType {
 
 message RegisterWorkerRequest {
   required int32 id = 1;
+//  optional repeated ShardInfo shards;
 }
 
 message ShardAssignment {

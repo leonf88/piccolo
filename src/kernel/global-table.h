@@ -490,34 +490,8 @@ void TypedGlobalTable<K, V>::update(const K &k, const V &v) {
 
   if (is_local_shard(shard)) {
 
-    /*
-     // invoke any registered triggers.
-     bool doUpdate = true;
-     V v2 = v;
-     V v1;
-
-     boost::recursive_mutex::scoped_lock sl(trigger_mutex());
-
-     if (partition(shard)->contains(k))
-     v1 = partition(shard)->get(k);
-
-     for (int i = 0; i < num_triggers(); ++i) {
-     if (reinterpret_cast<Trigger<K, V>*>(trigger(i))->enabled()) {
-     doUpdate = doUpdate && reinterpret_cast<Trigger<K, V>*>(trigger(i))->Fire(k, v1, v2);
-     }
-     //for now, let NACKS disallow chained triggers (?)
-     if (!doUpdate) break;
-     }
-
-     sl.unlock();
-
-     // Only update if no triggers NACKed
-     if (doUpdate) {
-     */
     partition(shard)->update(k, v);
-//    }
 
-    //VLOG(3) << " shard " << shard << " local? " << " : " << is_local_shard(shard) << " : " << worker_id_;
   } else {
 
     if (this->info().accum->type() != AccumulatorBase::TRIGGER) {
@@ -560,9 +534,7 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     {
       boost::recursive_mutex::scoped_lock sl(mutex());
       //Swap queue with an empty queue so we don't recurse way down
-      VLOG(3)
-          << "clearing update queue for table " << this->id() << " of "
-              << update_queue.size() << " items";
+      //VLOG(3) << "clearing update queue for table " << this->id() << " of " << update_queue.size() << " items" << endl;
 
       removed_items.clear();
       update_queue.swap(removed_items);
