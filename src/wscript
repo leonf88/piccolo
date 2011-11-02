@@ -21,6 +21,8 @@ PROTO_FILES = [
   'examples/examples.proto',
   ]
 
+STANDARD_LIBS = [ 'PROTOBUF', 'BOOST_THREAD', 'LZO', 'UNWIND', 'RT' ]
+
 class piccolo_program(link_task):
   run_str = ' '.join(['${LINK_CXX}',
                       '${LINKFLAGS}',
@@ -68,6 +70,13 @@ def configure(ctx):
 
   ctx.check(header_name='lzo/lzo1x.h', mandatory=False)
   ctx.check(header_name='libunwind.h', mandatory=True)
+  if ctx.check(header_name='google/profiler.h', define_name='CPUPROF', mandatory=False) and\
+     ctx.check(lib='profiler', mandatory=False):
+    STANDARD_LIBS.append('PROFILER')
+  else:
+    ctx.msg('Google profiler library was not found; profiling will not be '
+            'available.', False)
+             
 
   ctx.find_program('protoc', mandatory=True)
   ctx.find_program('mpic++', mandatory=True)
@@ -79,11 +88,11 @@ def configure(ctx):
   ctx.check(lib='protobuf')
   ctx.check(lib='rt')
   ctx.check(lib='unwind')
-  
-  if not ctx.check(lib='blas', required=False):
+
+  if not ctx.check(lib='blas', mandatory=False):
     ctx.msg('BLAS library was not found; certain examples will not be built', False)
 
-  if not ctx.check(lib='z', required=False):
+  if not ctx.check(lib='z', mandatory=False):
     ctx.msg('Zlib library was not found; certain examples will not be built', False)
 
   # check for either lzo or lzo2 availibility.
@@ -188,11 +197,10 @@ def build(bld):
                     'worker', 'master', 'common', 'kernel',
                     'gflags', 'glog' ]
 
-    std_lib = [ 'PROTOBUF', 'BOOST_THREAD', 'LZO', 'UNWIND', 'RT' ]
     bld.program(target=target,
                 source=[join('examples', src) for src in sources],
                 features='cxxprogram cxx',
-                use=use + ['example_main.o',] + piccolo_lib + std_lib)
+                use=use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS)
 
   if 'LIB_BLAS' in bld.env:
     build_example('matmul', ['matmul.pp', ], use=['BLAS'])
