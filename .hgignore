@@ -3,5 +3,9 @@
 ^extlib/.*_test
 ^bin/.*
 ^build/.*
-.waf-1.6.8.*/.*
+\.lock
+.waf-1.6.8.*
 ^.*/.*\.(pyc|orig|aux|log|nav|out|ps|pdf|snm|toc|bbl|blg|dvi|pb\.cc|pb\.h)
+^profile/.*
+\.(project|pydevproject|cproject|settings)
+\.*\.swp
