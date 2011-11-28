@@ -389,7 +389,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
   do {
     //check if non-delta (full cps) exist here
     string full_cp_pattern = StringPrintf("%s/epoch_%05d/*.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
-    vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
+    std::vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
     if (full_cps.empty()) {
       LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
       epoch--;
@@ -420,7 +420,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
     }
     epoch_++;
   } while(finalepoch >= epoch_ && File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_)));
-      StringPrintf("%s/epoch_%05d", FLAGS_checkpoint_read_dir.c_str(), epoch_)));
+//      StringPrintf("%s/epoch_%05d", FLAGS_checkpoint_read_dir.c_str(), epoch_)));
   LOG(INFO) << "State restored. Current epoch is " << epoch_ << ".";
 }
 
@@ -686,18 +686,18 @@ void Worker::CheckForMasterUpdates() {
 
 void Worker::HandleStartCheckpointAsync(const CheckpointRequest& req,
                                         EmptyMessage* resp,
-                                        const RPCInfo& rpc) {
+                                        const rpc::RPCInfo& rpc) {
   VLOG(1) << "Async order for checkpoint received.";  
   checkpoint_tables_.clear();
   for (int i = 0; i < req.table_size(); ++i) {
-    checkpoint_tables_.insert(make_pair(req.table(i), true));
+    checkpoint_tables_.insert(std::make_pair(req.table(i), true));
   }
   StartCheckpoint(req.epoch(),(CheckpointType)req.checkpoint_type(),false);
 } 
 
 void Worker::HandleFinishCheckpointAsync(const CheckpointFinishRequest& req,
 										 EmptyMessage *resp,
-										 const RPCInfo& rpc) {
+										 const rpc::RPCInfo& rpc) {
   VLOG(1) << "Async order for checkpoint finish received.";
   FinishCheckpoint(req.next_delta_only());
 }

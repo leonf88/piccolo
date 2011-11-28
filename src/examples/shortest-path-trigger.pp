@@ -72,19 +72,19 @@ static void BuildGraph(int shards, int nodes, int density) {
         StringPrintf("testdata/sp-graph.rec-%05d-of-%05d", i, shards), "w");
   }
 
-	srandom(nodes);	//repeatable graphs
+  srandom(nodes);	//repeatable graphs
   fprintf(stderr, "Building graph: ");
 
-	for (int i = 0; i < nodes; i++) {
+  for (int i = 0; i < nodes; i++) {
     PathNode n;
     n.set_id(i);
 
     for (int j = 0; j < density; j++) {
-			n.add_target(random() % nodes);
+      n.add_target(random() % nodes);
     }
 
     out[i % shards]->write(n);
-		if (i % (nodes / 50) == 0) { fprintf(stderr, "."); }
+    if (i % (nodes / 50) == 0) {
       fprintf(stderr, ".");
     }
   }
@@ -127,33 +127,32 @@ int ShortestPathTrigger(const ConfigData& conf) {
     return 0;
   }
 
-    if (!m.restore()) {
-		distance_map->resize(FLAGS_tnum_nodes);
-		nodes->resize(FLAGS_tnum_nodes);
-			PRunAll(distance_map, {
-    vector<double> v;
-    v.clear();
-				for(int i=current_shard();i<FLAGS_tnum_nodes;i+=FLAGS_shards) {
-					distance_map->update(i, 1e9);	//Initialize all distances to very large.
-					nodes->update(i,v);	//Start all vectors with empty adjacency lists
-				}
-				});
+  if (!m.restore()) {
+    distance_map->resize(FLAGS_tnum_nodes);
+    nodes->resize(FLAGS_tnum_nodes);
+    PRunAll(distance_map, {
+       vector<double> v;
+       v.clear();
+       for(int i=current_shard();i<FLAGS_tnum_nodes;i+=FLAGS_shards) {
+         distance_map->update(i, 1e9);	//Initialize all distances to very large.
+         nodes->update(i,v);	//Start all vectors with empty adjacency lists
+       }
+    });
 
 
-		//Build adjacency lists by appending RecordTables' contents
-		PMap({n: nodes_record}, {
-				vector<double> v=nodes->get(n.id());
-				for(int i=0; i < n.target_size(); i++)
+    //Build adjacency lists by appending RecordTables' contents
+    PMap({n: nodes_record}, {
+      vector<double> v=nodes->get(n.id());
       for(int i=0; i < n.target_size(); i++) {
-				v.push_back(n.target(i));
-				//cout << "writing node " << n.id() << endl;
-				nodes->update(n.id(),v);
-				});
+        v.push_back(n.target(i));
+		nodes->update(n.id(),v);
+      }
+	});
 
-		PRunAll(distance_map, {
-				distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
-				});
-    }
+	PRunAll(distance_map, {
+	  distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
+	});
+  }
 
   //Start the timer!
   struct timeval start_time, end_time;
