@@ -63,9 +63,9 @@ public:
   void HandleFinalize(const EmptyMessage& req, EmptyMessage *resp,
                       const rpc::RPCInfo& rpc);
   void HandleStartCheckpointAsync(const CheckpointRequest& req,
-                                  EmptyMessage* resp, const RPCInfo& rpc);
+                                  EmptyMessage* resp, const rpc::RPCInfo& rpc);
   void HandleFinishCheckpointAsync(const CheckpointFinishRequest& req,
-                                   EmptyMessage *resp, const RPCInfo& rpc);
+                                   EmptyMessage *resp, const rpc::RPCInfo& rpc);
   void HandleStartRestore(const StartRestore& req, EmptyMessage *resp,
                           const rpc::RPCInfo& rpc);
 

@@ -214,7 +214,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
-//      LOG(INFO) << "Executing Trigger [sparse]";
+      //LOG(INFO) << "Executing Trigger [sparse]";
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
       if (doUpdate)
         buckets_[b].v = v2;
@@ -225,6 +225,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       bool doUpdate = true;
       V v2 = v;
+      //LOG(INFO) << "Executing Trigger [sparse] [new]";
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true
       if (doUpdate)
         put(k, v2);

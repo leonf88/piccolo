@@ -280,7 +280,7 @@ public:
     *doUpdate = true;
     if (isNew) {
       value->L = newvalue.L;
-      value->pr_int = (float) FLAGS_apr_d * newvalue.pr_ext;
+      value->pr_int = (float) FLAGS_apr_d * newvalue.pr_int;
       value->pr_ext = 0;
       return;
     } else {
@@ -405,8 +405,8 @@ int AccelPagerank(const ConfigData& conf) {
       if (!prs->contains(p)) {
         struct AccelPRStruct initval = { 
            n.target_site_size(), 
-	       0, 
-           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d) };
+           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d),
+	       0};
         prs->update(p, initval);
             i++;
           }

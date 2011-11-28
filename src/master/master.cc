@@ -299,7 +299,7 @@ void Master::start_checkpoint() {
   int worker_id = 0;
   while(finished < workers_.size()) {
     VLOG(3) << "Waiting for checkpoint started responses (" << finished << " received)" << endl;
-    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_START_CHECKPOINT_DONE, &resp, &worker_id)) {
+    if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_START_CHECKPOINT_DONE, &resp, &worker_id)) {
       finished++;
       VLOG(3) << "Received checkpoint start done " << finished << " of " << workers_.size() << endl;
 
@@ -383,7 +383,7 @@ void Master::finish_checkpoint() {
   int worker_id;
   while(finished < workers_.size()) {
     VLOG(3) << "Waiting for checkpoint finished responses (" << finished << " received)" << endl;
-    if (network_->TryRead(MPI::ANY_SOURCE, MTYPE_FINISH_CHECKPOINT_DONE, &resp, &worker_id)) {
+    if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_FINISH_CHECKPOINT_DONE, &resp, &worker_id)) {
       finished++;
       VLOG(3) << "Received checkpoint finish done " << finished << " of " << workers_.size() << endl;
 
@@ -772,6 +772,7 @@ void Master::run(RunDescriptor r) {
 
   kernel_epoch_++;
 
+  VLOG(1) << "Current run: " << shards.size() << " shards";
   assign_tasks(current_run_, shards);
 
   dispatched_ = dispatch_work(current_run_);

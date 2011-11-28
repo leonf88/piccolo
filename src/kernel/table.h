@@ -80,7 +80,7 @@ struct Accumulator: public AccumulatorBase {
 template<class K, class V>
 struct Trigger: public AccumulatorBase {
   Type type() {
-    return AccumulatorBase::ACCUMULATOR;
+    return AccumulatorBase::TRIGGER;
   }
 
   virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
