@@ -71,6 +71,7 @@ struct PageIdBlockInfo: public BlockInfo<PageId> {
   int offset(const PageId& k, int block_size) {
     return k.page % block_size;
   }
+
 };
 
 static vector<int> InitSites() {

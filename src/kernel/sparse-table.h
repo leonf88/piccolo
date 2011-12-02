@@ -6,6 +6,7 @@
 #include "kernel/table.h"
 #include "kernel/local-table.h"
 #include <boost/noncopyable.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 namespace piccolo {
 
@@ -70,6 +71,9 @@ public:
     LOG(FATAL) << "Not implemented.";
   }
 
+  boost::dynamic_bitset<>* bitset_getbitset(void);
+  const K bitset_getkeyforbit(unsigned long int bit_offset);
+
   void resize(int64_t size);
 
   bool empty() { return size() == 0; }
@@ -78,6 +82,7 @@ public:
   void clear() {
     for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }
     entries_ = 0;
+    trigger_flags_.reset();
   }
 
   TableIterator *get_iterator() {
@@ -117,6 +122,7 @@ private:
   }
 
   std::vector<Bucket> buckets_;
+  boost::dynamic_bitset<> trigger_flags_;		//Retrigger flags
 
   int64_t entries_;
   int64_t size_;
@@ -129,6 +135,7 @@ SparseTable<K, V>::SparseTable(int size)
   : buckets_(0), entries_(0), size_(0) {
   clear();
 
+  trigger_flags_.resize(0);        //Retrigger flags
   resize(size);
 }
 
@@ -170,17 +177,23 @@ void SparseTable<K, V>::resize(int64_t size) {
     return;
 
   std::vector<Bucket> old_b = buckets_;
+  boost::dynamic_bitset<> old_ltflags = trigger_flags_;
+
   int old_entries = entries_;
 
   //VLOG(2) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
 
   buckets_.resize(size);
   size_ = size;
+
   clear();
+  trigger_flags_.reset();
+  trigger_flags_.resize(size_);
 
   for (size_t i = 0; i < old_b.size(); ++i) {
     if (old_b[i].in_use) {
       put(old_b[i].k, old_b[i].v);
+      trigger_flags_[bucket_for_key(old_b[i].k)] = old_ltflags[i];
     }
   }
 
@@ -211,13 +224,16 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
   if (b != -1) {
     if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
+      trigger_flags_[b] = true;
     } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
       //LOG(INFO) << "Executing Trigger [sparse]";
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
-      if (doUpdate)
+      if (doUpdate) {
         buckets_[b].v = v2;
+        trigger_flags_[b] = true;
+      }
     } else {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
     }
@@ -263,6 +279,7 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
       buckets_[b].in_use = 1;
       buckets_[b].k = k;
       buckets_[b].v = v;
+      trigger_flags_[b] = true;
       ++entries_;
     }
   } else {
@@ -270,5 +287,18 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
     buckets_[b].v = v;
   }
 }
+
+template <class K, class V>
+boost::dynamic_bitset<>* SparseTable<K, V>::bitset_getbitset(void) {
+  return &trigger_flags_;
 }
+
+template <class K, class V>
+const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
+  K k = buckets_[bit_offset].k;
+  return k;
+}
+
+}	/* namespace piccolo */
+
 #endif /* SPARSE_MAP_H_ */

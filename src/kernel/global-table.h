@@ -208,8 +208,7 @@ protected:
 template<class K, class V>
 class TypedGlobalTable: virtual public GlobalTable,
     public MutableGlobalTableBase,
-    public TypedTable<K, V>
-    ,
+    public TypedTable<K, V>,
     private boost::noncopyable {
 public:
   //update queuing support
@@ -220,12 +219,9 @@ public:
   //long trigger support
   void KernelFinalize();
   int retrigger_threadcount_; // number of long trigger threads for this table
-  std::vector<K> retrigger_vector_; // which keys still request long triggers
   std::vector<boost::thread::id> retrigger_threadids_; //IDs of retrigger threads, for future use
   bool retrigger_terminate_; // set to instruct retrigger threads to clear tables
   bool retrigger_termthreads_; // number of "terminated" threads
-  int retrigger_mode_; // 0 = scan retrigger_vector for flags
-  // 1 = scan table for flags
 
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
@@ -245,17 +241,23 @@ public:
     update_queue.clear();
 
     //Clear the long/retrigger map, just in case, and
-    //then start up the retrigger thread
+    //then start up the retrigger thread(s)
     retrigger_threadids_.clear();
     retrigger_terminate_ = false;
-    retrigger_threadcount_ = retrigt_count;
-    if (retrigt_count != 0) {
-      retrigger_vector_.clear();
-      retrigger_mode_ = RETRIGGER_MODE_EXPLICIT; //separate map to start
-      for (int i = 0; i < retrigt_count; i++)
-        retrigger_threadids_.push_back(
+    retrigger_threadcount_ = 0;
+
+    //Don't create retrigger threads for classic Piccolo apps
+    if (retrigt_count) {
+      for (size_t i = 0; i < partitions_.size(); ++i) {
+        //Only create retrigger threads for local shards
+        if (is_local_shard(i)) {
+          retrigger_threadids_.push_back(
             boost::thread(
-                boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,this)).get_id());
+              boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,
+                          this,partitions_[i]->id())).get_id());
+          retrigger_threadcount_++;
+        }
+      }
     }
   }
 
@@ -277,7 +279,10 @@ public:
   // retrigger threads to clear themselves of existing items.
   void enable_retrigger(K k);
   void retrigger_stop(void);
-  void retrigger_thread(void);
+  void retrigger_thread(int shard_id);
+
+  boost::dynamic_bitset<>* bitset_getbitset(void);
+  const K bitset_getkeyforbit(unsigned long int bit_offset);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -566,21 +571,23 @@ void TypedGlobalTable<K, V>::KernelFinalize() {
 template<class K, class V>
 void TypedGlobalTable<K, V>::enable_retrigger(K k) {
   boost::mutex::scoped_lock sl(retrigger_mutex());
-  if (retrigger_mode_ == RETRIGGER_MODE_EXPLICIT) {
-    //insert or update item in retrigger map
 
-    //Set new one
-    retrigger_vector_.push_back(k);
-  } else { //RETRIGGER_MODE_IMPLICIT
-    //Set bit in table instead of in retrigger map
-    LOG(FATAL) << "Retrigger mode 1 not yet implemented.";
-  }
+  //Set bit in table instead of in retrigger map	TODO
+  LOG(FATAL) << "Retrigger mode 1 not yet implemented.";
+
 }
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_stop(void) {
-  if (!retrigger_threadcount_) return;
-  {
+  if (!retrigger_threadcount_) {
+    for (size_t i = 0; i < partitions_.size(); ++i) {
+      //Only create retrigger threads for local shards
+      if (is_local_shard(i)) {
+        (partition(i)->bitset_getbitset())->reset();		//reset all bits in bitset
+      }
+    }
+    return;
+  } else {
     boost::mutex::scoped_lock sl(retrigger_mutex());
     retrigger_termthreads_ = 0;
     retrigger_terminate_ = true;
@@ -591,33 +598,44 @@ void TypedGlobalTable<K, V>::retrigger_stop(void) {
 }
 
 template<class K, class V>
-void TypedGlobalTable<K, V>::retrigger_thread(void) {
+boost::dynamic_bitset<>* TypedGlobalTable<K,V>::bitset_getbitset(void) {
+  LOG(FATAL) << "bitset_getbitset called in TypedGlobaTable";
+  return NULL;
+}
+
+template<class K, class V>
+const K TypedGlobalTable<K,V>::bitset_getkeyforbit(unsigned long int bit_offset) {
+  K k;
+  return k;
+}
+
+template<class K, class V>
+void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
   bool terminated = false;
   while (!terminated) {
     {
       //     boost::mutex::scoped_lock sl(retrigger_mutex());
-      if (retrigger_mode_ == RETRIGGER_MODE_EXPLICIT) {
-        typename std::vector<K>::iterator it = retrigger_vector_.begin();
-        typename std::vector<K>::iterator oldit;
-        bool terminating = retrigger_terminate_;
-        for (; it != retrigger_vector_.end();) {
-          bool retain = true;
-          retain = ((Trigger<K, V>*) info_.accum)->LongFire(*it, terminating);
-          if (retain == false) {
-            oldit = it;
-            it++;
-            retrigger_vector_.erase(oldit);
-          } else it++;
-        }
-        terminated = terminating;
-      } else { //RETRIGGER_MODE_IMPLICIT
-        LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
+      LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
+
+      bool terminating = retrigger_terminate_;
+
+      boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
+      boost::dynamic_bitset<>::size_type bititer = ltflags->find_first();
+
+      while(bititer != ltflags->npos) {
+        bool retain = true;
+        retain = ((Trigger<K, V>*) info_.accum)->LongFire(partition(shard_id)->bitset_getkeyforbit(bititer), terminating);
+        (*ltflags)[bititer] = retain;
+        bititer = ltflags->find_next(bititer);
       }
-      if (terminated && retrigger_vector_.size() > 0) {
-        boost::mutex::scoped_lock sl(retrigger_mutex());
-        retrigger_vector_.clear();
-        retrigger_termthreads_++; //increment terminated thread count
+
+      terminated = terminating;
+
+      if (terminated && ltflags->any()) {		//if we didn't actually shut down here...
         terminated = false;
+      } else if (terminated) {
+        boost::mutex::scoped_lock sl(retrigger_mutex());
+        retrigger_termthreads_++; //increment terminated thread count
       }
     }
     Sleep(RETRIGGER_SCAN_INTERVAL);
