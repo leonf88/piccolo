@@ -7,6 +7,7 @@
 #include "kernel/table.h"
 #include "kernel/table-inl.h"
 #include <boost/noncopyable.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 #include <tr1/unordered_map>
 
@@ -22,6 +23,7 @@ struct BlockInfo: BlockInfoBase {
 
   // Returns the index offset of 'k' within it's block.
   virtual int offset(const K& k, int block_size) = 0;
+
 };
 
 struct IntBlockInfo: public BlockInfo<int> {
@@ -32,6 +34,7 @@ struct IntBlockInfo: public BlockInfo<int> {
   int offset(const int& k, int block_size) {
     return k % block_size;
   }
+
 };
 
 // Provides fast lookups for dense key-spaces.  Keys are divided into 'blocks' of
@@ -120,6 +123,7 @@ public:
   DenseTable(int size = 1) :
       m_(size) {
     last_block_ = NULL;
+    trigger_flags_.resize(size);
   }
 
   ~DenseTable() {
@@ -163,12 +167,16 @@ public:
 
     if (this->info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*) this->info_.accum)->Accumulate(&vb[block_pos(k)], v);
+      trigger_flags_[block_pos(k)] = true;
     } else if (this->info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = vb[block_pos(k)];
       bool doUpdate = false;
 //      LOG(INFO) << "Executing Trigger [dense]";
       ((Trigger<K, V>*) this->info_.accum)->Fire(&k, &v2, v, &doUpdate, true);
-      if (doUpdate) vb[block_pos(k)] = v2;
+      if (doUpdate) {
+        vb[block_pos(k)] = v2;
+        trigger_flags_[block_pos(k)] = true;
+      }
     } else {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
     }
@@ -180,6 +188,7 @@ public:
   void put(const K& k, const V& v) {
     V* vb = get_block(k);
     vb[block_pos(k)] = v;
+    trigger_flags_[block_pos(k)] = true;
   }
 
   void remove(const K& k) {
@@ -204,6 +213,7 @@ public:
   }
 
   void resize(int64_t s) {
+    LOG(FATAL) << " DenseTable resize not implemented!";
   }
 
   void Serialize(TableCoder* out) {
@@ -246,10 +256,21 @@ public:
     return;
   }
 
+  boost::dynamic_bitset<>* bitset_getbitset(void) {
+    return &trigger_flags_;
+  }
+
+  const K bitset_getkeyforbit(unsigned long int bit_offset) {
+    int bucket = int(bit_offset/(this->info_.block_size));
+    return m_[bucket]->first + (bit_offset - (this->info_.block_size)*bucket);
+  }
+
+
 private:
   BucketMap m_;
   V* last_block_;
   K last_block_start_;
+  boost::dynamic_bitset<> trigger_flags_;        //Retrigger flags
 };
 }
 #endif

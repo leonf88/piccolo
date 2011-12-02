@@ -8,6 +8,7 @@
 #include "util/marshal.h"
 #include "worker/worker.pb.h"
 #include <boost/thread.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 namespace piccolo {
 
@@ -203,6 +204,9 @@ public:
   virtual void put(const K &k, const V &v) = 0;
   virtual void update(const K &k, const V &v) = 0;
   virtual void remove(const K &k) = 0;
+
+  virtual boost::dynamic_bitset<>* bitset_getbitset(void) = 0;
+  virtual const K bitset_getkeyforbit(unsigned long int bit_offset) = 0;
 
   // Default specialization for untyped methods
   virtual bool contains_str(const StringPiece& s) {
