@@ -224,6 +224,8 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
   if (b != -1) {
     if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
+    } else if (info_.accum->type() == AccumulatorBase::HYBRID) {
+      ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
       trigger_flags_[b] = true;
     } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
@@ -247,6 +249,9 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
         put(k, v2);
     } else {
       put(k, v);
+      if (info_.accum->type() == AccumulatorBase::HYBRID) {
+        trigger_flags_[b] = true;
+      }
     }
   }
 }
