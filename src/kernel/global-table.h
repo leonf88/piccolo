@@ -272,6 +272,7 @@ public:
   void enqueue_update(K k, V v);
   void swap_accumulator(Accumulator<V>* newaccum);
   void swap_accumulator(Trigger<K, V>* newaccum);
+  void swap_accumulator(HybridTrigger<K, V>* newaccum);
   int clearUpdateQueue();
 
   // Provide a mechanism to enable a long trigger / retrigger, as well as
@@ -663,6 +664,14 @@ void TypedGlobalTable<K, V>::swap_accumulator(Accumulator<V>* newaccum) {
 }
 template<class K, class V>
 void TypedGlobalTable<K, V>::swap_accumulator(Trigger<K, V>* newaccum) {
+  this->mutable_info()->swap_accumulator((AccumulatorBase*) newaccum);
+  for (size_t i = 0; i < partitions_.size(); ++i) {
+    partitions_[i]->mutable_info()->swap_accumulator(
+        (AccumulatorBase*) newaccum);
+  }
+}
+template<class K, class V>
+void TypedGlobalTable<K, V>::swap_accumulator(HybridTrigger<K, V>* newaccum) {
   this->mutable_info()->swap_accumulator((AccumulatorBase*) newaccum);
   for (size_t i = 0; i < partitions_.size(); ++i) {
     partitions_[i]->mutable_info()->swap_accumulator(

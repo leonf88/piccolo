@@ -167,7 +167,10 @@ public:
 
     if (this->info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*) this->info_.accum)->Accumulate(&vb[block_pos(k)], v);
-      trigger_flags_[block_pos(k)] = true;
+    } else if (this->info_.accum->type() == AccumulatorBase::HYBRID) {
+      ((Accumulator<V>*) this->info_.accum)->Accumulate(&vb[block_pos(k)], v);
+      trigger_flags_[ block_pos(k)] = true;	//WRONG
+      LOG(FATAL) << "That's wrong.";
     } else if (this->info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = vb[block_pos(k)];
       bool doUpdate = false;
@@ -175,7 +178,8 @@ public:
       ((Trigger<K, V>*) this->info_.accum)->Fire(&k, &v2, v, &doUpdate, true);
       if (doUpdate) {
         vb[block_pos(k)] = v2;
-        trigger_flags_[block_pos(k)] = true;
+        trigger_flags_[ block_pos(k)] = true;	//WRONG
+        LOG(FATAL) << "That's wrong.";
       }
     } else {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";

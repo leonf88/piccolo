@@ -273,38 +273,32 @@ static void ConvertGraph(string path, int nshards) {
 }
 
 namespace piccolo {
-struct AccelPRTrigger: public Trigger<APageId, AccelPRStruct> {
+struct AccelPRTrigger: public HybridTrigger<APageId, AccelPRStruct> {
 public:
-  void Fire(const APageId* key, AccelPRStruct* value,
-            const AccelPRStruct& newvalue, bool* doUpdate, bool isNew) {
-    *doUpdate = true;
-    if (isNew) {
-      value->L = newvalue.L;
-      value->pr_int = (float) FLAGS_apr_d * newvalue.pr_int;
-      value->pr_ext = 0;
-      return;
-    } else {
-      value->pr_int += (FLAGS_apr_d * newvalue.pr_ext) / newvalue.L;
-    }
-    if (abs(value->pr_int-value->pr_ext) >= FLAGS_apr_tol || newvalue.pr_ext == 0.0) {
-      // Get neighbors
-      APageInfo p = apages->get(*key);
-      struct AccelPRStruct updval = { p.adj.size(), 0, value->pr_int
-          - value->pr_ext };
-
-      //Update our own external PR
-      value->pr_ext = value->pr_int;
-
-      //Tell everyone about our delta PR
-      vector<APageId>::iterator it = p.adj.begin();
-      for (; it != p.adj.end(); it++) {
-        struct APageId neighbor = { it->site, it->page };
-        prs->enqueue_update(neighbor, updval);
-      }
-    }
+  void Accumulate(AccelPRStruct* a, const AccelPRStruct& b) {
+    a->pr_int += (FLAGS_apr_d * b.pr_ext) / b.L;
     return;
   }
   bool LongFire(const APageId key, bool lastrun) {
+    if (!lastrun) {
+      AccelPRStruct value = prs->get(key);
+      if (abs(value.pr_int-value.pr_ext) >= FLAGS_apr_tol) { //BAD || newvalue.pr_ext == 0.0) {
+        // Get neighbors
+        APageInfo p = apages->get(key);
+        struct AccelPRStruct updval = { p.adj.size(), 0, value.pr_int
+            - value.pr_ext };
+
+        //Update our own external PR
+        value.pr_ext = value.pr_int;
+ 
+        //Tell everyone about our delta PR
+        vector<APageId>::iterator it = p.adj.begin();
+        for (; it != p.adj.end(); it++) {
+          struct APageId neighbor = { it->site, it->page };
+          prs->enqueue_update(neighbor, updval);
+        }
+      }
+    }
     return false;
   }
 };
@@ -365,10 +359,6 @@ int AccelPagerank(const ConfigData& conf) {
   bool restored = m.restore(); //Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
   fprintf(stderr, "%successfully restore%s previous checkpoint.\n",
           (restored ? "S" : "Did not s"), (restored ? "d" : ""));
-  PRunAll(prs, {
-        prs->swap_accumulator((Trigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
-    //prs->swap_accumulator(new Accumulators<AccelPRStruct>::Replace);
-      });
 
 	PRunAll(pagedb, {
 	  apages->resize(FLAGS_apr_nodes);
@@ -405,7 +395,7 @@ int AccelPagerank(const ConfigData& conf) {
       if (!prs->contains(p)) {
         struct AccelPRStruct initval = { 
            n.target_site_size(), 
-           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d),
+           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes),
 	       0};
         prs->update(p, initval);
             i++;
@@ -414,11 +404,15 @@ int AccelPagerank(const ConfigData& conf) {
         fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
       });
 
+  PRunAll(prs, {
+        prs->swap_accumulator((HybridTrigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
+      });
+
   //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
   PRunAll(prs, {
     TypedTableIterator<APageId, AccelPRStruct> *it =
       prs->get_typed_iterator(current_shard());
-    float initval = (float)FLAGS_apr_d*((1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes*(float)FLAGS_apr_d));
+    float initval = (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes);
     int i=0;
     for(; !it->done(); it->Next()) {
       if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {

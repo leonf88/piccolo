@@ -32,7 +32,7 @@ struct SharderBase {
 
 struct AccumulatorBase {
   enum Type {
-    ACCUMULATOR, TRIGGER
+    ACCUMULATOR, TRIGGER, HYBRID
   };
 
   virtual Type type() = 0;
@@ -86,6 +86,16 @@ struct Trigger: public AccumulatorBase {
 
   virtual void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
                     bool isNew) = 0;
+  virtual bool LongFire(const K key, bool) = 0;
+};
+
+template<class K, class V>
+struct HybridTrigger: public AccumulatorBase {
+  Type type() {
+    return AccumulatorBase::HYBRID;
+  }
+
+  virtual void Accumulate(V* a, const V& b) = 0;
   virtual bool LongFire(const K key, bool) = 0;
 };
 
