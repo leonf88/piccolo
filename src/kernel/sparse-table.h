@@ -250,6 +250,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     } else {
       put(k, v);
       if (info_.accum->type() == AccumulatorBase::HYBRID) {
+        b = bucket_for_key(k);
         trigger_flags_[b] = true;
       }
     }
@@ -300,7 +301,9 @@ boost::dynamic_bitset<>* SparseTable<K, V>::bitset_getbitset(void) {
 
 template <class K, class V>
 const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
-  K k = buckets_[bit_offset].k;
+  CHECK_GT(size_,(int64_t) bit_offset);
+ // VLOG(2) << "Getting offset " << bit_offset << " from bucket of size_ " << size_;
+  K k = buckets_[(int64_t)bit_offset].k;
   return k;
 }
 

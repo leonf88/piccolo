@@ -280,9 +280,10 @@ public:
     return;
   }
   bool LongFire(const APageId key, bool lastrun) {
-    if (!lastrun) {
+    //if (!lastrun) {
       AccelPRStruct value = prs->get(key);
       if (abs(value.pr_int-value.pr_ext) >= FLAGS_apr_tol) { //BAD || newvalue.pr_ext == 0.0) {
+        //VLOG(2) << "LongFire propagate on key " << key.site << ":" << key.page;
         // Get neighbors
         APageInfo p = apages->get(key);
         struct AccelPRStruct updval = { p.adj.size(), 0, value.pr_int
@@ -298,7 +299,7 @@ public:
           prs->enqueue_update(neighbor, updval);
         }
       }
-    }
+    //}
     return false;
   }
 };
@@ -323,7 +324,7 @@ int AccelPagerank(const ConfigData& conf) {
   TOTALRANK = FLAGS_apr_nodes;
 
   prs = CreateTable(0, FLAGS_shards, new SiteSharding,
-                    (Trigger<APageId, AccelPRStruct>*) new AccelPRTrigger);
+                    (Trigger<APageId, AccelPRStruct>*) new AccelPRTrigger, 1);
 
   //no RecordTable option in this runner, MemoryTable only
   apages = CreateTable(1, FLAGS_shards, new SiteSharding,
