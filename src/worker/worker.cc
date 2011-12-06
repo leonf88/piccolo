@@ -591,6 +591,7 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
       int sentupdates = 0;
       t->SendUpdates(&sentupdates);
       updatesdone += sentupdates;
+      updatesdone += t->retrigger_stop();
       //updatesdone += t->clearUpdateQueue();
     }
   }
@@ -612,6 +613,14 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp,
   }
 
   HandlePutRequest();
+
+  TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+    MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+    if (t) {
+      t->retrigger_start();
+    }
+  }
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
 }
 

@@ -81,7 +81,9 @@ public:
   virtual void SendUpdates(int* count) = 0;
   virtual void ApplyUpdates(const TableData& req) = 0;
   virtual void HandlePutRequests() = 0;
-  virtual void KernelFinalize() = 0;
+  virtual unsigned int KernelFinalize() = 0;
+  virtual void retrigger_start() = 0;
+  virtual unsigned int retrigger_stop() = 0;
 
   virtual int pending_write_bytes() = 0;
   virtual int clearUpdateQueue() = 0;
@@ -185,7 +187,9 @@ public:
   void SendUpdates();
   void SendUpdates(int* count);
   virtual void ApplyUpdates(const TableData& req) = 0;
-  virtual void KernelFinalize() = 0;
+  virtual void retrigger_start() = 0;
+  virtual unsigned int retrigger_stop() = 0;
+  virtual unsigned int KernelFinalize() = 0;
   void HandlePutRequests();
 
   int pending_write_bytes();
@@ -217,11 +221,12 @@ public:
   bool clearingUpdateQueue;
 
   //long trigger support
-  void KernelFinalize();
+  unsigned int KernelFinalize();
   int retrigger_threadcount_; // number of long trigger threads for this table
   std::vector<boost::thread::id> retrigger_threadids_; //IDs of retrigger threads, for future use
   bool retrigger_terminate_; // set to instruct retrigger threads to clear tables
-  bool retrigger_termthreads_; // number of "terminated" threads
+  bool retrigger_updates_; // used for what triggers do in a flush/apply loop
+  unsigned int retrigger_termthreads_; // number of "terminated" threads
 
   typedef TypedTableIterator<K, V> Iterator;
   typedef DecodeIterator<K, V> UpdateDecoder;
@@ -248,15 +253,18 @@ public:
 
     //Don't create retrigger threads for classic Piccolo apps
     if (retrigt_count) {
+      VLOG(1) << "Retrigger threadcount > 0, creating long trigger threads";
       for (size_t i = 0; i < partitions_.size(); ++i) {
         //Only create retrigger threads for local shards
-        if (is_local_shard(i)) {
+        //if (is_local_shard(i)) {
           retrigger_threadids_.push_back(
             boost::thread(
               boost::bind(&TypedGlobalTable<K, V>::retrigger_thread,
-                          this,partitions_[i]->id())).get_id());
+                          this,i)).get_id());
+          VLOG(1) << "Bound thread " << retrigger_threadcount_ <<
+                       " to shard " << i << " on table " << tinfo->table_id;
           retrigger_threadcount_++;
-        }
+        //}
       }
     }
   }
@@ -279,7 +287,8 @@ public:
   // a function from which to create a retrigger thread, and one to instruct
   // retrigger threads to clear themselves of existing items.
   void enable_retrigger(K k);
-  void retrigger_stop(void);
+  void retrigger_start(void);
+  unsigned int retrigger_stop(void);
   void retrigger_thread(int shard_id);
 
   boost::dynamic_bitset<>* bitset_getbitset(void);
@@ -565,8 +574,10 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 }
 
 template<class K, class V>
-void TypedGlobalTable<K, V>::KernelFinalize() {
-  retrigger_stop();
+unsigned int TypedGlobalTable<K, V>::KernelFinalize() {
+  unsigned int i = retrigger_stop();
+  retrigger_start();
+  return i;
 }
 
 template<class K, class V>
@@ -574,12 +585,28 @@ void TypedGlobalTable<K, V>::enable_retrigger(K k) {
   boost::mutex::scoped_lock sl(retrigger_mutex());
 
   //Set bit in table instead of in retrigger map	TODO
-  LOG(FATAL) << "Retrigger mode 1 not yet implemented.";
+  LOG(FATAL) << "enable_retrigger temporarily deprecated";
 
+  return;
 }
 
 template<class K, class V>
-void TypedGlobalTable<K, V>::retrigger_stop(void) {
+void TypedGlobalTable<K, V>::retrigger_start(void) {
+  {
+    boost::mutex::scoped_lock sl(retrigger_mutex());		//Saves us a bit of pain here
+    retrigger_terminate_ = false;
+    retrigger_termthreads_ = 0;
+  }
+  while (retrigger_termthreads_ < retrigger_threadcount_) {
+    Sleep(RETRIGGER_SCAN_INTERVAL);
+  }
+  return;
+}
+
+template<class K, class V>
+unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
+  if (retrigger_terminate_)
+    return 0;
   if (!retrigger_threadcount_) {
     for (size_t i = 0; i < partitions_.size(); ++i) {
       //Only create retrigger threads for local shards
@@ -587,15 +614,18 @@ void TypedGlobalTable<K, V>::retrigger_stop(void) {
         (partition(i)->bitset_getbitset())->reset();		//reset all bits in bitset
       }
     }
-    return;
+    return 0;
   } else {
-    boost::mutex::scoped_lock sl(retrigger_mutex());
+    boost::mutex::scoped_lock sl(retrigger_mutex());		//Saves us a bit of pain here
     retrigger_termthreads_ = 0;
+    retrigger_updates_ = 0;
+
     retrigger_terminate_ = true;
   }
-  while (retrigger_termthreads_ < retrigger_threadcount_)
+  while (retrigger_termthreads_ < retrigger_threadcount_) {
     Sleep(RETRIGGER_SCAN_INTERVAL);
-  return;
+  }
+  return retrigger_updates_;	//if non-zero, let's assume there are issues.
 }
 
 template<class K, class V>
@@ -612,35 +642,58 @@ const K TypedGlobalTable<K,V>::bitset_getkeyforbit(unsigned long int bit_offset)
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
-  bool terminated = false;
-  while (!terminated) {
-    {
-      //     boost::mutex::scoped_lock sl(retrigger_mutex());
-      LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
+  while (1) {
+    bool terminated = false;
+    unsigned int updates = 0;
+    while (!terminated) {
+      if (is_local_shard(shard_id)) {
+        //     boost::mutex::scoped_lock sl(retrigger_mutex());
+        //LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
 
-      bool terminating = retrigger_terminate_;
+        bool terminating = retrigger_terminate_;
 
-      boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
-      boost::dynamic_bitset<>::size_type bititer = ltflags->find_first();
+        boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
+        boost::dynamic_bitset<>::size_type bititer = ltflags->find_first();
 
-      while(bititer != ltflags->npos) {
-        bool retain = true;
-        retain = ((Trigger<K, V>*) info_.accum)->LongFire(partition(shard_id)->bitset_getkeyforbit(bititer), terminating);
-        (*ltflags)[bititer] = retain;
-        bititer = ltflags->find_next(bititer);
+        while(bititer != ltflags->npos) {
+         // VLOG(1) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
+          bool retain = true;
+          updates++;				//this is for the Flush/Apply finalization
+          retain = ((Trigger<K, V>*) info_.accum)->LongFire(
+                   partition(shard_id)->bitset_getkeyforbit(bititer), terminating);
+          (*ltflags)[bititer] = retain;		//TODO Lock around this
+          bititer = ltflags->find_next(bititer);
+        }
+
+        terminated = terminating;
+
+        if (terminated && ltflags->any()) {		//if we didn't actually shut down here...
+          terminated = false;
+        } else if (terminated) {
+          boost::mutex::scoped_lock sl(retrigger_mutex());
+          retrigger_termthreads_++; //increment terminated thread count
+          retrigger_updates_ += updates; //not actually terminated if more updates happened.
+        }
+      } else {
+        if (retrigger_terminate_) {
+          boost::mutex::scoped_lock sl(retrigger_mutex());
+          retrigger_termthreads_++; //increment terminated thread count
+          terminated = true;
+        }
+        Sleep(10*RETRIGGER_SCAN_INTERVAL);
       }
-
-      terminated = terminating;
-
-      if (terminated && ltflags->any()) {		//if we didn't actually shut down here...
-        terminated = false;
-      } else if (terminated) {
-        boost::mutex::scoped_lock sl(retrigger_mutex());
-        retrigger_termthreads_++; //increment terminated thread count
-      }
+      Sleep(RETRIGGER_SCAN_INTERVAL);
     }
-    Sleep(RETRIGGER_SCAN_INTERVAL);
-  }
+    while(retrigger_terminate_) {
+      Sleep(RETRIGGER_SCAN_INTERVAL);
+    } 
+ //   VLOG(2) << "Waiting for re-enable lock";
+    {
+      boost::mutex::scoped_lock sl(retrigger_mutex());
+      retrigger_termthreads_++; //increment terminated thread count
+      terminated = false;
+    }
+  } //now a kernel is live again or we're going through a flush/apply loop.
 }
 
 template<class K, class V>
@@ -649,7 +702,7 @@ void TypedGlobalTable<K, V>::enqueue_update(K k, V v) {
 
   const KVPair thispair(k, v);
   update_queue.push_back(thispair);
-  VLOG(2)
+  VLOG(3)
       << "Enqueing table id " << this->id() << " update ("
           << update_queue.size() << " pending pairs)";
 }
