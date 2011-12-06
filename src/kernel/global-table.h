@@ -291,8 +291,10 @@ public:
   unsigned int retrigger_stop(void);
   void retrigger_thread(int shard_id);
 
+  // Lock for retrigger bitsets, and the two functions
   boost::dynamic_bitset<>* bitset_getbitset(void);
   const K bitset_getkeyforbit(unsigned long int bit_offset);
+  int bitset_epoch(void);
 
   // Return the value associated with 'k', possibly blocking for a remote fetch.
   V get(const K &k);
@@ -630,18 +632,25 @@ unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
 
 template<class K, class V>
 boost::dynamic_bitset<>* TypedGlobalTable<K,V>::bitset_getbitset(void) {
-  LOG(FATAL) << "bitset_getbitset called in TypedGlobaTable";
+  LOG(FATAL) << "bitset_getbitset called in TypedGlobalTable";
   return NULL;
 }
 
 template<class K, class V>
 const K TypedGlobalTable<K,V>::bitset_getkeyforbit(unsigned long int bit_offset) {
+  LOG(FATAL) << "bitset_getkeyforbit called in TypedGlobalTable";
   K k;
   return k;
+}
+template<class K, class V>
+int TypedGlobalTable<K,V>::bitset_epoch(void) {
+  LOG(FATAL) << "bitset_epoch called in TypedGlobalTable";
+  return -1;
 }
 
 template<class K, class V>
 void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
+  int bitset_epoch_ = 0;		//used to handle things like resizes to prevent problems
   while (1) {
     bool terminated = false;
     unsigned int updates = 0;
@@ -650,6 +659,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         //     boost::mutex::scoped_lock sl(retrigger_mutex());
         //LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
 
+      bitset_scan_restart:
         bool terminating = retrigger_terminate_;
 
         boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
@@ -657,11 +667,22 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
 
         while(bititer != ltflags->npos) {
          // VLOG(1) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
-          bool retain = true;
+          bool dorestart = false;
+          {
+            boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
+            if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) { //Without this, the 
+              dorestart = true;
+            } else {
+              (*ltflags)[bititer] = false;
+            }
+          }
+          if (dorestart)
+            goto bitset_scan_restart;
+          //bool retain = true;
           updates++;				//this is for the Flush/Apply finalization
-          retain = ((Trigger<K, V>*) info_.accum)->LongFire(
+          /*retain = */((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
                    partition(shard_id)->bitset_getkeyforbit(bititer), terminating);
-          (*ltflags)[bititer] = retain;		//TODO Lock around this
+          //(*ltflags)[bititer] = retain;		//TODO Lock around this
           bititer = ltflags->find_next(bititer);
         }
 

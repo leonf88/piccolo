@@ -73,6 +73,7 @@ public:
 
   boost::dynamic_bitset<>* bitset_getbitset(void);
   const K bitset_getkeyforbit(unsigned long int bit_offset);
+  int bitset_epoch(void);
 
   void resize(int64_t size);
 
@@ -126,13 +127,14 @@ private:
 
   int64_t entries_;
   int64_t size_;
+  int bitset_epoch_;
 
   std::tr1::hash<K> hashobj_;
 };
 
 template <class K, class V>
 SparseTable<K, V>::SparseTable(int size)
-  : buckets_(0), entries_(0), size_(0) {
+  : buckets_(0), entries_(0), size_(0), bitset_epoch_(0) {
   clear();
 
   trigger_flags_.resize(0);        //Retrigger flags
@@ -176,6 +178,8 @@ void SparseTable<K, V>::resize(int64_t size) {
   if (size_ == size)
     return;
 
+  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
+
   std::vector<Bucket> old_b = buckets_;
   boost::dynamic_bitset<> old_ltflags = trigger_flags_;
 
@@ -189,6 +193,7 @@ void SparseTable<K, V>::resize(int64_t size) {
   clear();
   trigger_flags_.reset();
   trigger_flags_.resize(size_);
+  bitset_epoch_++;						//prevent resize side effects for scanning long thread
 
   for (size_t i = 0; i < old_b.size(); ++i) {
     if (old_b[i].in_use) {
@@ -305,6 +310,12 @@ const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
  // VLOG(2) << "Getting offset " << bit_offset << " from bucket of size_ " << size_;
   K k = buckets_[(int64_t)bit_offset].k;
   return k;
+}
+
+template <class K, class V>
+int SparseTable<K, V>::bitset_epoch() {
+  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
+  return bitset_epoch_;
 }
 
 }	/* namespace piccolo */

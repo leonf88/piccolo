@@ -121,7 +121,7 @@ public:
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
   DenseTable(int size = 1) :
-      m_(size) {
+      m_(size), bitset_epoch_(0) {
     last_block_ = NULL;
     trigger_flags_.resize(size);
   }
@@ -269,12 +269,17 @@ public:
     return m_[bucket]->first + (bit_offset - (this->info_.block_size)*bucket);
   }
 
+  int bitset_epoch() {
+    boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
+    return bitset_epoch_;
+  }
 
 private:
   BucketMap m_;
   V* last_block_;
   K last_block_start_;
   boost::dynamic_bitset<> trigger_flags_;        //Retrigger flags
+  int bitset_epoch_;
 };
 }
 #endif

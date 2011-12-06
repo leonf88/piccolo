@@ -587,11 +587,15 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
     if (t) {
+      VLOG(2) << "Doing flush for table " << i->second;
       updatesdone += t->clearUpdateQueue();
+      VLOG(2) << "Doing flush for table " << i->second << " (queue cleared)";
       int sentupdates = 0;
       t->SendUpdates(&sentupdates);
+      VLOG(2) << "Doing flush for table " << i->second << " (updates sent)";
       updatesdone += sentupdates;
       updatesdone += t->retrigger_stop();
+      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopperetriggers stopped)";
       //updatesdone += t->clearUpdateQueue();
     }
   }
