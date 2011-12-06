@@ -301,7 +301,7 @@ void Master::start_checkpoint() {
     VLOG(3) << "Waiting for checkpoint started responses (" << finished << " received)" << endl;
     if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_START_CHECKPOINT_DONE, &resp, &worker_id)) {
       finished++;
-      VLOG(3) << "Received checkpoint start done " << finished << " of " << workers_.size() << endl;
+      VLOG(2) << "Received checkpoint start done " << finished << " of " << workers_.size() << endl;
 
       workers_[worker_id-1]->checkpointing = true;//(current_run_.checkpoint_type == CP_CONTINUOUS || 
                                               //current_run_.checkpoint_type == CP_INTERVAL);
@@ -385,7 +385,7 @@ void Master::finish_checkpoint() {
     VLOG(3) << "Waiting for checkpoint finished responses (" << finished << " received)" << endl;
     if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_FINISH_CHECKPOINT_DONE, &resp, &worker_id)) {
       finished++;
-      VLOG(3) << "Received checkpoint finish done " << finished << " of " << workers_.size() << endl;
+      VLOG(2) << "Received checkpoint finish done " << finished << " of " << workers_.size() << endl;
 
       if (current_run_.checkpoint_type != CP_CONTINUOUS)
         workers_[worker_id-1]->checkpointing = false;
@@ -898,7 +898,7 @@ void Master::barrier() {
           quiescent = false;
         }
 
-        VLOG(3) << "Received flush response " << flushed
+        VLOG(2) << "Received flush response " << flushed
                 << " of " << workers_.size()
                 << " with " << done_msg.updatesdone()
                 << " updates done.";
@@ -923,7 +923,7 @@ void Master::barrier() {
 	  VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
       if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
         applied++;
-        VLOG(3) << "Received apply done " << applied << " of " << workers_.size();
+        VLOG(2) << "Received apply done " << applied << " of " << workers_.size();
       } else {
         Sleep(FLAGS_sleep_time);
       }

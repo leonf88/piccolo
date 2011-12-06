@@ -217,6 +217,12 @@ public:
 
   virtual boost::dynamic_bitset<>* bitset_getbitset(void) = 0;
   virtual const K bitset_getkeyforbit(unsigned long int bit_offset) = 0;
+  virtual int bitset_epoch(void) = 0;
+  boost::recursive_mutex& rt_bitset_mutex() {
+    return rt_bitset_m_;
+  }
+  boost::recursive_mutex rt_bitset_m_;
+
 
   // Default specialization for untyped methods
   virtual bool contains_str(const StringPiece& s) {
