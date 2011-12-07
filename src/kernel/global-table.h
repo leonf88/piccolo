@@ -660,6 +660,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         //LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
 
       bitset_scan_restart:
+        bitset_epoch_ = partition(shard_id)->bitset_epoch();
         bool terminating = retrigger_terminate_;
 
         boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
@@ -667,22 +668,26 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
 
         while(bititer != ltflags->npos) {
          // VLOG(1) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
+          K key = partition(shard_id)->bitset_getkeyforbit(bititer);
           bool dorestart = false;
           {
             boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
-            if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) { //Without this, the 
+            if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) {
               dorestart = true;
             } else {
               (*ltflags)[bititer] = false;
             }
           }
-          if (dorestart)
+
+          if (dorestart)	//in case someone else resized/rearranged the hashmap
             goto bitset_scan_restart;
-          //bool retain = true;
+
+          bool retain = false;
           updates++;				//this is for the Flush/Apply finalization
-          /*retain = */((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
-                   partition(shard_id)->bitset_getkeyforbit(bititer), terminating);
-          //(*ltflags)[bititer] = retain;		//TODO Lock around this
+          retain = ((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
+                   key, terminating);
+          if (retain)
+            enable_retrigger(key);
           bititer = ltflags->find_next(bititer);
         }
 
