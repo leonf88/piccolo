@@ -276,7 +276,8 @@ namespace piccolo {
 struct AccelPRTrigger: public HybridTrigger<APageId, AccelPRStruct> {
 public:
   void Accumulate(AccelPRStruct* a, const AccelPRStruct& b) {
-    a->pr_int += (FLAGS_apr_d * b.pr_ext) / b.L;
+    a->pr_int += (FLAGS_apr_d * b.pr_int) / b.L;
+    a->pr_ext += b.pr_ext;
     return;
   }
   bool LongFire(const APageId key, bool lastrun) {
@@ -286,20 +287,22 @@ public:
         //VLOG(2) << "LongFire propagate on key " << key.site << ":" << key.page;
         // Get neighbors
         APageInfo p = apages->get(key);
-        struct AccelPRStruct updval = { p.adj.size(), 0, value.pr_int
-            - value.pr_ext };
+        struct AccelPRStruct updval = { p.adj.size(), value.pr_int
+            - value.pr_ext, 0 };
 
-        //Update our own external PR
-        value.pr_ext = value.pr_int;
- 
         //Tell everyone about our delta PR
         vector<APageId>::iterator it = p.adj.begin();
         for (; it != p.adj.end(); it++) {
           struct APageId neighbor = { it->site, it->page };
           prs->enqueue_update(neighbor, updval);
         }
+
+        //Update our own external PR
+        updval.pr_int = 0;	//therefore we don't have to do anything about L.
+        updval.pr_ext = value.pr_int-value.pr_ext;
+        prs->enqueue_update(key,updval);
       }
-    //}
+    
     return false;
   }
 };

@@ -589,13 +589,13 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
     if (t) {
       VLOG(2) << "Doing flush for table " << i->second;
       updatesdone += t->clearUpdateQueue();
-      VLOG(2) << "Doing flush for table " << i->second << " (queue cleared)";
+      VLOG(2) << "Doing flush for table " << i->second << " (queue cleared) @ " << updatesdone;
       int sentupdates = 0;
       t->SendUpdates(&sentupdates);
-      VLOG(2) << "Doing flush for table " << i->second << " (updates sent)";
       updatesdone += sentupdates;
+      VLOG(2) << "Doing flush for table " << i->second << " (updates sent) @ " << updatesdone;
       updatesdone += t->retrigger_stop();
-      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopperetriggers stopped)";
+      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopperetriggers stopped)" << updatesdone;
       //updatesdone += t->clearUpdateQueue();
     }
   }
