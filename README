@@ -48,8 +48,8 @@ sudo apt-get install libgoogle-perftools-dev python-dev swig
 -- BUILDING
 
 To build, simply run 'make' from the toplevel piccolo directory.  After building
-output should be available in the bin/ directory.  Specifically, a successful
-build should generate a bin/{debug,release}/examples/example-dsm binary.
+output should be available in the build/ directory.  Specifically, a successful
+build should generate a build/{debug,release}/examples/example-dsm binary.
 
 -- RUNNING
 
@@ -66,7 +66,7 @@ Which would allow for running up to 12 workers (+ 1 master process).
 
 With this file setup, you can run your Piccolo program via:
 
-bin/release/examples/example-dsm \
+build/release/examples/example-dsm \
  --runner=KMeans \
  --num_points=10000 \
  --num_clusters=100 \
