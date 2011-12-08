@@ -49,7 +49,22 @@ sudo apt-get install libgoogle-perftools-dev python-dev swig
 
 To build, simply run 'make' from the toplevel piccolo directory.  After building
 output should be available in the build/ directory.  Specifically, a successful
-build should generate a build/{debug,release}/examples/example-dsm binary.
+build should generate an executable for each example case:
+
+build/
+      accelpagerank
+      bipartmatch
+      bipartmatch-trigger
+      faceclass
+      k-means
+      matmul
+      pagerank
+      shortest-path
+      shortest-path-trigger
+      test-tables
+      test-tables2
+      wordcount
+
 
 -- RUNNING
 
@@ -62,15 +77,19 @@ a slots=4
 b slots=4
 c slots=4
 
-Which would allow for running up to 12 workers (+ 1 master process).
+Which allows for running up to 12 workers (+ 1 master process).
 
-With this file setup, you can run your Piccolo program via:
+In addition to the MPI configuration, LD_LIBRARY_PATH must be set to 
+allow the Piccolo .so files to be located; this can be done via:
 
-build/release/examples/example-dsm \
- --runner=KMeans \
+You can run an example via:
+
+LD_LIBRARY_PATH=build/ \
+ build/k-means \
  --num_points=10000 \
  --num_clusters=100 \
- --workers=12
+ --workers=12 \
+ --hostfile=conf/mpi-cluster 
  
 This will create and test a simple k-means clustering experiment using
 the workers specified.
