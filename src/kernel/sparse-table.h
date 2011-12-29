@@ -314,7 +314,7 @@ const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
 
 template <class K, class V>
 int SparseTable<K, V>::bitset_epoch() {
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
+  //boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
   return bitset_epoch_;
 }
 
