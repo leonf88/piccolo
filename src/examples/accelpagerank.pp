@@ -294,13 +294,14 @@ public:
         vector<APageId>::iterator it = p.adj.begin();
         for (; it != p.adj.end(); it++) {
           struct APageId neighbor = { it->site, it->page };
-          prs->enqueue_update(neighbor, updval);
+          //prs->enqueue_update(neighbor, updval);
+          prs->update(neighbor, updval);
         }
 
         //Update our own external PR
         updval.pr_int = 0;	//therefore we don't have to do anything about L.
         updval.pr_ext = value.pr_int-value.pr_ext;
-        prs->enqueue_update(key,updval);
+        prs->update(key,updval);
       }
     
     return false;
@@ -417,13 +418,14 @@ int AccelPagerank(const ConfigData& conf) {
     TypedTableIterator<APageId, AccelPRStruct> *it =
       prs->get_typed_iterator(current_shard());
     float initval = (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes);
-    int i=0;
+    int i=0, j=0;
     for(; !it->done(); it->Next()) {
       if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
         struct AccelPRStruct initval = { 1, 0, 0 };
         prs->update(it->key(),initval);
         i++;
       }
+      if (!(j++ % 1000)) fprintf(stderr,"Kickstarted %d of ????\n",j);
     }
     fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
   });

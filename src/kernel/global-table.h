@@ -154,16 +154,22 @@ protected:
   boost::recursive_mutex& mutex() {
     return m_;
   }
-  boost::recursive_mutex m_;
+
+  boost::recursive_mutex& updatequeue_mutex() {
+    return m_uq_;
+  }
 
   boost::recursive_mutex& trigger_mutex() {
     return m_trig_;
   }
-  boost::recursive_mutex m_trig_;
 
   boost::mutex& retrigger_mutex() {
     return m_retrig_;
   }
+
+  boost::recursive_mutex m_;
+  boost::recursive_mutex m_uq_;
+  boost::recursive_mutex m_trig_;
   boost::mutex m_retrig_;
 
   std::vector<PartitionInfo> partinfo_;
@@ -541,7 +547,7 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
   int i = 0;
   std::deque<KVPair> removed_items;
   {
-    boost::recursive_mutex::scoped_lock sl(mutex());
+    boost::recursive_mutex::scoped_lock sl(updatequeue_mutex());
     if (clearingUpdateQueue) return 0;
     clearingUpdateQueue = true; //turn recursion into iteration
 
@@ -569,9 +575,10 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     }
   } while (lastqueuesize != 0);
   {
-    boost::recursive_mutex::scoped_lock sl(mutex());
+    boost::recursive_mutex::scoped_lock sl(updatequeue_mutex());
     clearingUpdateQueue = false; //turn recursion into iteration
   }
+  VLOG(2) << "Cleared update queue of " << i << " items";
   return i;
 }
 
@@ -671,7 +678,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
           K key = partition(shard_id)->bitset_getkeyforbit(bititer);
           bool dorestart = false;
           {
-            boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
+            //boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
             if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) {
               dorestart = true;
             } else {
@@ -679,8 +686,10 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
             }
           }
 
-          if (dorestart)	//in case someone else resized/rearranged the hashmap
+          if (dorestart) {	//in case someone else resized/rearranged the hashmap
+            VLOG(3) << "Tainted bitset_epoch_!";
             goto bitset_scan_restart;
+          }
 
           bool retain = false;
           updates++;				//this is for the Flush/Apply finalization
@@ -696,6 +705,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         if (terminated && ltflags->any()) {		//if we didn't actually shut down here...
           terminated = false;
         } else if (terminated) {
+          VLOG(2) << "Terminated retrigger thread iteration with " << updates << " updates.";
           boost::mutex::scoped_lock sl(retrigger_mutex());
           retrigger_termthreads_++; //increment terminated thread count
           retrigger_updates_ += updates; //not actually terminated if more updates happened.
@@ -708,6 +718,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         }
         Sleep(10*RETRIGGER_SCAN_INTERVAL);
       }
+      VLOG(3) << "retrigger iteration accrued " << updates << " updates.";
       Sleep(RETRIGGER_SCAN_INTERVAL);
     }
     while(retrigger_terminate_) {
