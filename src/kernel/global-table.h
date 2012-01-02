@@ -578,7 +578,7 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
     boost::recursive_mutex::scoped_lock sl(updatequeue_mutex());
     clearingUpdateQueue = false; //turn recursion into iteration
   }
-  VLOG(2) << "Cleared update queue of " << i << " items";
+  VLOG(3) << "Cleared update queue of " << i << " items";
   return i;
 }
 
@@ -674,7 +674,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         boost::dynamic_bitset<>::size_type bititer = ltflags->find_first();
 
         while(bititer != ltflags->npos) {
-         // VLOG(1) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
+          //VLOG(2) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
           K key = partition(shard_id)->bitset_getkeyforbit(bititer);
           bool dorestart = false;
           {
