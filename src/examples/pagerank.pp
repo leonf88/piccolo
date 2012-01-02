@@ -75,7 +75,7 @@ struct PageIdBlockInfo: public BlockInfo<PageId> {
 };
 
 static vector<int> InitSites() {
-  vector<int> site_sizes;
+  static vector<int> site_sizes;
   srand(0);
   for (int n = 0; n < FLAGS_nodes;) {
     int c = powerlaw_random(1,

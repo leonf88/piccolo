@@ -131,7 +131,7 @@ TypedGlobalTable<APageId, APageInfo>* apages;
 DiskTable<uint64_t, Page> *pagedb;
 
 static vector<int> InitSites() {
-  vector<int> site_sizes;
+  static vector<int> site_sizes;
   srand(0);
   for (int n = 0; n < FLAGS_apr_nodes;) {
     int c = powerlaw_random(
@@ -166,7 +166,7 @@ static void BuildGraph(int oldshard, int nshards, int nodes, int density) {
     PERIODIC(
         1,
         LOG(INFO) << "Working: Shard -- " << shard << " of " << nshards
-            << "; site " << i << " of " << site_sizes.size());
+            << "; site " << i << " with size " << site_sizes[i] << " of " << site_sizes.size());
     for (int j = 0; j < site_sizes[i]; ++j) {
       n.Clear();
       n.set_site(i);
@@ -358,7 +358,7 @@ int AccelPagerank(const ConfigData& conf) {
   }
 
   PRunAll(prs, {
-        prs->swap_accumulator(new Triggers<APageId,AccelPRStruct>::NullTrigger);
+        prs->swap_accumulator(new Triggers<APageId, AccelPRStruct>::NullTrigger);
       });
 
   bool restored = m.restore(); //Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
@@ -394,7 +394,7 @@ int AccelPagerank(const ConfigData& conf) {
       pagedb->get_typed_iterator(current_shard());
     int i=0;
 
-        for(; !it->done(); it->Next()) {
+    for(; !it->done(); it->Next()) {
       Page n = it->value();
       struct APageId p = { n.site(), n.id() };
       if (!prs->contains(p)) {
@@ -403,11 +403,20 @@ int AccelPagerank(const ConfigData& conf) {
            (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes),
 	       0};
         prs->update(p, initval);
-            i++;
-          }
-        }
-        fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
-      });
+        i++;
+      }
+    }
+    fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
+  });
+
+  PRunAll(prs, {
+    TypedTableIterator<APageId, AccelPRStruct> *it =
+      prs->get_typed_iterator(current_shard());
+    int i=0;
+    for(; !it->done(); it->Next()) {
+      fprintf(stderr,"%6ld-%5ld\t%ld\t%e\t%e\n",it->key().site,it->key().page,it->value().L,it->value().pr_int,it->value().pr_ext);
+    }
+  });
 
   PRunAll(prs, {
         prs->swap_accumulator((HybridTrigger<APageId, AccelPRStruct>*)new AccelPRTrigger);
@@ -418,14 +427,13 @@ int AccelPagerank(const ConfigData& conf) {
     TypedTableIterator<APageId, AccelPRStruct> *it =
       prs->get_typed_iterator(current_shard());
     float initval = (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes);
-    int i=0, j=0;
+    int i=0;
     for(; !it->done(); it->Next()) {
       if (it->value().pr_int == initval && it->value().pr_ext == 0.0f) {
         struct AccelPRStruct initval = { 1, 0, 0 };
         prs->update(it->key(),initval);
         i++;
       }
-      if (!(j++ % 1000)) fprintf(stderr,"Kickstarted %d of ????\n",j);
     }
     fprintf(stderr,"Shard %d: Driver kickstarted %d vertices.\n",current_shard(),i);
   });
@@ -460,12 +468,13 @@ int AccelPagerank(const ConfigData& conf) {
 
       for(; !it->done(); it->Next()) {
         totalpages++;
-        if (it->value().pr_ext > pr_max)
+        float thisval = it->value().pr_ext;
+        if (thisval > pr_max)
           pr_max = it->value().pr_ext;
         //If it's at least better than the worst of the top list, then replace the worst with
         //this one, and propagate it upwards through the list until it's in place
-        if (it->value().pr_ext > topscores[FLAGS_ashow_top-1]) {
-          topscores[FLAGS_ashow_top-1] = it->value().pr_ext;
+        if (thisval > topscores[FLAGS_ashow_top-1]) {
+          topscores[FLAGS_ashow_top-1] = thisval;
           toplist[FLAGS_ashow_top-1] = it->key();
           for(int i=FLAGS_ashow_top-2; i>=0; i--) {
             if (topscores[i] < topscores[i+1]) {
@@ -481,8 +490,8 @@ int AccelPagerank(const ConfigData& conf) {
           }
         }
         if (it->value().pr_ext < pr_min)
-          pr_min = it->value().pr_ext;
-        pr_sum += it->value().pr_ext;
+          pr_min = thisval;
+        pr_sum += thisval;
       }
     }
     float pr_avg = pr_sum/totalpages;

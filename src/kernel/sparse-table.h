@@ -71,7 +71,7 @@ public:
     LOG(FATAL) << "Not implemented.";
   }
 
-  boost::dynamic_bitset<>* bitset_getbitset(void);
+  boost::dynamic_bitset<uint64_t>* bitset_getbitset(void);
   const K bitset_getkeyforbit(unsigned long int bit_offset);
   int bitset_epoch(void);
 
@@ -123,7 +123,7 @@ private:
   }
 
   std::vector<Bucket> buckets_;
-  boost::dynamic_bitset<> trigger_flags_;		//Retrigger flags
+  boost::dynamic_bitset<uint64_t> trigger_flags_;		//Retrigger flags
 
   int64_t entries_;
   int64_t size_;
@@ -181,7 +181,7 @@ void SparseTable<K, V>::resize(int64_t size) {
   boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
 
   std::vector<Bucket> old_b = buckets_;
-  boost::dynamic_bitset<> old_ltflags = trigger_flags_;
+  boost::dynamic_bitset<uint64_t> old_ltflags = trigger_flags_;
 
   int old_entries = entries_;
 
@@ -306,9 +306,10 @@ boost::dynamic_bitset<>* SparseTable<K, V>::bitset_getbitset(void) {
 
 template <class K, class V>
 const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
+  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
   CHECK_GT(size_,(int64_t) bit_offset);
- // VLOG(2) << "Getting offset " << bit_offset << " from bucket of size_ " << size_;
-  K k = buckets_[(int64_t)bit_offset].k;
+  //VLOG(2) << "Getting offset " << bit_offset << " from bucket of size_ " << size_;
+  K k = buckets_[bit_offset].k;
   return k;
 }
 
