@@ -91,6 +91,10 @@ bool operator==(const APageId& a, const APageId& b) {
   return a.site == b.site && a.page == b.page;
 }
 
+std::ostream& operator<<(std::ostream& s, const APageId& a) {
+  return s << a.site << ":" << a.page;
+}
+
 struct AccelPRStruct {
   int64_t L :32; //number of outgoing links
   float pr_int; //internal pagerank
@@ -275,10 +279,10 @@ static void ConvertGraph(string path, int nshards) {
 namespace piccolo {
 struct AccelPRTrigger: public HybridTrigger<APageId, AccelPRStruct> {
 public:
-  void Accumulate(AccelPRStruct* a, const AccelPRStruct& b) {
+  bool Accumulate(AccelPRStruct* a, const AccelPRStruct& b) {
     a->pr_int += (FLAGS_apr_d * b.pr_int) / b.L;
     a->pr_ext += b.pr_ext;
-    return;
+    return true;
   }
   bool LongFire(const APageId key, bool lastrun) {
     //if (!lastrun) {
@@ -407,15 +411,6 @@ int AccelPagerank(const ConfigData& conf) {
       }
     }
     fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
-  });
-
-  PRunAll(prs, {
-    TypedTableIterator<APageId, AccelPRStruct> *it =
-      prs->get_typed_iterator(current_shard());
-    int i=0;
-    for(; !it->done(); it->Next()) {
-      fprintf(stderr,"%6ld-%5ld\t%ld\t%e\t%e\n",it->key().site,it->key().page,it->value().L,it->value().pr_int,it->value().pr_ext);
-    }
   });
 
   PRunAll(prs, {

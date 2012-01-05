@@ -298,7 +298,7 @@ public:
   void retrigger_thread(int shard_id);
 
   // Lock for retrigger bitsets, and the two functions
-  boost::dynamic_bitset<>* bitset_getbitset(void);
+  boost::dynamic_bitset<uint32_t>* bitset_getbitset(void);
   const K bitset_getkeyforbit(unsigned long int bit_offset);
   int bitset_epoch(void);
 
@@ -638,7 +638,7 @@ unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
 }
 
 template<class K, class V>
-boost::dynamic_bitset<>* TypedGlobalTable<K,V>::bitset_getbitset(void) {
+boost::dynamic_bitset<uint32_t>* TypedGlobalTable<K,V>::bitset_getbitset(void) {
   LOG(FATAL) << "bitset_getbitset called in TypedGlobalTable";
   return NULL;
 }
@@ -670,8 +670,8 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         bitset_epoch_ = partition(shard_id)->bitset_epoch();
         bool terminating = retrigger_terminate_;
 
-        boost::dynamic_bitset<>* ltflags = partition(shard_id)->bitset_getbitset();
-        boost::dynamic_bitset<>::size_type bititer = ltflags->find_first();
+        boost::dynamic_bitset<uint32_t>* ltflags = partition(shard_id)->bitset_getbitset();
+        size_t bititer = ltflags->find_first();
 
         while(bititer != ltflags->npos) {
           //VLOG(2) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
@@ -682,7 +682,8 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
             if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) {
               dorestart = true;
             } else {
-              (*ltflags)[bititer] = false;
+              CHECK_EQ(true,ltflags->test(bititer)) << "Bititer flag " << bititer << " not actually set!";
+              ltflags->reset(bititer);
             }
           }
 
@@ -692,11 +693,13 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
           }
 
           bool retain = false;
-          updates++;				//this is for the Flush/Apply finalization
-          retain = ((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
-                   key, terminating);
-          if (retain)
-            enable_retrigger(key);
+          if (info_.accum->type() != AccumulatorBase::ACCUMULATOR) {
+            updates++;				//this is for the Flush/Apply finalization
+            retain = ((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
+                     key, terminating);
+            if (retain)
+              enable_retrigger(key);
+          }
           bititer = ltflags->find_next(bititer);
         }
 

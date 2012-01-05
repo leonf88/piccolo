@@ -6,7 +6,7 @@ using std::vector;
 using namespace piccolo;
 
 DEFINE_int32(num_nodes, 10000, "");
-DEFINE_bool(dump_output, false, "");
+DEFINE_int32(dump_nodes, 0, "");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance_map;
@@ -114,16 +114,12 @@ int ShortestPath(const ConfigData& conf) {
       * 1000000 + (end_time.tv_usec - start_time.tv_usec);
   fprintf(stderr, "Total SSSP time: %.3f seconds\n", totaltime / 1000000.0);
 
-  if (FLAGS_dump_output) {
+  if (FLAGS_dump_nodes > 0) {
     PRunOne(distance_map, {
-        for (int i = 0; i < FLAGS_num_nodes; ++i) {
-          if (i % 30 == 0) {
-            fprintf(stderr, "\n%5d: ", i);
-          }
-
-          int d = (int)distance_map->get(i);
+        for (int i = 0; i < FLAGS_dump_nodes; ++i) {
+          double d = distance_map->get(i);
           if (d >= 1000) {d = -1;}
-          fprintf(stderr, "%3d ", d);
+          fprintf(stderr, "%8d: %f ", i, d);
         }
         fprintf(stderr, "\n");
     });

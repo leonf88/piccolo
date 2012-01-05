@@ -45,6 +45,10 @@ bool operator==(const PageId& a, const PageId& b) {
   return a.site == b.site && a.page == b.page;
 }
 
+std::ostream& operator<<(std::ostream& s, const PageId& a) {
+  return s << a.site << ":" << a.page;
+}
+
 namespace std {
 namespace tr1 {
 template<>

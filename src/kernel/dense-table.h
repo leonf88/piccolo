@@ -260,7 +260,7 @@ public:
     return;
   }
 
-  boost::dynamic_bitset<>* bitset_getbitset(void) {
+  boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) {
     return &trigger_flags_;
   }
 
@@ -278,7 +278,7 @@ private:
   BucketMap m_;
   V* last_block_;
   K last_block_start_;
-  boost::dynamic_bitset<> trigger_flags_;        //Retrigger flags
+  boost::dynamic_bitset<uint32_t> trigger_flags_;        //Retrigger flags
   int bitset_epoch_;
 };
 }

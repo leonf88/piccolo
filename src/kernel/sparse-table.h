@@ -71,7 +71,7 @@ public:
     LOG(FATAL) << "Not implemented.";
   }
 
-  boost::dynamic_bitset<uint64_t>* bitset_getbitset(void);
+  boost::dynamic_bitset<uint32_t>* bitset_getbitset(void);
   const K bitset_getkeyforbit(unsigned long int bit_offset);
   int bitset_epoch(void);
 
@@ -123,7 +123,7 @@ private:
   }
 
   std::vector<Bucket> buckets_;
-  boost::dynamic_bitset<uint64_t> trigger_flags_;		//Retrigger flags
+  boost::dynamic_bitset<uint32_t> trigger_flags_;		//Retrigger flags
 
   int64_t entries_;
   int64_t size_;
@@ -137,7 +137,8 @@ SparseTable<K, V>::SparseTable(int size)
   : buckets_(0), entries_(0), size_(0), bitset_epoch_(0) {
   clear();
 
-  trigger_flags_.resize(0);        //Retrigger flags
+  trigger_flags_.resize(size);        //Retrigger flags
+  trigger_flags_.reset();
   resize(size);
 }
 
@@ -181,18 +182,23 @@ void SparseTable<K, V>::resize(int64_t size) {
   boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
 
   std::vector<Bucket> old_b = buckets_;
-  boost::dynamic_bitset<uint64_t> old_ltflags = trigger_flags_;
+
+  size_t setbits = trigger_flags_.count();
+  boost::dynamic_bitset<uint32_t> old_ltflags;
+  old_ltflags.resize(trigger_flags_.size());
+  for(int i=0; i<trigger_flags_.size(); i++)
+    old_ltflags.set(i,trigger_flags_.test(i));
 
   int old_entries = entries_;
 
-  //VLOG(2) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
+  VLOG(2) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
 
   buckets_.resize(size);
   size_ = size;
-
   clear();
-  trigger_flags_.reset();
+
   trigger_flags_.resize(size_);
+  trigger_flags_.reset();
   bitset_epoch_++;						//prevent resize side effects for scanning long thread
 
   for (size_t i = 0; i < old_b.size(); ++i) {
@@ -202,9 +208,10 @@ void SparseTable<K, V>::resize(int64_t size) {
     }
   }
 
-  //VLOG(2) << "Rehashed " << entries_ << " : " << size_ << " -> " << size;
-
   CHECK_EQ(old_entries, entries_);
+  CHECK_EQ(setbits,trigger_flags_.count()) << "Pre-resize had " << setbits << " bits set, but post-resize has " << trigger_flags_.count() << " bits set.";
+
+  //VLOG(2) << "Rehashed " << entries_ << " : " << size_ << " -> " << size << " with " << setbits << " bits set on";
 }
 
 template <class K, class V>
@@ -230,8 +237,10 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
     } else if (info_.accum->type() == AccumulatorBase::HYBRID) {
-      ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
-      trigger_flags_[b] = true;
+      trigger_flags_.set(b,((HybridTrigger<K,V>*)info_.accum)->Accumulate(&buckets_[b].v, v));
+
+      VLOG(1) << "HYBRID Setting (maybe) bit " << b << " for key " << k;
+
     } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
       bool doUpdate = false;
@@ -239,10 +248,11 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
       if (doUpdate) {
         buckets_[b].v = v2;
-        trigger_flags_[b] = true;
+        trigger_flags_.set(b);
+        VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
       }
     } else {
-      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
+      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR nor HYBRID";
     }
   } else {
     if (info_.accum->type() == AccumulatorBase::TRIGGER) {
@@ -250,13 +260,17 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       V v2 = v;
       //LOG(INFO) << "Executing Trigger [sparse] [new]";
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true
-      if (doUpdate)
+      if (doUpdate) {
         put(k, v2);
+        trigger_flags_.set(b);
+        VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
+      }
     } else {
       put(k, v);
       if (info_.accum->type() == AccumulatorBase::HYBRID) {
         b = bucket_for_key(k);
-        trigger_flags_[b] = true;
+        trigger_flags_.set(b);
+        VLOG(1) << "HYBRID Setting bit " << b << " for key " << k;
       }
     }
   }
@@ -300,7 +314,9 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
 }
 
 template <class K, class V>
-boost::dynamic_bitset<>* SparseTable<K, V>::bitset_getbitset(void) {
+boost::dynamic_bitset<uint32_t>* SparseTable<K, V>::bitset_getbitset(void) {
+  // boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
+  //VLOG(2) << "First set bit is " << trigger_flags_.find_first() << " where size " << trigger_flags_.size() << "==" << size_;
   return &trigger_flags_;
 }
 
@@ -308,8 +324,8 @@ template <class K, class V>
 const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
   boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
   CHECK_GT(size_,(int64_t) bit_offset);
-  //VLOG(2) << "Getting offset " << bit_offset << " from bucket of size_ " << size_;
   K k = buckets_[bit_offset].k;
+  //VLOG(2) << "Getting bit " << bit_offset << " for key " << k;
   return k;
 }
 
