@@ -929,6 +929,8 @@ void Master::barrier() {
       }
       barriertasks();
     }
+
+    VLOG(1) << "Flush/apply loop: " << flushed << "/" << applied << "f/a, quiescent = " << quiescent;
   } while (!quiescent);
 
   // Finally, we can do some cleanup/finalization tasks.  For now, this only

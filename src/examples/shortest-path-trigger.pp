@@ -6,7 +6,7 @@ using std::vector;
 using namespace piccolo;
 
 DEFINE_int32(tnum_nodes, 10000, "");
-DEFINE_bool(tdump_output, false, "");
+DEFINE_int32(tdump_nodes, 0, "");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance_map;
@@ -42,24 +42,21 @@ template<> struct Marshal<vector<double> > : MarshalBase {
 // This is the trigger. In order to experiment with non-trigger version,
 // I limited the maximum distance will be 20.
 
-struct SSSPTrigger: public Trigger<int, double> {
+struct SSSPTrigger: public HybridTrigger<int, double> {
 public:
-  void Fire(const int* key, double* value, const double& newvalue,
-            bool* doUpdate, bool isNew) {
-    //fprintf(stderr,"TRIGGER: k=%d,v=%f,nv=%f\n",*key,*value,newvalue);
-    if (*value <= newvalue) {
-      doUpdate = false;
-      return;
-    }
-    vector<double> thisnode = nodes->get(*key);
-    vector<double>::iterator it = thisnode.begin();
-    for (; it != thisnode.end(); it++)
-      distance_map->enqueue_update((*it), newvalue + 1);
-    *value = newvalue;
-    *doUpdate = true;
-    return;
+  bool Accumulate(double* a, const double& b) {
+    if (*a <= b)		//not better
+		return false;
+    *a = b;
+    return true;
   }
   bool LongFire(const int key, bool lastrun) {
+    double distance = distance_map->get(key);
+    vector<double> thisnode = nodes->get(key);
+    vector<double>::iterator it = thisnode.begin();
+    for (; it != thisnode.end(); it++)
+      if ((*it) != key)
+        distance_map->update((*it), distance + 1);
     return false;
   }
 };
@@ -73,7 +70,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   }
 
   srandom(nodes);	//repeatable graphs
-  fprintf(stderr, "Building graph: ");
+  fprintf(stderr, "Building graph with %d nodes and %d shards: ", nodes, shards);
 
   for (int i = 0; i < nodes; i++) {
     PathNode n;
@@ -111,7 +108,7 @@ int ShortestPathTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
   distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod,
-                             new Triggers<int, double>::NullTrigger);
+                             new Accumulators<double>::Replace, 1);
     if (!FLAGS_build_graph) {
   	  nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
     }
@@ -180,16 +177,12 @@ int ShortestPathTrigger(const ConfigData& conf) {
       * 1000000 + (end_time.tv_usec - start_time.tv_usec);
   fprintf(stderr, "Total SSSP time: %.3f seconds \n", totaltime / 1000000.0);
 
-  if (FLAGS_tdump_output) {
+  if (FLAGS_tdump_nodes > 0) {
     PRunOne(distance_map, {
-      for (int i = 0; i < FLAGS_tnum_nodes; ++i) {
-        if (i % 30 == 0) {
-          fprintf(stderr, "\n%5d: ", i);
-        }
-
+      for (int i = 0; i < FLAGS_tdump_nodes; ++i) {
         int d = (int)distance_map->get(i);
         if (d >= 1000) {d = -1;}
-        fprintf(stderr, "%3d ", d);
+        fprintf(stderr, "%8d:\t%3d\n", i, d);
       }
       fprintf(stderr, "\n");
     });

@@ -95,7 +95,7 @@ struct HybridTrigger: public AccumulatorBase {
     return AccumulatorBase::HYBRID;
   }
 
-  virtual void Accumulate(V* a, const V& b) = 0;
+  virtual bool Accumulate(V* a, const V& b) = 0;
   virtual bool LongFire(const K key, bool) = 0;
 };
 
@@ -215,7 +215,7 @@ public:
   virtual void update(const K &k, const V &v) = 0;
   virtual void remove(const K &k) = 0;
 
-  virtual boost::dynamic_bitset<>* bitset_getbitset(void) = 0;
+  virtual boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) = 0;
   virtual const K bitset_getkeyforbit(unsigned long int bit_offset) = 0;
   virtual int bitset_epoch(void) = 0;
   boost::recursive_mutex& rt_bitset_mutex() {
