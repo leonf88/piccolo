@@ -595,7 +595,7 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
       updatesdone += sentupdates;
       VLOG(2) << "Doing flush for table " << i->second << " (updates sent) @ " << updatesdone;
       updatesdone += t->retrigger_stop();
-      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopperetriggers stopped)" << updatesdone;
+      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopped) @ " << updatesdone;
       //updatesdone += t->clearUpdateQueue();
     }
   }
