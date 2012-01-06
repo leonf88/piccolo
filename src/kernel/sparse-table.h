@@ -237,9 +237,10 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
     if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
     } else if (info_.accum->type() == AccumulatorBase::HYBRID) {
-      trigger_flags_.set(b,((HybridTrigger<K,V>*)info_.accum)->Accumulate(&buckets_[b].v, v));
+      trigger_flags_[b] |= ((HybridTrigger<K,V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
 
-      VLOG(1) << "HYBRID Setting (maybe) bit " << b << " for key " << k;
+      //VLOG(2) << "HYBRID Setting (maybe = " << trigger_flags_.test(b) << ") bit " << b << " for key " << k
+      //        << ", now " << trigger_flags_.count() << " bits set.";
 
     } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
       V v2 = buckets_[b].v;
@@ -249,7 +250,7 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       if (doUpdate) {
         buckets_[b].v = v2;
         trigger_flags_.set(b);
-        VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
+        //VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
       }
     } else {
       LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR nor HYBRID";
@@ -263,15 +264,10 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       if (doUpdate) {
         put(k, v2);
         trigger_flags_.set(b);
-        VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
+        //VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
       }
     } else {
       put(k, v);
-      if (info_.accum->type() == AccumulatorBase::HYBRID) {
-        b = bucket_for_key(k);
-        trigger_flags_.set(b);
-        VLOG(1) << "HYBRID Setting bit " << b << " for key " << k;
-      }
     }
   }
 }
@@ -304,7 +300,9 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
       buckets_[b].in_use = 1;
       buckets_[b].k = k;
       buckets_[b].v = v;
-      trigger_flags_[b] = true;
+      if (info_.accum->type() == AccumulatorBase::HYBRID) {
+        trigger_flags_[b] = true;
+      }
       ++entries_;
     }
   } else {

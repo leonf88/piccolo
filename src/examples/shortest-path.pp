@@ -7,6 +7,7 @@ using namespace piccolo;
 
 DEFINE_int32(num_nodes, 10000, "");
 DEFINE_int32(dump_nodes, 0, "");
+DEFINE_int32(sssp_iters, 10, "");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance_map;
@@ -21,7 +22,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   }
 
   srandom(nodes);	//repeatable graphs
-  fprintf(stderr, "Building graph: ");
+  fprintf(stderr, "Building graph: \n");
 
   for (int i = 0; i < nodes; i++) {
     PathNode n;
@@ -32,11 +33,11 @@ static void BuildGraph(int shards, int nodes, int density) {
     }
 
     out[i % shards]->write(n);
-    if (i % (nodes / 50) == 0) {
+    if (nodes > 50 && i % (nodes / 50) == 0) {
       fprintf(stderr, ".");
     }
   }
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\nGraph built.\n");
 
   for (int i = 0; i < shards; ++i) {
     delete out[i];
@@ -51,7 +52,8 @@ public:
     for(;!it->done(); it->Next()) {
         PathNode n = it->value();
         for (int j = 0; j < n.target_size(); ++j) {
-          distance_map->update(n.target(j), distance_map->get(n.id()) + 1);
+          if (n.target(j) != it->key())
+            distance_map->update(n.target(j), distance_map->get(n.id()) + 1);
         }
     }
     delete it;
@@ -96,7 +98,7 @@ int ShortestPath(const ConfigData& conf) {
   gettimeofday(&start_time, NULL);
 
   vector<int> cptables;
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < FLAGS_sssp_iters; ++i) {
     cptables.clear();
     cptables.push_back(0);
 
@@ -119,7 +121,7 @@ int ShortestPath(const ConfigData& conf) {
         for (int i = 0; i < FLAGS_dump_nodes; ++i) {
           double d = distance_map->get(i);
           if (d >= 1000) {d = -1;}
-          fprintf(stderr, "%8d: %f ", i, d);
+          fprintf(stderr, "%8d: %d\n", i, (int)d);
         }
         fprintf(stderr, "\n");
     });

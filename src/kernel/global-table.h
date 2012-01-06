@@ -688,7 +688,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
           }
 
           if (dorestart) {	//in case someone else resized/rearranged the hashmap
-            VLOG(3) << "Tainted bitset_epoch_!";
+            VLOG(2) << "Tainted bitset_epoch_!";
             goto bitset_scan_restart;
           }
 
@@ -706,6 +706,8 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         terminated = terminating;
 
         if (terminated && ltflags->any()) {		//if we didn't actually shut down here...
+          VLOG(2) << "Terminating retrigger thread suspended pending at least " <<
+                     partition(shard_id)->bitset_getbitset()->count() << " bits set";
           terminated = false;
         } else if (terminated) {
           VLOG(2) << "Terminated retrigger thread iteration with " << updates << " updates.";
@@ -721,7 +723,8 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         }
         Sleep(10*RETRIGGER_SCAN_INTERVAL);
       }
-      VLOG(3) << "retrigger iteration accrued " << updates << " updates.";
+      //VLOG(2) << "retrigger iteration accrued " << updates << " updates; next pass should have >=" <<
+      //           partition(shard_id)->bitset_getbitset()->count() << " bits set";
       Sleep(RETRIGGER_SCAN_INTERVAL);
     }
     while(retrigger_terminate_) {

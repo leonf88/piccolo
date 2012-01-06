@@ -70,7 +70,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   }
 
   srandom(nodes);	//repeatable graphs
-  fprintf(stderr, "Building graph with %d nodes and %d shards: ", nodes, shards);
+  fprintf(stderr, "Building graph with %d nodes and %d shards:\n", nodes, shards);
 
   for (int i = 0; i < nodes; i++) {
     PathNode n;
