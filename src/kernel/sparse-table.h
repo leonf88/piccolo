@@ -263,7 +263,6 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
       ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true
       if (doUpdate) {
         put(k, v2);
-        trigger_flags_.set(b);
         //VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
       }
     } else {
@@ -300,7 +299,8 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
       buckets_[b].in_use = 1;
       buckets_[b].k = k;
       buckets_[b].v = v;
-      if (info_.accum->type() == AccumulatorBase::HYBRID) {
+      if (info_.accum->type() == AccumulatorBase::HYBRID ||
+          info_.accum->type() == AccumulatorBase::TRIGGER) {
         trigger_flags_[b] = true;
       }
       ++entries_;

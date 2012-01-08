@@ -85,6 +85,7 @@ static vector<int> InitSites() {
     int c = powerlaw_random(1,
                             min(50000, (int) (100000. * FLAGS_nodes / 100e6)),
                             0.001);
+    c = (c==0)?1:c;
     site_sizes.push_back(c);
     n += c;
   }
@@ -419,7 +420,9 @@ int Pagerank(const ConfigData& conf) {
             float contribution = kPropagationFactor * v / n.target_site_size();
             for (int i = 0; i < n.target_site_size(); ++i) {
               PageId target = {n.target_site(i), n.target_id(i)};
-              next_pr->update(target, contribution);
+              if (!(target == p)) {
+                next_pr->update(target, contribution);
+              }
             }
             pcount++;
           }

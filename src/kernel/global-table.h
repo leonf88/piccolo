@@ -721,7 +721,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
           retrigger_termthreads_++; //increment terminated thread count
           terminated = true;
         }
-        Sleep(10*RETRIGGER_SCAN_INTERVAL);
+        //Sleep(10*RETRIGGER_SCAN_INTERVAL);
       }
       //VLOG(2) << "retrigger iteration accrued " << updates << " updates; next pass should have >=" <<
       //           partition(shard_id)->bitset_getbitset()->count() << " bits set";
