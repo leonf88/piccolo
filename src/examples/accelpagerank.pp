@@ -22,7 +22,7 @@ static const char kTestPrefix[] = "/scratch/kerm/pr-graph.rec";
 DEFINE_string(apr_graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(apr_nodes, 10000, "");
 DEFINE_double(apr_tol, 1.5e-8, "threshold for updates");
-DEFINE_double(apr_d, 0.85, "alpha/restart probability");
+DEFINE_double(apr_d, kPropagationFactor, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
 DEFINE_int32(machines, 1, "number of physical filesystem(s), assuming round-robin MPI schedulinG");
 
@@ -101,6 +101,10 @@ struct AccelPRStruct {
   float pr_ext; //external pagerank
 };
 
+std::ostream& operator<<(std::ostream& s, const struct AccelPRStruct& a) {
+  return s << "[" << a.L << "]<-(" << a.pr_int << "," << a.pr_ext << ")";
+}
+
 namespace std {
 namespace tr1 {
 template<>
@@ -140,6 +144,7 @@ static vector<int> InitSites() {
   for (int n = 0; n < FLAGS_apr_nodes;) {
     int c = powerlaw_random(
         1, min(50000, (int) (100000. * FLAGS_apr_nodes / 100e6)), 0.001);
+    c = (c==0)?1:c;
     site_sizes.push_back(c);
     n += c;
   }
@@ -175,7 +180,7 @@ static void BuildGraph(int oldshard, int nshards, int nodes, int density) {
       n.Clear();
       n.set_site(i);
       n.set_id(j);
-      for (int k = 0; k < density; k++) {
+      for (int k = 0; k < ((density>nodes)?nodes:density); k++) {
         int target_site =
             (random() % 10 != 0) ? i : (random() % site_sizes.size());
         n.add_target_site(target_site);
@@ -280,9 +285,10 @@ namespace piccolo {
 struct AccelPRTrigger: public HybridTrigger<APageId, AccelPRStruct> {
 public:
   bool Accumulate(AccelPRStruct* a, const AccelPRStruct& b) {
-    a->pr_int += (FLAGS_apr_d * b.pr_int) / b.L;
+    //LOG(INFO) << "Accumulating " << b << " into " << *a;
+    a->pr_int += (FLAGS_apr_d * b.pr_int); // / (float)b.L;
     a->pr_ext += b.pr_ext;
-    return true;
+    return (b.pr_ext == 0);		//don't propagate if we're just setting our ext = int
   }
   bool LongFire(const APageId key, bool lastrun) {
     //if (!lastrun) {
@@ -291,15 +297,16 @@ public:
         //VLOG(2) << "LongFire propagate on key " << key.site << ":" << key.page;
         // Get neighbors
         APageInfo p = apages->get(key);
-        struct AccelPRStruct updval = { p.adj.size(), value.pr_int
-            - value.pr_ext, 0 };
+        struct AccelPRStruct updval = { 0, (value.pr_int
+            - value.pr_ext)/((float)value.L), 0 };
 
         //Tell everyone about our delta PR
         vector<APageId>::iterator it = p.adj.begin();
         for (; it != p.adj.end(); it++) {
           struct APageId neighbor = { it->site, it->page };
           //prs->enqueue_update(neighbor, updval);
-          prs->update(neighbor, updval);
+          if (!(neighbor == key))
+            prs->update(neighbor, updval);
         }
 
         //Update our own external PR
@@ -362,7 +369,7 @@ int AccelPagerank(const ConfigData& conf) {
   }
 
   PRunAll(prs, {
-        prs->swap_accumulator(new Triggers<APageId, AccelPRStruct>::NullTrigger);
+        prs->swap_accumulator(new Accumulators<AccelPRStruct>::Replace);
       });
 
   bool restored = m.restore(); //Restore checkpoint, if it exists.  Useful for stopping the process and modifying the graph.
@@ -404,8 +411,8 @@ int AccelPagerank(const ConfigData& conf) {
       if (!prs->contains(p)) {
         struct AccelPRStruct initval = { 
            n.target_site_size(), 
-           (1-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes),
-	       0};
+           (1.0f-(float)FLAGS_apr_d)/((float)FLAGS_apr_nodes),
+	       0.0};
         prs->update(p, initval);
         i++;
       }

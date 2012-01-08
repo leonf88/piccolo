@@ -178,14 +178,15 @@ int ShortestPathTrigger(const ConfigData& conf) {
   fprintf(stderr, "Total SSSP time: %.3f seconds \n", totaltime / 1000000.0);
 
   if (FLAGS_tdump_nodes > 0) {
-    PRunOne(distance_map, {
+    FILE* fh = fopen("SSSPT_dump","w");
+    /*PDontRunOne(distance_map, {*/
       for (int i = 0; i < FLAGS_tdump_nodes; ++i) {
         int d = (int)distance_map->get(i);
         if (d >= 1000) {d = -1;}
-        fprintf(stderr, "%8d:\t%3d\n", i, d);
+        fprintf(fh, "%8d:\t%3d\n", i, d);
       }
-      fprintf(stderr, "\n");
-    });
+    /*});*/
+    fclose(fh);
   }
   return 0;
 }

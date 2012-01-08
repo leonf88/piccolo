@@ -5,9 +5,10 @@ using std::vector;
 
 using namespace piccolo;
 
-DEFINE_int32(num_nodes, 10000, "");
-DEFINE_int32(dump_nodes, 0, "");
-DEFINE_int32(sssp_iters, 10, "");
+DEFINE_int32(num_nodes, 10000, "Default number of nodes in graph");
+DEFINE_int32(dump_nodes, 0, "0 to not dump final lengths, or >0 to dump that many nodes");
+DEFINE_int32(dump_nodes_periodic, 0, "same as dump_nodes, but after every iteration");
+DEFINE_int32(sssp_iters, 10, "How many iterations to perform");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance_map;
@@ -47,7 +48,7 @@ static void BuildGraph(int shards, int nodes, int density) {
 class sssp_kern : public DSMKernel {
 public:
   void sssp_driver() {
-    for(int i=0;i<100;i++) {
+//    for(int i=0;i<100;i++) {
     TypedTableIterator<long unsigned int, PathNode>* it = nodes->get_typed_iterator(current_shard());
     for(;!it->done(); it->Next()) {
         PathNode n = it->value();
@@ -57,7 +58,7 @@ public:
         }
     }
     delete it;
-    }
+//    }
   }
 };
 
@@ -108,6 +109,19 @@ int ShortestPath(const ConfigData& conf) {
     sp_rd.checkpoint_type = CP_CONTINUOUS;
     m.run_all(sp_rd);
 
+    if (FLAGS_dump_nodes_periodic > 0) {
+      fprintf(stderr, "Dumping SSSP lengths for iteration %d\n",i);
+      char dump_fname[256];
+      sprintf(dump_fname,"SSSP_dump_periodic_i%d",i);
+      FILE* fh = fopen(dump_fname,"w");
+      for (int i = 0; i < FLAGS_dump_nodes_periodic; ++i) {
+        double d = distance_map->get(i);
+        if (d >= 1000) {d = -1;}
+        fprintf(fh, "%8d: %d\n", i, (int)d);
+      }
+      fclose(fh);
+    }
+
   }
 
 //Finish the timer!
@@ -117,14 +131,16 @@ int ShortestPath(const ConfigData& conf) {
   fprintf(stderr, "Total SSSP time: %.3f seconds\n", totaltime / 1000000.0);
 
   if (FLAGS_dump_nodes > 0) {
-    PRunOne(distance_map, {
+    fprintf(stderr, "Dumping SSSP lengths for final results\n");
+    FILE* fh = fopen("SSSP_dump","w");
+    /*PDontRunOne(distance_map, {*/
         for (int i = 0; i < FLAGS_dump_nodes; ++i) {
           double d = distance_map->get(i);
           if (d >= 1000) {d = -1;}
-          fprintf(stderr, "%8d: %d\n", i, (int)d);
+          fprintf(fh, "%8d: %d\n", i, (int)d);
         }
-        fprintf(stderr, "\n");
-    });
+    /*});*/
+    fclose(fh);
   }
   return 0;
 }
