@@ -234,6 +234,6 @@ def build(bld):
   build_example('nas/n-body', ['nas/n-body.cc', ])
   build_example('bipartmatch', ['bipartmatch.cc'])
   build_example('bipartmatch-trigger', ['bipartmatch-trigger.cc', ])
-  #build_example('conncomp', ['conncomp.pp', ])
-  #build_example('adsorb', ['adsorb.pp', ])
+  build_example('conncomp', ['conncomp.pp', ])
+  build_example('conncomp-trigger', ['conncomp-trigger.pp', ])
 
