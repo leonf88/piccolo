@@ -7,6 +7,7 @@ using namespace piccolo;
 
 DEFINE_int32(tcc_num_nodes, 10000, "");
 DEFINE_int32(tcc_dump_nodes, 0, "");
+DEFINE_bool(tcc_directed, false, "Set to change edges to be directed");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, int>* maxcomp_map;
@@ -70,17 +71,52 @@ static void BuildGraph(int shards, int nodes, int density) {
   srandom(nodes);	//repeatable graphs
   fprintf(stderr, "Building graph with %d nodes and %d shards:\n", nodes, shards);
 
-  for (int i = 0; i < nodes; i++) {
-    PathNode n;
-    n.set_id(i);
+  int edges = 0;
 
-    for (int j = 0; j < density; j++) {
-      n.add_target(random() % nodes);
+  if (FLAGS_tcc_directed) {
+    for (int i = 0; i < nodes; i++) {
+      PathNode n;
+      n.set_id(i);
+  
+      for (int j = 0; j < random() % density; j++) {
+        n.add_target(random() % nodes);
+        edges++;
+      }
+  
+      out[i % shards]->write(n);
+      if (i % (nodes / 50) == 0) {
+        fprintf(stderr, ".");
+      }
     }
-
-    out[i % shards]->write(n);
-    if (i % (nodes / 50) == 0) {
-      fprintf(stderr, ".");
+  } else {
+    // Pass 1: edge generation
+    vector< vector<int> > edgestage;
+    edgestage.resize(nodes);
+    for (int i = 0; i < nodes; i++) {
+      for (int j = 0; j < random() % density; j++) {
+	    int neighbor = random() % nodes;
+        edgestage[neighbor].push_back(i);
+        edgestage[i].push_back(neighbor);
+        edges++;
+      }
+  
+      if (i % (nodes / 50) == 0) {
+        fprintf(stderr, ",");
+      }
+    }
+    // Pass 2: write to file
+    for (int i = 0; i < nodes; i++) {
+      PathNode n;
+      n.set_id(i);
+  
+      for (int j = 0; j < edgestage[i].size(); j++) {
+        n.add_target(edgestage[i][j]);
+      }
+  
+      out[i % shards]->write(n);
+      if (i % (nodes / 50) == 0) {
+        fprintf(stderr, ".");
+      }
     }
   }
   fprintf(stderr, "\n");
@@ -88,6 +124,7 @@ static void BuildGraph(int shards, int nodes, int density) {
   for (int i = 0; i < shards; ++i) {
     delete out[i];
   }
+  fprintf(stderr,"Generated graph with %d vertices and %d edges\n",nodes,edges);
 }
 
 
@@ -120,7 +157,7 @@ int ShortestPathTrigger(const ConfigData& conf) {
   Master m(conf);
 
   if (FLAGS_build_graph) {
-    BuildGraph(FLAGS_shards, FLAGS_tcc_num_nodes, 6);
+    BuildGraph(FLAGS_shards, FLAGS_tcc_num_nodes, 145);
     return 0;
   }
 
