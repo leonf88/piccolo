@@ -10,7 +10,7 @@
 
 namespace piccolo {
 
-static const double kLoadFactor = 0.8;
+static const double kLoadFactor = 0.4;
 
 template <class K, class V>
 class SparseTable :
