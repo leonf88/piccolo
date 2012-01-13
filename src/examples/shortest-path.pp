@@ -49,7 +49,7 @@ class sssp_kern : public DSMKernel {
 public:
   void sssp_driver() {
 //    for(int i=0;i<100;i++) {
-    TypedTableIterator<long unsigned int, PathNode>* it = nodes->get_typed_iterator(current_shard());
+    TypedTableIterator<uint64_t, PathNode>* it = nodes->get_typed_iterator(current_shard());
     for(;!it->done(); it->Next()) {
         PathNode n = it->value();
         for (int j = 0; j < n.target_size(); ++j) {
@@ -81,6 +81,8 @@ int ShortestPath(const ConfigData& conf) {
     BuildGraph(FLAGS_shards, FLAGS_num_nodes, 4);
     return 0;
   }
+
+  distance_map->resize(2*FLAGS_num_nodes);
 
   if (!m.restore()) {
   PRunAll(distance_map, {
