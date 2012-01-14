@@ -25,6 +25,7 @@ public:
   void write_delta(const TableData& put);
 
   virtual int64_t size() = 0;
+  virtual int64_t capacity() = 0;
   virtual void clear() = 0;
   virtual void resize(int64_t size) = 0;
 

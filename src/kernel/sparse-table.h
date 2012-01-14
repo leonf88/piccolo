@@ -79,6 +79,7 @@ public:
 
   bool empty() { return size() == 0; }
   int64_t size() { return entries_; }
+  int64_t capacity() { return size(); }
 
   void clear() {
     for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }

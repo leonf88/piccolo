@@ -2,6 +2,7 @@
 #include "kernel/local-table.h"
 #include "util/stats.h"
 #include "util/timer.h"
+#include <boost/dynamic_bitset.hpp>
 
 namespace piccolo {
 
@@ -14,6 +15,9 @@ struct LocalTableCoder : public TableCoder {
   virtual void WriteEntry(StringPiece k, StringPiece v);
   virtual bool ReadEntry(string* k, string *v);
 
+  virtual void WriteBitMap(boost::dynamic_bitset<uint32_t>*, int64_t tablesize);
+  virtual bool ReadBitMap(boost::dynamic_bitset<uint32_t>*,LocalTable* table);
+
   RecordFile *f_;
 };
 
@@ -24,6 +28,8 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
   if (!deltaOnly) {
     LocalTableCoder c(f, "w");
     Serialize(&c);
+    LocalTableCoder d(f + ".bitmap", "w");
+    d.WriteBitMap(bitset_getbitset(),capacity());
   }
 
   delta_file_ = new LocalTableCoder(f + ".delta", "w");
@@ -53,6 +59,15 @@ void LocalTable::restore(const string& f) {
     while (rf.ReadEntry(&k, &v)) {
       update_str(k, v);
     }
+  }
+
+  if (!File::Exists(f + ".bitmap")) {
+    VLOG(2) << "Skipping full restore of missing bitmap " << f << ".bitmap";
+  } else {
+    //return the bitmap
+    VLOG(2) << "Restoring full snapshot bitmap" << f + ".bitmap";
+    LocalTableCoder rfbm(f + ".bitmap", "r");
+    rfbm.ReadBitMap(bitset_getbitset(),this);
   }
 
   if (!File::Exists(f + ".delta")) {
@@ -97,4 +112,96 @@ void LocalTableCoder::WriteEntry(StringPiece k, StringPiece v) {
   f_->writeChunk(v);
 }
 
+enum BitMapPackMode {
+  BITMAP_DENSE, BITMAP_SPARSE
+};
+
+void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64_t capacity) {
+  Marshal<int>      m_int;
+  Marshal<uint32_t> m_int32;
+  Marshal<int64_t>  m_int64;
+
+  string tablesize_s;
+  m_int64.marshal(capacity,&tablesize_s);
+  f_->writeChunk(StringPiece(tablesize_s));
+
+  //Figure out what method to use
+  string packmode_s;
+  if (((sizeof(int)+sizeof(uint64_t))*bitset->count()) < bitset->size()/32) {
+    // Sparse is worthwhile
+    m_int.marshal(BITMAP_SPARSE,&packmode_s);
+    f_->writeChunk(StringPiece(packmode_s));
+
+    size_t bititer = bitset->find_first();
+    while(bititer != bitset->npos) {
+      string bitindex_s;
+      m_int64.marshal((int64_t)bititer,&bitindex_s);
+      f_->writeChunk(StringPiece(bitindex_s));
+      bititer = bitset->find_next(bititer);
+    }
+  } else {
+    // Dense is better
+    m_int.marshal(BITMAP_DENSE,&packmode_s);
+    f_->writeChunk(StringPiece(packmode_s));
+
+    uint32_t fullbyte = 0;
+    int64_t offset = 0;
+    while(offset < bitset->size()) {
+      fullbyte |= ((bitset->test(offset))<<(offset%32));
+      offset++;
+      if ((offset%32 == 0) || (offset >= bitset->size())) {
+        string fullbyte_s;
+        m_int32.marshal(fullbyte,&fullbyte_s);
+        f_->writeChunk(StringPiece(fullbyte_s));
+        fullbyte = 0;
+      }
+    }
+  }
+  return;
 }
+
+bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalTable* table) {
+  Marshal<int>      m_int;
+  Marshal<uint32_t> m_int32;
+  Marshal<int64_t>  m_int64;
+
+  string tablesize_s;
+  int64_t tablesize;
+  f_->readChunk(&tablesize_s);
+  m_int64.unmarshal(StringPiece(tablesize_s),&tablesize);
+  if (tablesize <= 0) {
+    LOG(ERROR) << "Restoration of table bitmap requested from table of size " << tablesize;
+    return false;
+  }
+  table->resize(tablesize);		//important to make bitmaps match properly!
+  
+  string packmode_s;
+  int packmode;
+  f_->readChunk(&packmode_s);
+  m_int.unmarshal(StringPiece(packmode_s),&packmode);
+  if (packmode == BITMAP_SPARSE) {
+    //Indices of set bits are packed into the string
+    string bittoset_s;
+    while(f_->readChunk(&bittoset_s)) {
+      int64_t bittoset;
+      m_int64.unmarshal(StringPiece(bittoset_s),&bittoset);
+      bitset->set(bittoset);
+    }
+  } else if (packmode == BITMAP_DENSE) {
+    //Bits are packed 32 per byte, unpack them into the bitset
+    string fullbyte_s;
+    uint32_t fullbyte;
+    int64_t offset = 0;
+    while(f_->readChunk(&fullbyte_s)) {
+      m_int32.unmarshal(StringPiece(fullbyte_s),&fullbyte);
+      for(int bit=0; bit<32; bit++) {
+        bitset->set(offset++,fullbyte&(1<<bit));
+      }
+    }
+  } else {
+    LOG(FATAL) << "Unknown BitMap packing mode!";
+  }
+  return true;
+}
+
+}	// namespace piccolo {

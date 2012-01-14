@@ -196,6 +196,7 @@ struct UntypedTable {
   virtual bool contains_str(const StringPiece& k) = 0;
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
+  virtual boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) = 0;
 };
 
 struct TableIterator {
@@ -274,9 +275,12 @@ public:
 };
 
 // Interface for serializing tables, either to disk or for transmitting via RPC.
+class LocalTable;
 struct TableCoder {
   virtual void WriteEntry(StringPiece k, StringPiece v) = 0;
   virtual bool ReadEntry(string* k, string *v) = 0;
+  virtual void WriteBitMap(boost::dynamic_bitset<uint32_t>*, int64_t capacity) = 0;
+  virtual bool ReadBitMap(boost::dynamic_bitset<uint32_t>*, LocalTable* table) = 0;
 };
 
 class Serializable {

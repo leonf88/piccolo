@@ -211,6 +211,10 @@ public:
     return m_.size() * this->info_.block_size;
   }
 
+  int64_t capacity() {
+    return size();
+  }
+
   void clear() {
     m_.clear();
     last_block_ = NULL;

@@ -204,6 +204,15 @@ void ProtoTableCoder::WriteEntry(StringPiece k, StringPiece v) {
   a->set_value(v.data, v.len);
 }
 
+void ProtoTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>*, int64_t capacity) {
+  return;
+}
+
+bool ProtoTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>*, LocalTable* table) {
+  return true;
+}
+
+
 void MutableGlobalTableBase::SendUpdates() {
   int i;
   MutableGlobalTableBase::SendUpdates(&i);
