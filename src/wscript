@@ -38,7 +38,7 @@ class piccolo_program(link_task):
                       '${STLIB_ST:PICCOLO_STATIC}',
                       '${SHLIB_MARKER}',
                       '${LIBPATH_ST:LIBPATH}',
-                      '${LIB_ST:LIB}'
+                      '${LIB_ST:LIB}',
                       '-Wl,--end-group',
                       ])
 
@@ -88,6 +88,7 @@ def configure(ctx):
   ctx.check(lib='protobuf')
   ctx.check(lib='rt')
   ctx.check(lib='unwind')
+  ctx.check(lib='tcmalloc', uselib_store='TCMALLOC', mandatory=True)
 
   if not ctx.check(lib='blas', mandatory=False):
     ctx.msg('BLAS library was not found; certain examples will not be built', False)
@@ -195,17 +196,21 @@ def build(bld):
     # add system library dependencies
     piccolo_lib = [ 'piccolo_proto',
                     'worker', 'master', 'common', 'kernel',
-                    'gflags', 'glog' ]
+                    'gflags', 'glog', 'tcmalloc' ]
+    STANDARD_LIBS.append('tcmalloc')
+    use.append('tcmalloc')
 
     if 'LIB_PROFILER' in bld.env:
       STANDARD_LIBS.append('PROFILER')
       piccolo_lib.append('profiler')
       use.append('profiler')
 
+    #print " ".join(use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS)
     bld.program(target=target,
                 source=[join('examples', src) for src in sources],
                 features='cxxprogram cxx',
-                use=use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS)
+                use=use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS,
+                lib=piccolo_lib)
 
   if 'LIB_BLAS' in bld.env:
     build_example('matmul', ['matmul.pp', ], use=['BLAS'])
@@ -214,7 +219,7 @@ def build(bld):
     _lib(target='webgraph',
          dir='external/webgraph',
          source=['webgraph.cc'],
-         use=['Z'])
+         use=['Z','tcmalloc'])
 
     build_example('pagerank', ['pagerank.pp'], use=['webgraph'])
     build_example('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])
