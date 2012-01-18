@@ -321,7 +321,7 @@ boost::dynamic_bitset<uint32_t>* SparseTable<K, V>::bitset_getbitset(void) {
 
 template <class K, class V>
 const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
+  //boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
   CHECK_GT(size_,(int64_t) bit_offset);
   K k = buckets_[bit_offset].k;
   //VLOG(2) << "Getting bit " << bit_offset << " for key " << k;

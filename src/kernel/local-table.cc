@@ -127,6 +127,7 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
 
   //Figure out what method to use
   string packmode_s;
+  uint64_t saved = 0;
   if (((sizeof(int)+sizeof(uint64_t))*bitset->count()) < bitset->size()/32) {
     // Sparse is worthwhile
     m_int.marshal(BITMAP_SPARSE,&packmode_s);
@@ -138,6 +139,7 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
       m_int64.marshal((int64_t)bititer,&bitindex_s);
       f_->writeChunk(StringPiece(bitindex_s));
       bititer = bitset->find_next(bititer);
+      saved++;
     }
   } else {
     // Dense is better
@@ -156,7 +158,9 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
         fullbyte = 0;
       }
     }
+    saved = offset;
   }
+  VLOG(1) << "Saved " << saved << " bits from retrigger bitset containing " << bitset->count() << " set bits.";
   return;
 }
 
@@ -179,6 +183,7 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
   int packmode;
   f_->readChunk(&packmode_s);
   m_int.unmarshal(StringPiece(packmode_s),&packmode);
+  uint64_t restored = 0;
   if (packmode == BITMAP_SPARSE) {
     //Indices of set bits are packed into the string
     string bittoset_s;
@@ -192,15 +197,17 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
     string fullbyte_s;
     uint32_t fullbyte;
     int64_t offset = 0;
-    while(f_->readChunk(&fullbyte_s)) {
+    while(f_->readChunk(&fullbyte_s) && offset < bitset->size()) {
       m_int32.unmarshal(StringPiece(fullbyte_s),&fullbyte);
-      for(int bit=0; bit<32; bit++) {
+      for(int bit = 0; bit < 32 && offset < bitset->size(); bit++) {
         bitset->set(offset++,fullbyte&(1<<bit));
       }
     }
+    restored = offset;
   } else {
     LOG(FATAL) << "Unknown BitMap packing mode!";
   }
+  VLOG(1) << "Restored " << restored << " bits to retrigger bitset.";
   return true;
 }
 

@@ -898,7 +898,7 @@ void Master::barrier() {
           quiescent = false;
         }
 
-        VLOG(2) << "Received flush response " << flushed
+        VLOG(1) << "Received flush response " << flushed
                 << " of " << workers_.size()
                 << " with " << done_msg.updatesdone()
                 << " updates done.";

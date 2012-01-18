@@ -668,6 +668,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         //     boost::mutex::scoped_lock sl(retrigger_mutex());
         //LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
 
+      boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
       bitset_scan_restart:
         bitset_epoch_ = partition(shard_id)->bitset_epoch();
         bool terminating = retrigger_terminate_;
