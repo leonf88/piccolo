@@ -26,10 +26,17 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
   Timer t;
 
   if (!deltaOnly) {
+    // Do a full checkpoint
     LocalTableCoder c(f, "w");
     Serialize(&c);
+
+    // Set up for checkpointing bitset
     LocalTableCoder d(f + ".bitmap", "w");
-    d.WriteBitMap(bitset_getbitset(),capacity());
+
+    {
+      boost::recursive_mutex::scoped_lock sl(rt_bitset_mutex()); //prevent a bunch of nasty resize side-effects
+      d.WriteBitMap(bitset_getbitset(),capacity());
+    }
   }
 
   delta_file_ = new LocalTableCoder(f + ".delta", "w");
@@ -37,12 +44,11 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
 }
 
 void LocalTable::finish_checkpoint() {
-//  VLOG(1) << "FStart.";
   if (delta_file_) {
+	VLOG(1) << "Closing delta log.";
     delete delta_file_;
     delta_file_ = NULL;
   }
-//  VLOG(1) << "FEnd.";
 }
 
 void LocalTable::restore(const string& f) {
@@ -128,6 +134,7 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
   //Figure out what method to use
   string packmode_s;
   uint64_t saved = 0;
+  uint64_t count = bitset->count();
   if (((sizeof(int)+sizeof(uint64_t))*bitset->count()) < bitset->size()/32) {
     // Sparse is worthwhile
     m_int.marshal(BITMAP_SPARSE,&packmode_s);
@@ -160,7 +167,7 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
     }
     saved = offset;
   }
-  VLOG(1) << "Saved " << saved << " bits from retrigger bitset containing " << bitset->count() << " set bits.";
+  VLOG(1) << "Saved " << saved << " bits from retrigger bitset containing " << count << " set and " << bitset->size() << " total bits.";
   return;
 }
 
