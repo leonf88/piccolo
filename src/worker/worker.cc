@@ -595,6 +595,7 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
       updatesdone += sentupdates;
       VLOG(2) << "Doing flush for table " << i->second << " (updates sent) @ " << updatesdone;
       updatesdone += t->retrigger_stop();
+      t->retrigger_start();
       VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopped) @ " << updatesdone;
       //updatesdone += t->clearUpdateQueue();
     }
@@ -622,7 +623,7 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp,
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
     if (t) {
-      t->retrigger_start();
+      //t->retrigger_start();
     }
   }
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);

@@ -197,6 +197,7 @@ struct UntypedTable {
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
   virtual boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) = 0;
+  virtual boost::recursive_mutex& rt_bitset_mutex() = 0;
 };
 
 struct TableIterator {
