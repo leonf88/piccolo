@@ -186,6 +186,7 @@ void MutableGlobalTableBase::HandlePutRequests() {
 }
 
 ProtoTableCoder::ProtoTableCoder(const TableData *in) : read_pos_(0), t_(const_cast<TableData*>(in)) {}
+ProtoTableCoder::~ProtoTableCoder() {}
 
 bool ProtoTableCoder::ReadEntry(string *k, string *v) {
   if (read_pos_ < t_->kv_data_size()) {

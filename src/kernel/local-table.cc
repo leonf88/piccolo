@@ -9,7 +9,7 @@ namespace piccolo {
 // Encodes or decodes table entries, reading and writing from the
 // specified file.
 struct LocalTableCoder : public TableCoder {
-  LocalTableCoder(const string &f, const string& mode);
+  LocalTableCoder(const string &f, const string& mode, int64_t* capacity);
   virtual ~LocalTableCoder();
 
   virtual void WriteEntry(StringPiece k, StringPiece v);
@@ -24,14 +24,18 @@ struct LocalTableCoder : public TableCoder {
 void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
   VLOG(1) << "Start checkpoint " << f;
   Timer t;
+  int64_t table_capacity;
 
   if (!deltaOnly) {
+    Marshal<int64_t>  m_int64;
+
     // Do a full checkpoint
-    LocalTableCoder c(f, "w");
+    table_capacity = capacity();
+    LocalTableCoder c(f, "w", &table_capacity);
     Serialize(&c);
 
     // Set up for checkpointing bitset
-    LocalTableCoder d(f + ".bitmap", "w");
+    LocalTableCoder d(f + ".bitmap", "w", &table_capacity);
 
     {
       boost::recursive_mutex::scoped_lock sl(rt_bitset_mutex()); //prevent a bunch of nasty resize side-effects
@@ -39,7 +43,7 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
     }
   }
 
-  delta_file_ = new LocalTableCoder(f + ".delta", "w");
+  delta_file_ = new LocalTableCoder(f + ".delta", "w", &table_capacity);
   VLOG(1) << "Flushed to disk in: " << t.elapsed();
 }
 
@@ -53,6 +57,7 @@ void LocalTable::finish_checkpoint() {
 
 void LocalTable::restore(const string& f) {
   string k, v;
+  int64_t table_capacity;
   if (!File::Exists(f)) {
     //this is no longer a return-able condition because there might
     //be epochs that are just deltas for continuous checkpointing
@@ -61,10 +66,16 @@ void LocalTable::restore(const string& f) {
 
     VLOG(2) << "Restoring full snapshot " << f;
     //TableData p;
-    LocalTableCoder rf(f, "r");
+    Timer t;
+
+    //Resize the table as needed
+    LocalTableCoder rf(f, "r", &table_capacity);
+    resize(table_capacity);
+
     while (rf.ReadEntry(&k, &v)) {
       update_str(k, v);
     }
+	VLOG(1) << "Restored full snapshot '" << f << "' in " << t.elapsed() << " sec";
   }
 
   if (!File::Exists(f + ".bitmap")) {
@@ -72,7 +83,8 @@ void LocalTable::restore(const string& f) {
   } else {
     //return the bitmap
     VLOG(2) << "Restoring full snapshot bitmap" << f + ".bitmap";
-    LocalTableCoder rfbm(f + ".bitmap", "r");
+    LocalTableCoder rfbm(f + ".bitmap", "r", &table_capacity);
+    resize(table_capacity);
     rfbm.ReadBitMap(bitset_getbitset(),this);
   }
 
@@ -80,7 +92,7 @@ void LocalTable::restore(const string& f) {
     VLOG(2) << "Skipping delta restore of missing delta " << f << ".delta";
   } else {
     // Replay delta log.
-    LocalTableCoder df(f + ".delta", "r");
+    LocalTableCoder df(f + ".delta", "r", &table_capacity);
     while (df.ReadEntry(&k, &v)) {
       update_str(k, v);
     }
@@ -96,8 +108,22 @@ void LocalTable::write_delta(const TableData& put) {
   }
 }
 
-LocalTableCoder::LocalTableCoder(const string& f, const string &mode) :
-    f_(new RecordFile(f, mode, RecordFile::LZO)) {
+LocalTableCoder::LocalTableCoder(const string& f, const string &mode, int64_t *capacity) :
+  f_(new RecordFile(f, mode, RecordFile::LZO)) {
+
+  Marshal<int64_t> m_int64;
+
+  //Record or return table size
+  string tablesize_s;
+  if (mode == "w") {
+    m_int64.marshal(*capacity,&tablesize_s);
+    f_->writeChunk(StringPiece(tablesize_s));
+  } else {
+    string tablesize_s;
+    f_->readChunk(&tablesize_s);
+    m_int64.unmarshal(StringPiece(tablesize_s),capacity);
+  }
+    
 }
 
 LocalTableCoder::~LocalTableCoder() {
@@ -127,9 +153,11 @@ void LocalTableCoder::WriteBitMap(boost::dynamic_bitset<uint32_t>* bitset, int64
   Marshal<uint32_t> m_int32;
   Marshal<int64_t>  m_int64;
 
+/*
   string tablesize_s;
   m_int64.marshal(capacity,&tablesize_s);
   f_->writeChunk(StringPiece(tablesize_s));
+*/
 
   //Figure out what method to use
   string packmode_s;
@@ -176,6 +204,7 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
   Marshal<uint32_t> m_int32;
   Marshal<int64_t>  m_int64;
 
+/*
   string tablesize_s;
   int64_t tablesize;
   f_->readChunk(&tablesize_s);
@@ -184,7 +213,9 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
     LOG(ERROR) << "Restoration of table bitmap requested from table of size " << tablesize;
     return false;
   }
+  VLOG(1) << "Resizing table to size " << tablesize << " to match bitset";
   table->resize(tablesize);		//important to make bitmaps match properly!
+*/
   
   string packmode_s;
   int packmode;

@@ -25,6 +25,7 @@ class Master;
 // Encodes table entries using the passed in TableData protocol buffer.
 struct ProtoTableCoder: public TableCoder {
   ProtoTableCoder(const TableData* in);
+  ~ProtoTableCoder();
   virtual void WriteEntry(StringPiece k, StringPiece v);
   virtual bool ReadEntry(string* k, string *v);
   virtual void WriteBitMap(boost::dynamic_bitset<uint32_t>*, int64_t capacity);
