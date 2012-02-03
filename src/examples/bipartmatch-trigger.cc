@@ -126,7 +126,7 @@ public:
       //Also, this is always a local get(), so no possible consistency issues
       vector<int> v = leftoutedges->get(*key);
 
-      vector<int>::iterator it = v.begin();
+      //vector<int>::iterator it = v.begin();
 
 #ifdef DEBUGOUT
       cout << "Match on " << *key << " denied from " << *(v.end()-1);

@@ -9,6 +9,8 @@
 namespace piccolo {
 
 // Represents a single shard of a partitioned global table.
+class LocalTableCoder;
+
 class LocalTable :
   public TableBase,
   virtual public UntypedTable,
@@ -35,7 +37,7 @@ public:
 
 protected:
   friend class GlobalTable;
-  TableCoder *delta_file_;
+  LocalTableCoder *delta_file_;
 };
 
 }
