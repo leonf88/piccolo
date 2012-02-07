@@ -287,7 +287,8 @@ struct TableCoder {
 class Serializable {
 public:
   virtual void DecodeUpdates(TableCoder *in, DecodeIteratorBase *it) = 0;
-  virtual void Serialize(TableCoder* out) = 0;
+  virtual void Serialize(TableCoder* out, bool tryOptimize = false) = 0;
+  virtual void Deserialize(TableCoder* in, bool tryOptimize = false) = 0;
 };
 }
 

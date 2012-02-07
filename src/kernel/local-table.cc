@@ -32,7 +32,7 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
     // Do a full checkpoint
     table_capacity = capacity();
     LocalTableCoder c(f, "w", &table_capacity);
-    Serialize(&c);
+    Serialize(&c, true);		//tryOptimize = true
 
     // Set up for checkpointing bitset
     LocalTableCoder d(f + ".bitmap", "w", &table_capacity);
@@ -72,9 +72,7 @@ void LocalTable::restore(const string& f) {
     LocalTableCoder rf(f, "r", &table_capacity);
     resize(table_capacity);
 
-    while (rf.ReadEntry(&k, &v)) {
-      update_str(k, v);
-    }
+    Deserialize(&rf,true);	//tryOptimize = true
 	VLOG(1) << "Restored full snapshot '" << f << "' in " << t.elapsed() << " sec";
   }
 

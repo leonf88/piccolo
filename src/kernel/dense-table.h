@@ -224,7 +224,7 @@ public:
     LOG(FATAL) << " DenseTable resize not implemented!";
   }
 
-  void Serialize(TableCoder* out) {
+  void Serialize(TableCoder* out, bool tryOptimize = false) {
     string k, v;
     for (typename BucketMap::iterator i = m_.begin(); i != m_.end(); ++i) {
       v.clear();
@@ -241,6 +241,13 @@ public:
       }
 
       out->WriteEntry(k, v);
+    }
+  }
+
+  void Deserialize(TableCoder* in) {
+    string k,v;
+    while(in->ReadEntry(&k,&v)) {
+      update_str(k,v);
     }
   }
 
