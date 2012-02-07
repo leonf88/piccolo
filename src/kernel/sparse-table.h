@@ -91,7 +91,9 @@ public:
       return new Iterator(*this);
   }
 
-  void Serialize(TableCoder *out);
+  void Serialize(TableCoder *out, bool tryOptimize = false);
+  void Deserialize(TableCoder *in, bool tryOptimize = false);
+
   void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
 
 private:
@@ -144,17 +146,41 @@ SparseTable<K, V>::SparseTable(int size)
 }
 
 template <class K, class V>
-void SparseTable<K, V>::Serialize(TableCoder *out) {
-  Iterator *i = (Iterator*)get_iterator();
-  string k, v;
-  while (!i->done()) {
-    k.clear(); v.clear();
-    marshal(i->key(), &k);
-    marshal(i->value(), &v);
-    out->WriteEntry(k, v);
-    i->Next();
+void SparseTable<K, V>::Serialize(TableCoder *out, bool tryOptimize) {
+  if (tryOptimize && boost::is_pod<K>::value && (boost::is_pod<V>::value)) {
+    //optimize!
+    StringPiece k("rawdump");
+    VLOG(1) << "Optimized dump of " << (buckets_.size()*sizeof(Bucket)) << " bytes of data in " <<
+               buckets_.size() << " buckets of " << sizeof(Bucket) << " bytes each.";
+    StringPiece v((const char*)&(buckets_[0]),buckets_.size()*sizeof(Bucket));
+    out->WriteEntry(k,v);
+  } else {
+    Iterator *i = (Iterator*)get_iterator();
+    string k, v;
+    while (!i->done()) {
+      k.clear(); v.clear();
+      marshal(i->key(), &k);
+      marshal(i->value(), &v);
+      out->WriteEntry(k, v);
+      i->Next();
+    }
+    delete i;
   }
-  delete i;
+}
+
+template <class K, class V>
+void SparseTable<K, V>::Deserialize(TableCoder *in, bool tryOptimize) {
+  string k,v;
+  if (tryOptimize && boost::is_pod<K>::value && boost::is_pod<V>::value) {
+    //optimize!
+    CHECK_EQ(true,in->ReadEntry(&k,&v)) << "Failed to read raw table dump!";
+    VLOG(1) << "Optimized restore of " << v.length() << " bytes of data";
+    memcpy(&(buckets_[0]),v.c_str(),v.length());
+  } else {
+    while (in->ReadEntry(&k, &v)) {
+      update_str(k, v);
+    }
+  }
 }
 
 template <class K, class V>
