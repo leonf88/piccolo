@@ -108,10 +108,10 @@ int ShortestPathTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
   distance_map = CreateTable(0, FLAGS_shards, new Sharding::Mod,
-                             new Accumulators<double>::Replace, 1);
-    if (!FLAGS_build_graph) {
-  	  nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
-    }
+                             (Trigger<int,double>*)new SSSPTrigger, 1);
+  if (!FLAGS_build_graph) {
+    nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
+  } 
   nodes = CreateTable(2, FLAGS_shards, new Sharding::Mod,
                       new Accumulators<vector<double> >::Replace);
   //TriggerID trigid = distance_map->register_trigger(new SSSPTrigger);
@@ -124,52 +124,54 @@ int ShortestPathTrigger(const ConfigData& conf) {
     return 0;
   }
 
+  distance_map->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
+  nodes->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
+
   if (!m.restore()) {
-    distance_map->resize(FLAGS_tnum_nodes);
-    nodes->resize(FLAGS_tnum_nodes);
+
+    //This is actually a kernel-like thing
+    PSwapAccumulator(distance_map,{new Accumulators<double>::Replace});
+
     PRunAll(distance_map, {
-       vector<double> v;
-       v.clear();
+       //vector<double> v;
+       //v.clear();
        for(int i=current_shard();i<FLAGS_tnum_nodes;i+=FLAGS_shards) {
          distance_map->update(i, 1e9);	//Initialize all distances to very large.
-         nodes->update(i,v);	//Start all vectors with empty adjacency lists
+       //  nodes->update(i,v);	//Start all vectors with empty adjacency lists
        }
     });
 
-
     //Build adjacency lists by appending RecordTables' contents
     PMap({n: nodes_record}, {
-      vector<double> v=nodes->get(n.id());
+      vector<double> v;//=nodes->get(n.id());
       for(int i=0; i < n.target_size(); i++) {
         v.push_back(n.target(i));
-		nodes->update(n.id(),v);
+        nodes->update(n.id(),v);
       }
-	});
-
-	PRunAll(distance_map, {
-	  distance_map->swap_accumulator((Trigger<int,double>*)new SSSPTrigger);
-	});
+    });
   }
+
+  //This is actually a kernel-like thing
+  PSwapAccumulator(distance_map,{(Trigger<int,double>*)new SSSPTrigger});
 
   //Start the timer!
   struct timeval start_time, end_time;
   gettimeofday(&start_time, NULL);
 
-    //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
-    vector<int> cptables;
-	cptables.clear();	
-	cptables.push_back(0);
-	cptables.push_back(2);
+  //Start it all up by poking the thresholding process with a "null" update on the newly-initialized nodes.
+  vector<int> cptables;
+  cptables.clear();	
+  cptables.push_back(0);
+  cptables.push_back(2);
 
-    RunDescriptor pr_rd("ssspt_kern", "ssspt_driver", distance_map, cptables);
+  RunDescriptor pr_rd("ssspt_kern", "ssspt_driver", distance_map, cptables);
 
-    //Switched to a RunDescriptor so that checkpointing can be used.
-    pr_rd.checkpoint_type = CP_CONTINUOUS;
-    m.run_all(pr_rd);
+  //Switched to a RunDescriptor so that checkpointing can be used.
+  pr_rd.checkpoint_type = CP_CONTINUOUS;
+  m.run_all(pr_rd);
 
-  PRunAll(distance_map, {
-    distance_map->swap_accumulator(new Triggers<int,double>::NullTrigger);
-  });
+  //This is actually a kernel-like thing
+  PSwapAccumulator(distance_map,{new Triggers<int,double>::NullTrigger});
 
   //Finish the timer!
   gettimeofday(&end_time, NULL);

@@ -8,11 +8,11 @@ using namespace std;
 
 DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
 DEFINE_bool(crawler_triggers, false, "Use trigger-based crawler (t/f).");
-static DSMKernel *the_kernel;
+static KernelBase *the_kernel;
 
 namespace piccolo {
 
-DSMKernel* kernel() {
+KernelBase* kernel() {
   return the_kernel;
 }
 
@@ -204,8 +204,9 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
   return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
 }
 
-class PythonKernel: public DSMKernel {
+class PythonKernel: public KernelBase {
 public:
+  bool is_swapaccum(void) { return false; }
   virtual ~PythonKernel() {}
   PythonKernel() {
     try {

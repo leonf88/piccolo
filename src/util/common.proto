@@ -38,6 +38,8 @@ enum MessageTypes {
 
   MTYPE_WORKER_FINALIZE = 40;
   MTYPE_WORKER_FINALIZE_DONE = 41;
+
+  MTYPE_BACKUP_FORWARD = 42;
 };
 
 message EmptyMessage {}

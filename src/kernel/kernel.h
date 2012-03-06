@@ -108,7 +108,7 @@ private:
 #endif
 
 
-class DSMKernel {
+class KernelBase {
 public:
   // Called upon creation of this kernel by a worker.
   virtual void InitKernel() {}
@@ -136,6 +136,9 @@ public:
   TypedGlobalTable<K, V>* get_table(int id) {
     return dynamic_cast<TypedGlobalTable<K, V>*>(get_table(id));
   }
+
+  virtual bool is_swapaccum(void) = 0;
+
 private:
   friend class Worker;
   friend class Master;
@@ -153,12 +156,22 @@ private:
   MarshalledMap cp_;
 };
 
+class DSMKernel : public KernelBase {
+public:
+  bool is_swapaccum(void) { return false; }
+};
+
+class DSMKernel_Swap : public KernelBase {
+public:
+  bool is_swapaccum(void) { return true; }
+};
+
 struct KernelInfo {
   virtual ~KernelInfo() {}
   KernelInfo(const char* name) : name_(name) {}
 
-  virtual DSMKernel* create() = 0;
-  virtual void Run(DSMKernel* obj, const string& method_name) = 0;
+  virtual KernelBase* create() = 0;
+  virtual void Run(KernelBase* obj, const string& method_name) = 0;
   virtual bool has_method(const string& method_name) = 0;
 
   string name_;
@@ -171,9 +184,9 @@ struct KernelInfoT : public KernelInfo {
 
   KernelInfoT(const char* name) : KernelInfo(name) {}
 
-  DSMKernel* create() { return new C; }
+  KernelBase* create() { return new C; }
 
-  void Run(DSMKernel* obj, const string& method_id) {
+  void Run(KernelBase* obj, const string& method_id) {
     boost::function<void (C*)> m(methods_[method_id]);
     m((C*)obj);
   }

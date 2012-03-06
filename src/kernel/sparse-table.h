@@ -206,6 +206,7 @@ void SparseTable<K, V>::resize(int64_t size) {
   if (size_ == size)
     return;
 
+  update_tainted_ = true;
   boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
 
   std::vector<Bucket> old_b = buckets_;
@@ -260,6 +261,7 @@ template <class K, class V>
 void SparseTable<K, V>::update(const K& k, const V& v) {
   int b = bucket_for_key(k);
 
+  update_tainted_ = true;
   if (b != -1) {
     if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
       ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
@@ -300,6 +302,8 @@ void SparseTable<K, V>::update(const K& k, const V& v) {
 
 template <class K, class V>
 void SparseTable<K, V>::put(const K& k, const V& v) {
+  update_tainted_ = true;
+
   int start = bucket_idx(k);
   int b = start;
   bool found = false;

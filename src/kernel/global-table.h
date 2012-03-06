@@ -273,6 +273,7 @@ public:
           retrigger_threadcount_++;
         //}
       }
+      retrigger_stop();
     }
   }
 
@@ -460,7 +461,7 @@ int TypedGlobalTable<K, V>::get_shard(const K& k) {
 
   Sharder<K> *sharder = (Sharder<K>*) (this->info().sharder);
   int shard = (*sharder)(k, this->info().num_shards);
-  DCHECK_GE(shard, 0);
+  DCHECK_GE(shard, 0) << "Key " << k;
   DCHECK_LT(shard, this->num_shards());
   return shard;
 }
@@ -586,7 +587,7 @@ int TypedGlobalTable<K, V>::clearUpdateQueue(void) {
 template<class K, class V>
 unsigned int TypedGlobalTable<K, V>::KernelFinalize() {
   unsigned int i = retrigger_stop();
-  retrigger_start();
+  //retrigger_start();
   return i;
 }
 
@@ -610,20 +611,24 @@ void TypedGlobalTable<K, V>::retrigger_start(void) {
   while (retrigger_termthreads_ < retrigger_threadcount_) {
     Sleep(RETRIGGER_SCAN_INTERVAL);
   }
+  VLOG(1) << "All retriggers now running!";
   return;
 }
 
 template<class K, class V>
 unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
+  VLOG(1) << "All retriggers stopping.";
   if (retrigger_terminate_)
     return 0;
   if (!retrigger_threadcount_) {
+/*
     for (size_t i = 0; i < partitions_.size(); ++i) {
       //Only create retrigger threads for local shards
       if (is_local_shard(i)) {
         (partition(i)->bitset_getbitset())->reset();		//reset all bits in bitset
       }
     }
+*/				//why??
     return 0;
   } else {
     boost::mutex::scoped_lock sl(retrigger_mutex());		//Saves us a bit of pain here
@@ -662,6 +667,9 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
   while (1) {
     bool terminated = false;
     unsigned int updates = 0;
+
+    //printf("Currently have %d pending set bits\n",partition(shard_id)->bitset_getbitset()->count());
+
     while (!terminated) {
       if (is_local_shard(shard_id)) {
         //     boost::mutex::scoped_lock sl(retrigger_mutex());

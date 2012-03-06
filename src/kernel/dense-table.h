@@ -163,6 +163,7 @@ public:
   }
 
   void update(const K& k, const V& v) {
+    update_tainted_ = true;
     V* vb = get_block(k);
 
     if (this->info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
@@ -190,6 +191,7 @@ public:
   }
 
   void put(const K& k, const V& v) {
+    update_tainted_ = true;
     V* vb = get_block(k);
     vb[block_pos(k)] = v;
     trigger_flags_[block_pos(k)] = true;

@@ -26,7 +26,11 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
   Timer t;
   int64_t table_capacity;
 
-  if (!deltaOnly) {
+  if (!update_tainted()) {
+    VLOG(1) << "Skipping full checkpoint of untainted table (pseudo-read-only?)";
+    deltaOnly = true;
+  }
+  if (!deltaOnly) {	//don't checkpoint untainted tables!
     Marshal<int64_t>  m_int64;
 
     // Do a full checkpoint
@@ -41,6 +45,7 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
       boost::recursive_mutex::scoped_lock sl(rt_bitset_mutex()); //prevent a bunch of nasty resize side-effects
       d.WriteBitMap(bitset_getbitset(),capacity());
     }
+    clear_update_tainted();
   }
 
   delta_file_ = new LocalTableCoder(f + ".delta", "w", &table_capacity);
@@ -70,6 +75,7 @@ void LocalTable::restore(const string& f) {
 
     //Resize the table as needed
     LocalTableCoder rf(f, "r", &table_capacity);
+    VLOG(1) << "Resizing table to " << table_capacity << " entries for full restore.";
     resize(table_capacity);
 
     Deserialize(&rf,true);	//tryOptimize = true
