@@ -102,6 +102,7 @@ private:
   int num_peers_;
   bool running_;
   bool krunning_;
+  bool kswapaccum_;		//set if previous kernel is/was a swap_accum and should not touch retrigger threads
   bool handling_putreqs_;
   CheckpointType active_checkpoint_;
 
@@ -140,7 +141,7 @@ private:
     }
   };
 
-  std::map<KernelId, DSMKernel*> kernels_;
+  std::map<KernelId, KernelBase*> kernels_;
 
   Stats stats_;
 };

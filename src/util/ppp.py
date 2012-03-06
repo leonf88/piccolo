@@ -6,7 +6,8 @@ ppp: The Piccolo Pre-Processor.
 Yes, alliteration is fun.
 
 Transforms .pp files to C++, replacing instances of the PMap and PReduce
-calls with calls to generated kernels and barriers.
+calls with calls to generated kernels and barriers. Now also works with 
+the PSwapAccumulator call.
 '''
 
 import os, sys, re, _sre
@@ -140,6 +141,20 @@ REGISTER_KERNEL(%(prefix)sRunKernel%(id)s);
 REGISTER_METHOD(%(prefix)sRunKernel%(id)s, run);
 '''
 
+SWAP_ACCUM = '''
+class %(prefix)sSwapAccumKernel%(id)s : public DSMKernel_Swap {
+public:
+  virtual ~%(prefix)sSwapAccumKernel%(id)s () {}
+  void swap() {
+#line %(line)s "%(filename)s"
+      %(code)s;
+  }
+};
+
+REGISTER_KERNEL(%(prefix)sSwapAccumKernel%(id)s);
+REGISTER_METHOD(%(prefix)sSwapAccumKernel%(id)s, swap);
+'''
+
 class Counter(object):
   def __init__(self):
     self.c = 0
@@ -248,6 +263,24 @@ def ParsePRunAll(s):
   s.pop()
   return code
 
+def ParsePSwapAccumulator(s):
+  s.push('ParsePSwapAccumulator')
+  _, table, _, accum, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
+
+  code = table+'->swap_accumulator('+accum+');'
+
+  filename = s._f
+  prefix = re.sub(r'[\W]', '_', filename)
+
+  id = get_id()
+  s._out += 'm.run_all("%sSwapAccumKernel%d", "swap", %s);' % (prefix, id, table)
+  s._d += SWAP_ACCUM % dict(filename=filename,
+                            prefix=prefix,
+                            line=s._stack[-1][1],
+                            id=id,
+                            code=code) + '\n'
+  s.pop()
+  return code;
 
 def ProcessFile(f_in, f_out):
   global c
@@ -256,11 +289,12 @@ def ProcessFile(f_in, f_out):
   print >> f_out, '#line 1 "%s"' % f_in
 
   while 1:
-    g = s.search('PMap|PRunOne|PRunAll')
+    g = s.search('PMap|PRunOne|PRunAll|PSwapAccumulator')
     if not g: break
     if g.group(0) == 'PMap': ParsePMap(s)
     elif g.group(0) == 'PRunOne': ParsePRunOne(s)
     elif g.group(0) == 'PRunAll': ParsePRunAll(s)
+    elif g.group(0) == 'PSwapAccumulator': ParsePSwapAccumulator(s)
 
   print >> f_out, s._out
   print >> f_out, s._d

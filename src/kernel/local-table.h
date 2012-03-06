@@ -34,10 +34,13 @@ public:
   virtual TableIterator* get_iterator() = 0;
 
   int shard() { return info_.shard; }
+  bool update_tainted() { return update_tainted_; }
+  void clear_update_tainted() { update_tainted_ = false; }
 
 protected:
   friend class GlobalTable;
   LocalTableCoder *delta_file_;
+  bool update_tainted_;		//set if update(s) have occurred since last full checkpoint
 };
 
 }

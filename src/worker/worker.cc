@@ -151,7 +151,7 @@ void Worker::KernelLoop() {
 
     KernelInfo *helper = KernelRegistry::Get()->kernel(kreq.kernel());
     KernelId id(kreq.kernel(), kreq.table(), kreq.shard());
-    DSMKernel* d = kernels_[id];
+    KernelBase* d = kernels_[id];
 
     if (!d) {
       d = helper->create();
@@ -166,6 +166,16 @@ void Worker::KernelLoop() {
 
     if (this->id() == 1 && FLAGS_sleep_hack > 0) {
       Sleep(FLAGS_sleep_hack);
+    }
+
+    // Turn retrigger threads on for a trigger-based kernel
+    kswapaccum_ = d->is_swapaccum();
+    if (!kswapaccum_) {
+      TableRegistry::Map &tmap = TableRegistry::Get()->tables();
+      for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+        MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+        if (t) { t->retrigger_start(); }
+      }
     }
 
     // Run the user kernel
@@ -403,24 +413,28 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
   // CRM 2011-10-13: Look for latest and later epochs that might
   // contain deltas.  Master will have sent the epoch number of the
   // last FULL checkpoint
-  epoch_ = epoch;
-  do {
-    LOG(INFO) << "Worker restoring state from epoch: " << epoch_;
-//    if (!File::Exists(StringPrintf("%s/epoch_%05d/checkpoint.finished",FLAGS_checkpoint_read_dir.c_str(),epoch_))) {
-//      VLOG(2) << "Epoch " << epoch_ << " did not finish; restore process terminating normally.";
-//      break;
-//    }
-    for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
-      Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
-      if (t) {
-        t->restore(
-            StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
-                         FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+  for (TableRegistry::Map::iterator i = t.begin(); i != t.end(); ++i) {
+    Checkpointable* t = dynamic_cast<Checkpointable*>(i->second);
+    epoch_ = epoch;
+    if (t) {
+      do {
+        string full_cp_pattern = StringPrintf("%s/epoch_%05d/checkpoint.table-%d.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch_,i->first);
+        std::vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
+        if (!full_cps.empty()) break;
+      } while (--epoch_ >= 0);
+      if (epoch_ >= 0) {
+        do {
+          LOG(INFO) << "Worker restoring state from epoch: " << epoch_;
+              t->restore(
+                  StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
+                               FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
+          epoch_++;
+        } while(finalepoch >= epoch_ && File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_)));
+      } else {
+        LOG(WARNING) << "Table " << i->first << " seems to have no full checkpoints.";
       }
     }
-    epoch_++;
-  } while(finalepoch >= epoch_ && File::Exists(StringPrintf("%s/epoch_%05d",FLAGS_checkpoint_read_dir.c_str(),epoch_)));
-//      StringPrintf("%s/epoch_%05d", FLAGS_checkpoint_read_dir.c_str(), epoch_)));
+  }
   LOG(INFO) << "State restored. Current epoch is " << epoch_ << ".";
 }
 
@@ -584,20 +598,25 @@ void Worker::HandleFlush(const EmptyMessage& req, FlushResponse *resp,
 
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
   int updatesdone = 0;
-  for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
-    MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
-    if (t) {
-      VLOG(2) << "Doing flush for table " << i->second;
-      updatesdone += t->clearUpdateQueue();
-      VLOG(2) << "Doing flush for table " << i->second << " (queue cleared) @ " << updatesdone;
-      int sentupdates = 0;
-      t->SendUpdates(&sentupdates);
-      updatesdone += sentupdates;
-      VLOG(2) << "Doing flush for table " << i->second << " (updates sent) @ " << updatesdone;
-      updatesdone += t->retrigger_stop();
-      t->retrigger_start();
-      VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopped) @ " << updatesdone;
-      //updatesdone += t->clearUpdateQueue();
+
+  if (kswapaccum_) {
+    VLOG(1) << "Skipping flush for swapaccumulator kernel";
+  } else {
+    for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
+      MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
+      if (t) {
+        VLOG(2) << "Doing flush for table " << i->second;
+        updatesdone += t->clearUpdateQueue();
+        VLOG(2) << "Doing flush for table " << i->second << " (queue cleared) @ " << updatesdone;
+        int sentupdates = 0;
+        t->SendUpdates(&sentupdates);
+        updatesdone += sentupdates;
+        VLOG(2) << "Doing flush for table " << i->second << " (updates sent) @ " << updatesdone;
+        updatesdone += t->retrigger_stop();
+        t->retrigger_start();
+        VLOG(2) << "Doing flush for table " << i->second << " (retriggers stopped) @ " << updatesdone;
+        //updatesdone += t->clearUpdateQueue();
+      }
     }
   }
   network_->Flush();
@@ -622,9 +641,6 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp,
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
-    if (t) {
-      //t->retrigger_start();
-    }
   }
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
 }
