@@ -11,29 +11,29 @@ DEFINE_int32(tdump_nodes, 0, "");
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, double>* distance_map;
 static RecordTable<PathNode>* nodes_record;
-static TypedGlobalTable<int, vector<double> >* nodes;
+static TypedGlobalTable<int, vector<int> >* nodes;
 
 namespace piccolo {
-template<> struct Marshal<vector<double> > : MarshalBase {
-  static void marshal(const vector<double>& t, string *out) {
+template<> struct Marshal<vector<int> > : MarshalBase {
+  static void marshal(const vector<int>& t, string *out) {
     int i;
-    double j;
+    int j;
     int len = t.size();
     out->append((char*) &len, sizeof(int));
     for (i = 0; i < len; i++) {
       j = t[i];
-      out->append((char*) &j, sizeof(double));
+      out->append((char*) &j, sizeof(int));
     }
   }
-  static void unmarshal(const StringPiece &s, vector<double>* t) {
+  static void unmarshal(const StringPiece &s, vector<int>* t) {
     int i;
-    double j;
+    int j;
     int len;
     memcpy(&len, s.data, sizeof(int));
     if (len < 0) LOG(FATAL) << "Unmarshalled vector of size < 0";
     t->clear();
     for (i = 0; i < len; i++) {
-      memcpy(&j, s.data + (i + 1) * sizeof(double), sizeof(double));
+      memcpy(&j, s.data + (i + 1) * sizeof(int), sizeof(int));
       t->push_back(j);
     }
   }
@@ -52,11 +52,13 @@ public:
   }
   bool LongFire(const int key, bool lastrun) {
     double distance = distance_map->get(key);
-    vector<double> thisnode = nodes->get(key);
-    vector<double>::iterator it = thisnode.begin();
+    vector<int> thisnode = nodes->get(key);
+    vector<int>::iterator it = thisnode.begin();
     for (; it != thisnode.end(); it++)
       if ((*it) != key)
+   { if ((*it) < 0) { printf("BAD KEY for neighbor of %d with %d neighbors\n",key,thisnode.size()); } else
         distance_map->update((*it), distance + 1);
+   }
     return false;
   }
 };
@@ -99,10 +101,34 @@ public:
       distance_map->update(0, 0);
     }
   }
+  void dump_adj_to_file() {
+    FILE* fh = fopen("adj_dumpT","w");
+    printf("Dumping Adj data to file\n");
+    
+    for(int i=0; i < nodes->num_shards(); i++) {
+      printf("-- Dumping shard %d...\n",i);
+    TypedGlobalTable<int, vector<int> >::Iterator *it =
+      nodes->get_typed_iterator(i);
+      for(; !it->done(); it->Next()) {
+        //printf("dumping key %d\n",it->key());
+        fprintf(fh,"%d: {",it->key());
+        
+        vector<int>::iterator it2 = (it->value()).begin();
+        for (; it2 != (it->value()).end(); it2++) {
+          fprintf(fh,"%d,",*it2);
+        }
+        fprintf(fh,"}\n");
+      }
+    }
+    fclose(fh);
+
+  }
 };
+
 
 REGISTER_KERNEL(ssspt_kern);
 REGISTER_METHOD(ssspt_kern,ssspt_driver);
+REGISTER_METHOD(ssspt_kern,dump_adj_to_file);
 
 int ShortestPathTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
@@ -113,8 +139,10 @@ int ShortestPathTrigger(const ConfigData& conf) {
     nodes_record = CreateRecordTable<PathNode>(1, "testdata/sp-graph.rec*", false);
   } 
   nodes = CreateTable(2, FLAGS_shards, new Sharding::Mod,
-                      new Accumulators<vector<double> >::Replace);
-  //TriggerID trigid = distance_map->register_trigger(new SSSPTrigger);
+                      new Accumulators<vector<int> >::Replace);
+
+  distance_map->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
+  nodes->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
 
   StartWorker(conf);
   Master m(conf);
@@ -123,9 +151,6 @@ int ShortestPathTrigger(const ConfigData& conf) {
     BuildGraph(FLAGS_shards, FLAGS_tnum_nodes, 4);
     return 0;
   }
-
-  distance_map->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
-  nodes->resize((int)(2.52f*(float)FLAGS_tnum_nodes));
 
   if (!m.restore()) {
 
@@ -143,13 +168,16 @@ int ShortestPathTrigger(const ConfigData& conf) {
 
     //Build adjacency lists by appending RecordTables' contents
     PMap({n: nodes_record}, {
-      vector<double> v;//=nodes->get(n.id());
+      vector<int> v;//=nodes->get(n.id());
       for(int i=0; i < n.target_size(); i++) {
         v.push_back(n.target(i));
         nodes->update(n.id(),v);
       }
     });
   }
+
+  //RunDescriptor pr_dump("ssspt_kern","dump_adj_to_file", nodes);
+  //m.run_one(pr_dump);
 
   //This is actually a kernel-like thing
   PSwapAccumulator(distance_map,{(Trigger<int,double>*)new SSSPTrigger});

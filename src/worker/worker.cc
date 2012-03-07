@@ -435,7 +435,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
       }
     }
   }
-  LOG(INFO) << "State restored. Current epoch is " << epoch_ << ".";
+  LOG(INFO) << "State restored. Current epoch is >= " << epoch << ".";
 }
 
 void Worker::HandlePutRequest() {

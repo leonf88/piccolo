@@ -92,7 +92,7 @@ public:
   }
 
   void Serialize(TableCoder *out, bool tryOptimize = false);
-  void Deserialize(TableCoder *in, bool tryOptimize = false);
+  int64_t Deserialize(TableCoder *in, bool tryOptimize = false);
 
   void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
 
@@ -169,18 +169,22 @@ void SparseTable<K, V>::Serialize(TableCoder *out, bool tryOptimize) {
 }
 
 template <class K, class V>
-void SparseTable<K, V>::Deserialize(TableCoder *in, bool tryOptimize) {
+int64_t SparseTable<K, V>::Deserialize(TableCoder *in, bool tryOptimize) {
   string k,v;
+  int updates = 0;
   if (tryOptimize && boost::is_pod<K>::value && boost::is_pod<V>::value) {
     //optimize!
     CHECK_EQ(true,in->ReadEntry(&k,&v)) << "Failed to read raw table dump!";
     VLOG(1) << "Optimized restore of " << v.length() << " bytes of data";
     memcpy(&(buckets_[0]),v.c_str(),v.length());
+    updates++;
   } else {
     while (in->ReadEntry(&k, &v)) {
       update_str(k, v);
+      updates++;
     }
   }
+  return updates;
 }
 
 template <class K, class V>
@@ -203,6 +207,8 @@ void SparseTable<K, V>::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase
 template <class K, class V>
 void SparseTable<K, V>::resize(int64_t size) {
   CHECK_GT(size, 0);
+  VLOG(1) << "Resizing/rehashing table " << id() << "... " << entries_ << " : " << size_ << " -> " << size;
+
   if (size_ == size)
     return;
 
@@ -218,8 +224,6 @@ void SparseTable<K, V>::resize(int64_t size) {
     old_ltflags.set(i,trigger_flags_.test(i));
 
   int old_entries = entries_;
-
-  VLOG(2) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
 
   buckets_.resize(size);
   size_ = size;
