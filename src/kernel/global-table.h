@@ -617,7 +617,6 @@ void TypedGlobalTable<K, V>::retrigger_start(void) {
 
 template<class K, class V>
 unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
-  VLOG(1) << "All retriggers stopping.";
   if (retrigger_terminate_)
     return 0;
   if (!retrigger_threadcount_) {
@@ -631,6 +630,7 @@ unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
 */				//why??
     return 0;
   } else {
+    VLOG(1) << "All retriggers stopping.";
     boost::mutex::scoped_lock sl(retrigger_mutex());		//Saves us a bit of pain here
     retrigger_termthreads_ = 0;
     retrigger_updates_ = 0;

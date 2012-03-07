@@ -63,6 +63,7 @@ void LocalTable::finish_checkpoint() {
 void LocalTable::restore(const string& f) {
   string k, v;
   int64_t table_capacity;
+  int64_t updates;
   if (!File::Exists(f)) {
     //this is no longer a return-able condition because there might
     //be epochs that are just deltas for continuous checkpointing
@@ -78,8 +79,8 @@ void LocalTable::restore(const string& f) {
     VLOG(1) << "Resizing table to " << table_capacity << " entries for full restore.";
     resize(table_capacity);
 
-    Deserialize(&rf,true);	//tryOptimize = true
-	VLOG(1) << "Restored full snapshot '" << f << "' in " << t.elapsed() << " sec";
+    updates = Deserialize(&rf,true);	//tryOptimize = true
+	VLOG(1) << "Restored full snapshot '" << f << "' with " << updates << " pieces in " << t.elapsed() << " sec";
   }
 
   if (!File::Exists(f + ".bitmap")) {
