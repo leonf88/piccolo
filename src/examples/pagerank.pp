@@ -27,7 +27,7 @@ DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert
 
 static float powerlaw_random(float dmin, float dmax, float n) {
   float r = (float) random() / RAND_MAX;
-  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3) + pow(dmin, n), 1.0 / n);
+  return pow((pow(dmax, n) - pow(dmin, n)) * pow(r, 3.f) + pow(dmin, n), 1.f / n);
 }
 
 static float random_restart_seed() {
