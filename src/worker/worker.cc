@@ -392,7 +392,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
                                 const rpc::RPCInfo& rpc) {
   int epoch = req.epoch();
   boost::recursive_mutex::scoped_lock sl(state_lock_);
-  LOG(INFO) << "Master instructing restore starting at epoch " << epoch << " (and possibly backwards)";
+  VLOG(1) << "Master instructing restore starting at epoch " << epoch << " (and possibly backwards)";
 
   int foundfull = false;
   int finalepoch = epoch;
@@ -401,7 +401,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
     string full_cp_pattern = StringPrintf("%s/epoch_%05d/*.???\?\?-of-?????",FLAGS_checkpoint_read_dir.c_str(),epoch);
     std::vector<string> full_cps = File::MatchingFilenames(full_cp_pattern);
     if (full_cps.empty()) {
-      LOG(INFO) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
+      VLOG(1) << "Stepping backwards from epoch " << epoch << ", which has only deltas.";
       epoch--;
     } else foundfull = true;
   } while (epoch > 0 && !foundfull);
@@ -424,7 +424,7 @@ void Worker::HandleStartRestore(const StartRestore& req, EmptyMessage* resp,
       } while (--epoch_ >= 0);
       if (epoch_ >= 0) {
         do {
-          LOG(INFO) << "Worker restoring state from epoch: " << epoch_;
+          VLOG(1) << "Worker restoring state from epoch: " << epoch_;
               t->restore(
                   StringPrintf("%s/epoch_%05d/checkpoint.table-%d",
                                FLAGS_checkpoint_read_dir.c_str(), epoch_, i->first));
