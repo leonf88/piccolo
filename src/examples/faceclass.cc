@@ -298,12 +298,12 @@ public:
       }
     }
     float whichmodelperf = (cum_perf) * ((float) rand() / (float) RAND_MAX);
-//			printf("\nPicked 0 <= %f <= %f\n",whichmodelperf,cum_perf);
+//                  printf("\nPicked 0 <= %f <= %f\n",whichmodelperf,cum_perf);
     vector<int>::iterator it1 = indices.begin();
     vector<double>::iterator it2 = perfs.begin();
     for (; it1 < indices.end() && it2 < perfs.end(); it1++, it2++) {
       if (whichmodelperf <= *it2) {
-//					printf("%d->%f; ",*it1,*it2);
+//                              printf("%d->%f; ",*it1,*it2);
         whichtable = *it1;
         if (0 > (net = TableToBPNN(whichtable))) {
           fprintf(stderr, "Fatal error: could not load bpnn from table\n");
@@ -313,7 +313,7 @@ public:
       }
     }
 
-//			printf("Shard %d picked model %d\n",current_shard(),whichtable);
+//                  printf("Shard %d picked model %d\n",current_shard(),whichtable);
 
     TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(
         current_shard(), PREFETCH);
@@ -336,7 +336,7 @@ public:
           net->hidden_weights, net->hidden_units, &hid_err);
 
       /*** Adjust input and hidden weights. ***/
-//				double thiseta = FLAGS_eta/(double)train_ims->num_shards();
+//                        double thiseta = FLAGS_eta/(double)train_ims->num_shards();
       double thiseta = FLAGS_eta;
       bpnn.bpnn_adjust_weights(net->output_delta, 1, net->hidden_units, hiddenn,
           net->hidden_weights, net->hidden_prev_weights, thiseta,
@@ -346,7 +346,7 @@ public:
           FLAGS_momentum);
     }
 
-//			printf("Current shard is %d\n",current_shard());
+//                  printf("Current shard is %d\n",current_shard());
     nn_models->update(current_shard(), *net);
     nn_models->SendUpdates();
     //bpnn.bpnn_free(net,false);
@@ -370,7 +370,7 @@ public:
           imnet.load_input_with_image(&thisimg, net); //load the input layer
           bpnn.bpnn_feedforward(net);
           imnet.load_target(&thisimg, net); //load target output layer
-          //					performance->update(1,err);							//accumulate more error
+          //                              performance->update(1,err);                                          //accumulate more error
 
           classed = (net->output_units[1] > 0.5);
           classed = (net->target[1] > 0.5) ? classed : !classed;
@@ -379,7 +379,7 @@ public:
         //bpnn.bpnn_free(net,false);
       }
     }
-//			printf("Got %d of %d images\n",correctims,ims);
+//                  printf("Got %d of %d images\n",correctims,ims);
     performance->SendUpdates();
 
     //This part is like swap()
