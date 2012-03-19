@@ -1,7 +1,7 @@
 all: configure
 	cd src && ./waf.py build
 
-configure:
+configure: src/wscript
 	cd src && ./waf.py configure
 
 clean: 

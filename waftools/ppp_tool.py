@@ -5,7 +5,7 @@ from waflib import Logs
 from waflib import TaskGen
 TaskGen.declare_chain(
         name='ppp',
-        rule='${PPP} ${SRC} ${TGT}',
+        rule='${PPP} ${SRC} > ${TGT}',
         shell=False,
         ext_in='.pp',
         ext_out='.cc',

@@ -1,6 +1,8 @@
 #ifndef FILE_H_
 #define FILE_H_
 
+#include "piccolo-config.h"
+
 #include "boost/noncopyable.hpp"
 #include "util/common.h"
 #include "util/common.pb.h"
@@ -10,11 +12,14 @@
 #include <vector>
 
 #include <glob.h>
-#include <lzo/lzo1x.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef HAVE_LZO
+#include <lzo/lzo1x.h>
+#endif
 
 namespace google { namespace protobuf { class Message; } }
 
@@ -172,6 +177,7 @@ public:
   }
 };
 
+#ifdef HAVE_LZO
 class LZOFile : public File, private boost::noncopyable {
 public:
   LZOFile(const std::string& fname, const std::string& mode) {
@@ -231,6 +237,7 @@ private:
 
   Block block;
 };
+#endif
 
 class RecordFile {
 public:
