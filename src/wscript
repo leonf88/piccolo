@@ -231,7 +231,7 @@ def build(bld):
   build_example('test-tables', ['test-tables.cc', ])
   build_example('test-tables2', ['test-tables2.cc', ])
   build_example('wordcount', ['wordcount.pp', ])
-  build_example('faceclass', ['facedet/cpp/pgmimage.c',
+  build_example('faceclass', ['imglib/pgmimage.cpp',
                                'facedet/cpp/imagenet.cpp',
                                'facedet/cpp/backprop.cpp',
                                'faceclass.cc', ])

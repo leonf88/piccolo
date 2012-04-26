@@ -1,9 +1,8 @@
 #include "client/client.h"
 #include "examples/examples.pb.h"
 
-extern "C" {
-#include "facedet/cpp/pgmimage.h"
-}
+#include "imglib/pgmimage.h"
+
 #include "facedet/cpp/backprop.hpp"
 #include "facedet/cpp/imagenet.hpp"
 
@@ -39,7 +38,7 @@ DEFINE_double(momentum, 0.3, "Momentum of BPNN");
 
 static TypedGlobalTable<int, BPNN>* nn_models = NULL;
 static TypedGlobalTable<int, BPNN>* nn_prev_models = NULL;
-static TypedGlobalTable<int, IMAGE>* train_ims = NULL;
+static TypedGlobalTable<int, image>* train_ims = NULL;
 static TypedGlobalTable<int, double>* performance = NULL;
 
 //-----------------------------------------------
@@ -92,42 +91,36 @@ template<> struct Marshal<BPNN> : MarshalBase {
 // Marshalling for IMAGE* type
 //-----------------------------------------------
 namespace piccolo {
-template<> struct Marshal<IMAGE> : MarshalBase {
-  static void marshal(const IMAGE& t, string *out) {
-    char sizes[4];
+template<> struct Marshal<image> : MarshalBase {
+  static void marshal(const image& t, string *out) {
+    short int sizes[2];
     out->clear();
-    sizes[0] = (char) ((t.rows) / 256);
-    sizes[1] = (char) ((t.rows) % 256);
-    sizes[2] = (char) ((t.cols) / 256);
-    sizes[3] = (char) ((t.cols) % 256);
-    out->append(sizes, 4);
-    out->append((char*) (t.data), sizeof(int) * (t.rows) * (t.cols));
-    sizes[0] = (char) (((strlen(t.name)) > 256) ? 256 : (strlen(t.name)));
-    out->append(sizes, 1);
-    out->append((char*) (t.name), (int) sizes[0]);
+    sizes[0] = (short int)t.rows();
+    sizes[1] = (short int)t.cols();
+    out->append((char*)sizes, 2*sizeof(short int));
+    out->append((char*)(t.raw()), sizeof(int) * (t.rows()) * (t.cols()));
+    sizes[0] = (short int)(t.name().length())+1;
+    out->append((char*)sizes, sizeof(short int));
+    out->append((char*) (t.name().c_str()), (int) sizes[0]);
     VLOG(3)
-        << "Marshalled image " << t.name << " to string of size "
+        << "Marshalled image " << t.name() << " to string of size "
             << out->length();
   }
-  static void unmarshal(const StringPiece &s, IMAGE* t) {
-    int r, c, sl;
-    r = (256 * (unsigned int) (s.data[0])) + (unsigned int) (s.data[1]);
-    c = (256 * (unsigned int) (s.data[2])) + (unsigned int) (s.data[3]);
-    t->rows = r;
-    t->cols = c;
-    if (NULL == (t->data = (int*) malloc(sizeof(int) * r * c))) {
-      fprintf(stderr, "Failed to marshal an image: out of memory.\n");
-      exit(-1);
-    }
-    memcpy(t->data, s.data + 4, sizeof(int) * r * c);
-    sl = (unsigned int) (s.data[4 + sizeof(int) * r * c]);
-    if (NULL == (t->name = (char*) malloc(sl + 1))) {
-      fprintf(stderr, "Failed to marshal an image: out of memory.\n");
-      exit(-1);
-    }
-    strncpy(t->name, s.data + 5 + sizeof(int) * r * c, sl);
-    t->name[sl] = '\0';
-    VLOG(3) << "Unmarshalled image " << t->name << " from string";
+  static void unmarshal(const StringPiece &s, image* t) {
+    int r, c;
+    char tempname[2048];
+
+    r = (int)((short int*)(s.data))[0];
+    c = (int)((short int*)(s.data))[1];
+
+    int nameoffset = (2*sizeof(short int)) + (sizeof(int) * r * c);
+    //size_t namelen = *((short int *)(((char*)s.data) + nameoffset));
+    strncpy(tempname,((char*)s.data) + nameoffset + sizeof(short int),2047);
+    string tempstrname(tempname);
+
+    t->realloc(tempstrname,r,c);
+    memcpy(t->raw(), s.data + 2*sizeof(short int), sizeof(int) * r * c);
+    VLOG(3) << "Unmarshalled image " << tempstrname << " from string";
   }
 };
 }
@@ -156,8 +149,8 @@ public:
 
   void Initialize() {
     string netname, pathpn, infopn;
-    IMAGELIST *trainlist;
-    IMAGE *iimg;
+    imagelist *trainlist;
+    image *iimg;
     int seed;
     int train_n, i, j;
 
@@ -166,59 +159,52 @@ public:
     netname = FLAGS_netname;
     pathpn = FLAGS_pathpn;
     infopn = FLAGS_infopn;
-    fprintf(stdout, "Initialize kernel invoked.\n");
+    LOG(INFO) << "Initialize kernel invoked.";
 
     /*** Create imagelists ***/
-    trainlist = imgl_alloc();
+    trainlist = new imagelist();
 
     /*** Don't try to train if there's no training data ***/
     if (infopn.length() == 0 || pathpn.length() == 0) {
-      fprintf(stderr,
-          "FaceClass: Must specify path and filename of training data\n");
-      exit(-1);
+      LOG(FATAL) << "FaceClass: Must specify path and filename of training data";
     }
 
     /*** Loading training images ***/
-    imgl_load_images_from_infofile(trainlist, pathpn.c_str(), infopn.c_str());
+    trainlist->load_from_infofile(pathpn, infopn);
 
     /*** If we haven't specified a network save file, we should... ***/
     if (netname.length() == 0) {
-      fprintf(stderr, "Faceclass: Must specify an output file\n");
-      exit(-1);
+      LOG(FATAL) << "Faceclass: Must specify an output file";
     }
 
     /*** Initialize the neural net package ***/
     bpnn.bpnn_initialize(seed);
 
     /*** Show number of images in train, test1, test2 ***/
-    fprintf(stdout, "%d images in training set\n", trainlist->n);
+    fprintf(stdout, "%d images in training set\n", trainlist->images());
 
     /*** If we've got at least one image to train on, go train the net ***/
-    train_n = trainlist->n;
-    if (train_n <= 0) {
-      fprintf(stderr,
-          "FaceClass: Must have at least one image to train from\n");
-      exit(-1);
-    }
+    train_n = trainlist->images();
+    CHECK_GT(train_n,0) << "FaceClass: Must have at least one image to train from";
 
     /*** Turn the IMAGELIST into a database of images, ie,  TypedGlobalTable<int, IMAGE>* train_ims ***/
-    train_ims->resize(trainlist->n);
-    for (i = 0; i < trainlist->n; i++) {
-      train_ims->update(i, *(trainlist->list[i]));
+    train_ims->resize(train_n);
+    for (i = 0; i < train_n; i++) {
+      train_ims->update(i, *trainlist->getimage(i));
     }
     train_ims->SendUpdates();
 
     /*** If requested, grab all the images out again and make sure they're correct ***/
     if (FLAGS_verify == true) {
       int goodims = 0;
-      for (i = 0; i < trainlist->n; i++) {
-        IMAGE testim = train_ims->get(i);
-        if (testim.rows == (trainlist->list[i])->rows
-            && testim.cols == (trainlist->list[i])->cols) {
-          if (!strcmp(testim.name, (trainlist->list[i])->name)) {
+      for (i = 0; i < train_n; i++) {
+        image testim = train_ims->get(i);
+        if (testim.rows() == (trainlist->getimage(i))->rows()
+            && testim.cols() == (trainlist->getimage(i))->cols()) {
+          if (testim.name() == ((trainlist->getimage(i))->name())) {
             int immatch = 0;
-            for (j = 0; j < (testim.rows * testim.cols); j++) {
-              if (testim.data[j] != (trainlist->list[i])->data[j]) {
+            for (j = 0; j < (testim.rows() * testim.cols()); j++) {
+              if (testim.raw()[j] != (trainlist->getimage(i))->raw()[j]) {
                 immatch++;
                 break;
               }
@@ -227,7 +213,7 @@ public:
               fprintf(
                   stderr,
                   "[Verify] Image %d did not match image data in DB (%d/%d pixels mismatched)\n",
-                  i, immatch, (testim.rows * testim.cols));
+                  i, immatch, (testim.rows() * testim.cols()));
             } else {
               goodims++;
             }
@@ -240,22 +226,22 @@ public:
             fprintf(
                 stderr,
                 "[Verify] Image %d has incorrect dimensions in DB (got %dx%d, expected %dx%d)\n",
-                i, testim.cols, testim.rows, (trainlist->list[i])->cols,
-                (trainlist->list[i])->rows);
+                i, testim.cols(), testim.rows(), (trainlist->getimage(i))->cols(),
+                (trainlist->getimage(i))->rows());
           } else {
             fprintf(stderr, "[Verify] Image key %d not found in DB!\n", i);
           }
         }
       }
       printf("[Verify] %d of %d images matched correctly in the DB\n", goodims,
-          trainlist->n);
+          train_n);
     }
 
     /*** Read network in if it exists, otherwise make one from scratch ***/
     if ((net = bpnn.bpnn_read(netname.c_str())) == NULL) {
       printf("Creating new network '%s'\n", netname.c_str());
-      iimg = trainlist->list[0];
-      imgsize = ROWS(iimg) * COLS(iimg);
+      iimg = trainlist->getimage(0);
+      imgsize = iimg->rows() * iimg->cols();
       /* bthom ===========================
        make a net with:
        imgsize inputs, N hidden units, and 1 o      utput unit
@@ -315,10 +301,10 @@ public:
 
 //			printf("Shard %d picked model %d\n",current_shard(),whichtable);
 
-    TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(
+    TypedTableIterator<int, image> *it = train_ims->get_typed_iterator(
         current_shard(), PREFETCH);
     for (; !it->done(); it->Next()) {
-      IMAGE thisimg = it->value(); //grab this image
+      image thisimg = it->value(); //grab this image
 
       imnet.load_input_with_image(&thisimg, net); //load the input layer
       imnet.load_target(&thisimg, net); //load target output layer
@@ -361,11 +347,11 @@ public:
           fprintf(stderr, "Fatal error: could not load bpnn from table\n");
           exit(-1);
         }
-        TypedTableIterator<int, IMAGE> *it = train_ims->get_typed_iterator(j,
+        TypedTableIterator<int, image> *it = train_ims->get_typed_iterator(j,
             PREFETCH);
 
         for (; !it->done(); it->Next()) {
-          IMAGE thisimg = it->value(); //grab this image
+          image thisimg = it->value(); //grab this image
 
           imnet.load_input_with_image(&thisimg, net); //load the input layer
           bpnn.bpnn_feedforward(net);
@@ -441,7 +427,7 @@ int Faceclass(const ConfigData& conf) {
   nn_prev_models = CreateTable(1, imageshards, new Sharding::Mod,
       new Accumulators<BPNN>::Replace);
   train_ims = CreateTable(2, imageshards, new Sharding::Mod,
-      new Accumulators<IMAGE>::Replace);
+      new Accumulators<image>::Replace);
   performance = CreateTable(3, imageshards, new Sharding::Mod,
       new Accumulators<double>::Sum);
 
