@@ -79,7 +79,7 @@ public:
       leftmatches->enqueue_update(newvalue, -1);
       *doUpdate = false;
       return;
-      //		return false;
+      //            return false;
     } else {
       //Else this match is acceptable.  Set new cost.
 #ifdef DEBUGOUT
@@ -91,7 +91,7 @@ public:
     *value = newvalue;
     *doUpdate = true;
     return;
-//			return true;
+//                  return true;
   }
 
   //No longfire
@@ -156,7 +156,7 @@ public:
         *value = newvalue;
         *doUpdate = true;
         return;
-//					return true;
+//                              return true;
       }
 
       rightmatches->enqueue_update(j, *key);
@@ -166,7 +166,7 @@ public:
 #endif
       *doUpdate = false;
       return;
-//				return false;
+//                        return false;
     }
 
     //It was not a denial; store it.
@@ -176,7 +176,7 @@ public:
 #endif
     *doUpdate = true;
     return;
-//			return true;
+//                  return true;
   }
 
   //No longfire
@@ -309,8 +309,8 @@ public:
     }
   }
 
-		void EvalPerformance() {
-			int left_matched=0, right_matched=0;
+            void EvalPerformance() {
+                  int left_matched=0, right_matched=0;
 
     for (int i = 0; i < leftmatches->num_shards(); i++) {
       TypedTableIterator<int, int> *it = leftmatches->get_typed_iterator(
@@ -323,9 +323,9 @@ public:
       }
     }
 
-			printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_tleft_vertices);
-			printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_tright_vertices);
-		}
+                  printf("Performance: [LEFT]  %d of %d matched.\n",left_matched,FLAGS_tleft_vertices);
+                  printf("Performance: [RIGHT] %d of %d matched.\n",right_matched,FLAGS_tright_vertices);
+            }
 
   void EnableTriggers() {
     leftmatches->swap_accumulator((Trigger<int, int>*) new LeftTrigger);
@@ -362,8 +362,8 @@ int Bipartmatch_trigger(const ConfigData& conf) {
   rightcosts = CreateTable(4, conf.num_workers(), new Sharding::Mod,
       new Accumulators<int>::Replace);
 
-//	TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
-//	TriggerID lefttriggerid = leftmatches->register_trigger(new LeftTrigger);
+//      TriggerID matchreqid = rightmatches->register_trigger(new MatchRequestTrigger);
+//      TriggerID lefttriggerid = leftmatches->register_trigger(new LeftTrigger);
 
   StartWorker(conf);
   Master m(conf);
@@ -373,8 +373,8 @@ int Bipartmatch_trigger(const ConfigData& conf) {
       NUM_WORKERS);
 
   //Disable triggers
-//	m.enable_trigger(matchreqid,2,false);
-//	m.enable_trigger(lefttriggerid,1,false);
+//      m.enable_trigger(matchreqid,2,false);
+//      m.enable_trigger(lefttriggerid,1,false);
 
   if (!m.restore()) {
     //Fill in all necessary keys

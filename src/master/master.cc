@@ -638,7 +638,7 @@ void Master::assign_tables() {
   TableRegistry::Map &tables = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tables.begin(); i != tables.end(); ++i) {
     if (!i->second->num_shards()) {
-	  VLOG(2) << "Note: assigning tables; table " << i->first << " has no shards.";
+        VLOG(2) << "Note: assigning tables; table " << i->first << " has no shards.";
     }
     for (int j = 0; j < i->second->num_shards(); ++j) {
       assign_worker(i->first, j);
@@ -795,7 +795,7 @@ void Master::enable_trigger(const TriggerID triggerid, int table, bool enable) {
     WorkerState& w = *workers_[i];
     trigreq.set_trigger_id(triggerid);
     trigreq.set_table(table);
-	trigreq.set_enable(enable);
+      trigreq.set_enable(enable);
     network_->Send(w.id + 1, MTYPE_ENABLE_TRIGGER, trigreq);
   }
 
@@ -888,7 +888,7 @@ void Master::barrier() {
     size_t applied = 0;
     FlushResponse done_msg;
     while (flushed < workers_.size()) {
-	  VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
+        VLOG(3) << "Waiting for flush responses (" << flushed << " received)" << endl;
       if (network_->TryRead(rpc::ANY_SOURCE,
                             MTYPE_FLUSH_RESPONSE,
                             &done_msg,
@@ -920,7 +920,7 @@ void Master::barrier() {
 
     EmptyMessage apply_msg;
     while (applied < workers_.size()) {
-	  VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
+        VLOG(3) << "Waiting for apply responses (" << applied << " received)" << endl;
       if (network_->TryRead(rpc::ANY_SOURCE, MTYPE_WORKER_APPLY_DONE, &apply_msg, &worker_id)) {
         applied++;
         VLOG(2) << "Received apply done " << applied << " of " << workers_.size();
@@ -973,7 +973,7 @@ void Master::barriertasks() {
 
   //need to keep checkpointing alive
   if (current_run_.checkpoint_type == CP_CONTINUOUS && Now() > start_deltacheckpoint_ + FLAGS_mintime_ccp_delta) {
-	finish_checkpoint();
+      finish_checkpoint();
   }
 
 }

@@ -1,6 +1,8 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include "piccolo-config.h"
+
 #include "glog/logging.h"
 #include "google/gflags.h"
 #include <google/protobuf/message.h>

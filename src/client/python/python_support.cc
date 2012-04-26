@@ -149,7 +149,7 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
   }
   try {
     retval = PyObject_CallFunctionObjArgs(
-		callable, key, cur_obj, upd_obj, isnew_obj, NULL);
+            callable, key, cur_obj, upd_obj, isnew_obj, NULL);
     Py_DECREF(callable);
   } catch (error_already_set& e) {
     PyErr_Print();
@@ -192,7 +192,7 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
   }
   try {
     retval = PyObject_CallFunctionObjArgs(
-		callable, key, cur_obj, upd_obj, isnew_obj, NULL);
+            callable, key, cur_obj, upd_obj, isnew_obj, NULL);
     Py_DECREF(callable);
   } catch (error_already_set& e) {
     PyErr_Print();

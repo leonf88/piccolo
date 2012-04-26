@@ -32,7 +32,9 @@ int main() {
 '''
 
 def configure(conf):
+  conf.start_msg('Checking for required protocol buffer version.')
   conf.check(features='cxx cxxprogram',
-           fragment=PROTOBUF_FRAGMENT,
-           lib='protobuf pthread')
+             fragment=PROTOBUF_FRAGMENT,
+             lib='protobuf pthread')
+  conf.end_msg(True)
 
