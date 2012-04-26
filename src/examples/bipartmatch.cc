@@ -26,10 +26,10 @@ static TypedGlobalTable<string, string>* StatsTable = NULL;
 //-----------------------------------------------
 namespace piccolo {
 struct RightMatchSet: public Accumulator<int> {
-  virtual ~RightMatchSet() {}
+  virtual ~RightMatchSet() {
+  }
   void Accumulate(int *i, const int &j) {
-    if (*i == -1)
-      *i = j;
+    if (*i == -1) *i = j;
     return;
   }
 };
@@ -60,7 +60,8 @@ template<> struct Marshal<vector<int> > : MarshalBase {
 //-----------------------------------------------
 class BPMKernel: public DSMKernel {
 public:
-  virtual ~BPMKernel() {}
+  virtual ~BPMKernel() {
+  }
   void InitTables() {
     vector<int> v; //for left nodes' neighbors
 
@@ -127,8 +128,7 @@ public:
 
       //only try to match if this left node is unmatched and has candidate right nodes,
       //represented respectively by leftmatches == -1 and v/v2 having >0 items.
-      if (v.size() <= 0 || it3->value() != -1)
-        continue;
+      if (v.size() <= 0 || it3->value() != -1) continue;
 
       //don't stop until nothing happens in a round
       quiescent = false;
@@ -141,9 +141,7 @@ public:
       j = (j >= v.size()) ? v.size() - 1 : j;
       j = v[j];
 
-      VLOG(2)
-          << "Attempted match: left " << it->key() << " <--> right " << j
-             ;
+      VLOG(2) << "Attempted match: left " << it->key() << " <--> right " << j;
 
       rightmatches->update(j, it->key());
       leftattemptmatches->update(it->key(), j);
@@ -159,41 +157,40 @@ public:
     TypedTableIterator<int, int> *it = rightmatches->get_typed_iterator(
         current_shard());
     for (; !it->done(); it->Next()) {
-      if (it->value() != -1)
-        leftmatches->update(it->value(), it->key());
+      if (it->value() != -1) leftmatches->update(it->value(), it->key());
     }
   }
 
-		void BPMRoundCleanupLeft() {
-			int i=0;
-			TypedTableIterator<int,int> *it =
-				 leftmatches->get_typed_iterator(current_shard());
-			TypedTableIterator<int,int> *it2 =
-				 leftattemptmatches->get_typed_iterator(current_shard());
-			TypedTableIterator<int,vector<int> > *it3 =
-				 leftoutedges->get_typed_iterator(current_shard());
-			for(; !it->done() && !it2->done() && !it3->done(); it->Next(), it2->Next(), it3->Next()) {
-				CHECK_EQ(it->key(),it2->key());
-				CHECK_EQ(it2->key(),it3->key());
-				//tried to set but got denied
-				if (it->value() == -1 && it2->value() != -1) {
-					vector<int> v = it3->value();
-					vector<int>::iterator it = find(v.begin(), v.end(), it2->value());
-					if (it != v.end()) {
-						v.erase(it);
-						leftattemptmatches->update(it2->key(),-1);
-						leftoutedges->update(it3->key(),v);
-						i++;
-					} else
-						LOG(FATAL) << "Cleanup failed!";
-				}
-			}
-			VLOG(2) << "Cleaned up " << i << " left nodes.";
-		}
-			
+  void BPMRoundCleanupLeft() {
+    int i = 0;
+    TypedTableIterator<int, int> *it = leftmatches->get_typed_iterator(
+        current_shard());
+    TypedTableIterator<int, int> *it2 = leftattemptmatches->get_typed_iterator(
+        current_shard());
+    TypedTableIterator<int, vector<int> > *it3 = leftoutedges
+        ->get_typed_iterator(current_shard());
+    for (; !it->done() && !it2->done() && !it3->done();
+        it->Next(), it2->Next(), it3->Next()) {
+      CHECK_EQ(it->key(), it2->key());
+      CHECK_EQ(it2->key(), it3->key());
+      //tried to set but got denied
+      if (it->value() == -1 && it2->value() != -1) {
+        vector<int> v = it3->value();
+        vector<int>::iterator it = find(v.begin(), v.end(), it2->value());
+        if (it != v.end()) {
+          v.erase(it);
+          leftattemptmatches->update(it2->key(), -1);
+          leftoutedges->update(it3->key(), v);
+          i++;
+        } else
+        LOG(FATAL) << "Cleanup failed!";
+      }
+    }
+    VLOG(2) << "Cleaned up " << i << " left nodes.";
+  }
 
-		void EvalPerformance() {
-			int left_matched=0, right_matched=0;
+  void EvalPerformance() {
+    int left_matched = 0, right_matched = 0;
 
     for (int i = 0; i < leftmatches->num_shards(); i++) {
       TypedTableIterator<int, int> *it = leftmatches->get_typed_iterator(
@@ -207,9 +204,9 @@ public:
     }
 
     printf("Performance: [LEFT]  %d of %d matched.\n", left_matched,
-        FLAGS_left_vertices);
+           FLAGS_left_vertices);
     printf("Performance: [RIGHT] %d of %d matched.\n", right_matched,
-        FLAGS_right_vertices);
+           FLAGS_right_vertices);
   }
 };
 
@@ -226,21 +223,21 @@ REGISTER_METHOD(BPMKernel, EvalPerformance);
 int Bipartmatch(const ConfigData& conf) {
 
   leftoutedges = CreateTable(0, conf.num_workers(), new Sharding::Mod,
-      new Accumulators<vector<int> >::Replace);
+                             new Accumulators<vector<int> >::Replace);
   leftmatches = CreateTable(1, conf.num_workers(), new Sharding::Mod,
-      new Accumulators<int>::Replace);
+                            new Accumulators<int>::Replace);
   leftattemptmatches = CreateTable(2, conf.num_workers(), new Sharding::Mod,
-      new Accumulators<int>::Replace);
+                                   new Accumulators<int>::Replace);
   rightmatches = CreateTable(3, conf.num_workers(), new Sharding::Mod,
-      new RightMatchSet);
+                             new RightMatchSet);
   StatsTable = CreateTable(10000, 1, new Sharding::String,
-      new Accumulators<string>::Replace); //CreateStatsTable();
+                           new Accumulators<string>::Replace); //CreateStatsTable();
 
   StartWorker(conf);
   Master m(conf);
 
   if (FLAGS_edge_costs)
-    LOG(FATAL) << "Edges with costs not properly implemented";
+  LOG(FATAL) << "Edges with costs not properly implemented";
 
   NUM_WORKERS = conf.num_workers();
   printf("---- Initializing Bipartmatch on %d workers ----\n", NUM_WORKERS);
@@ -264,8 +261,7 @@ int Bipartmatch(const ConfigData& conf) {
     for (int i = 0; i < conf.num_workers(); i++) {
       char qkey[32];
       sprintf(qkey, "quiescent%d", i);
-      if (0 == strcmp(StatsTable->get(qkey).c_str(), "f"))
-        unstable = true;
+      if (0 == strcmp(StatsTable->get(qkey).c_str(), "f")) unstable = true;
     }
     invocations++;
   } while (unstable);

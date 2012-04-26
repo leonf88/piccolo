@@ -33,23 +33,28 @@ class Scanner(object):
   id = compile(r'([a-zA-Z][a-z0-9_]*)', name='identifier')
 
   def __init__(self, f):
-    self._f = f
-    self._d = open(f).read()
-    self._out = ''
+    self.file = f
+    self.content = open(f).read()
+    self.output = ''
     self.line = 1
     self.offset = 0
     self._stack = []
 
+  def code_prefix(self):
+    filename = os.path.basename(self.file)
+    prefix = os.path.splitext(filename)[0]
+    return re.sub(r'\W', '_', prefix)
+
   def update(self, g, update_pos):
     if update_pos:
-      self._out += self._d[:g.start()]
+      self.output += self.content[:g.start()]
       s = g.end()
 
       # this is horrible...
-      self.line += self._d.count('\n', 0, s)
-      self.offset = s - self._d.rfind('\n', 0, s)
+      self.line += self.content.count('\n', 0, s)
+      self.offset = s - self.content.rfind('\n', 0, s)
 
-      self._d = self._d[g.end():]
+      self.content = self.content[g.end():]
 
 
   def slurp(self, *patterns):
@@ -58,21 +63,21 @@ class Scanner(object):
       matched = False
       for p in patterns:
         p = compile(p)
-        g = p.match(self._d)
+        g = p.match(self.content)
         if g:
           matched = True
           self.update(g, True)
 
   def match(self, pattern, update_pos=True, must_match=True):
-    g = compile(pattern).match(self._d)
+    g = compile(pattern).match(self.content)
     if not g and must_match:
       raise ValueError, 'Expected `%s\' in input at line %d (offset %d), "...%s...", while parsing:\n >>>%s' % \
-                        (pattern, self.line, self.offset, self._d[:20], '\n >>>'.join([s[0] for s in self._stack]))
+                        (pattern, self.line, self.offset, self.content[:20], '\n >>>'.join([s[0] for s in self._stack]))
     self.update(g, update_pos)
     return g
 
   def search(self, pattern, update_pos=True):
-    g = compile(pattern).search(self._d)
+    g = compile(pattern).search(self.content)
     if g: self.update(g, update_pos)
     return g
 
@@ -100,9 +105,9 @@ using namespace piccolo;
 '''
 
 MAP_KERNEL = '''
-class %(prefix)sMapKernel%(id)s : public DSMKernel {
+class %(prefix)s_Map_%(id)s : public DSMKernel {
 public:
-  virtual ~%(prefix)sMapKernel%(id)s() {}
+  virtual ~%(prefix)s_Map_%(id)s() {}
   template <class K, %(klasses)s>
   void run_iter(const K& k, %(decl)s) {
 #line %(line)s "%(filename)s"
@@ -123,36 +128,36 @@ public:
   }
 };
 
-REGISTER_KERNEL(%(prefix)sMapKernel%(id)s);
-REGISTER_METHOD(%(prefix)sMapKernel%(id)s, map);
+REGISTER_KERNEL(%(prefix)s_Map_%(id)s);
+REGISTER_METHOD(%(prefix)s_Map_%(id)s, map);
 '''
 
 RUN_KERNEL = '''
-class %(prefix)sRunKernel%(id)s : public DSMKernel {
+class %(prefix)s_Run_%(id)s : public DSMKernel {
 public:
-  virtual ~%(prefix)sRunKernel%(id)s () {}
+  virtual ~%(prefix)s_Run_%(id)s () {}
   void run() {
 #line %(line)s "%(filename)s"
       %(code)s;
   }
 };
 
-REGISTER_KERNEL(%(prefix)sRunKernel%(id)s);
-REGISTER_METHOD(%(prefix)sRunKernel%(id)s, run);
+REGISTER_KERNEL(%(prefix)s_Run_%(id)s);
+REGISTER_METHOD(%(prefix)s_Run_%(id)s, run);
 '''
 
 SWAP_ACCUM = '''
-class %(prefix)sSwapAccumKernel%(id)s : public DSMKernel_Swap {
+class %(prefix)s_Swap_%(id)s : public DSMKernel_Swap {
 public:
-  virtual ~%(prefix)sSwapAccumKernel%(id)s () {}
+  virtual ~%(prefix)s_Swap_%(id)s () {}
   void swap() {
 #line %(line)s "%(filename)s"
       %(code)s;
   }
 };
 
-REGISTER_KERNEL(%(prefix)sSwapAccumKernel%(id)s);
-REGISTER_METHOD(%(prefix)sSwapAccumKernel%(id)s, swap);
+REGISTER_KERNEL(%(prefix)s_Swap_%(id)s);
+REGISTER_METHOD(%(prefix)s_Swap_%(id)s, swap);
 '''
 
 class Counter(object):
@@ -194,14 +199,10 @@ def ParsePMap(s):
   s.push('ParsePMap')
   _, keys, _, code, _ = s.read(r'\(', '{'), ParseKeys(s), s.read('}', ','), ParseCode(s), s.read(r'\)', ';')
 
-
-  filename = s._f
-  prefix = re.sub(r'[\W]', 'P_', filename)
-
   id = get_id()
   main_table = keys[0][1]
 
-  s._out += 'm.run_all("%sMapKernel%d", "map", %s);' % (prefix, id, main_table)
+  s.output += 'm.run_all("%s_Map_%d", "map", %s);' % (s.code_prefix(), id, main_table)
 
   i = 0
   klasses, decls, calls = [], [], []
@@ -215,8 +216,8 @@ def ParsePMap(s):
       calls += ['%s->get(it->key())' % v]
     i += 1
 
-  s._d += MAP_KERNEL % dict(filename=filename,
-                            prefix=prefix,
+  s.content += MAP_KERNEL % dict(filename=s.file,
+                            prefix=s.code_prefix(),
                             line=s._stack[-1][1],
                             id=id,
                             decl=','.join(decls),
@@ -231,14 +232,11 @@ def ParsePRunOne(s):
   s.push('ParsePRunOne')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
 
-  filename = s._f
-  prefix = re.sub(r'[\W]', '_', filename)
-
   id = get_id()
-  s._out += 'm.run_one("%sRunKernel%d", "run", %s);' % (prefix, id, table)
+  s.output += 'm.run_one("%s_Run_%d", "run", %s);' % (s.code_prefix(), id, table)
 
-  s._d += RUN_KERNEL % dict(filename=filename,
-                            prefix=prefix,
+  s.content += RUN_KERNEL % dict(filename=s.file,
+                            prefix=s.code_prefix(),
                             line=s._stack[-1][1],
                             id=id,
                             code=code) + '\n'
@@ -249,14 +247,11 @@ def ParsePRunAll(s):
   s.push('ParsePRunAll')
   _, table, _, code, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
 
-  filename = s._f
-  prefix = re.sub(r'[\W]', '_', filename)
-
   id = get_id()
-  s._out += 'm.run_all("%sRunKernel%d", "run", %s);' % (prefix, id, table)
+  s.output += 'm.run_all("%s_Run_%d", "run", %s);' % (s.code_prefix(), id, table)
 
-  s._d += RUN_KERNEL % dict(filename=filename,
-                            prefix=prefix,
+  s.content += RUN_KERNEL % dict(filename=s.file,
+                            prefix=s.code_prefix() ,
                             line=s._stack[-1][1],
                             id=id,
                             code=code) + '\n'
@@ -267,15 +262,12 @@ def ParsePSwapAccumulator(s):
   s.push('ParsePSwapAccumulator')
   _, table, _, accum, _ = s.read(r'\(',), s.read(Scanner.id)[0], s.read(','), ParseCode(s), s.read(r'\)', ';')
 
-  code = table+'->swap_accumulator('+accum+');'
-
-  filename = s._f
-  prefix = re.sub(r'[\W]', '_', filename)
+  code = table + '->swap_accumulator(' + accum + ');'
 
   id = get_id()
-  s._out += 'm.run_all("%sSwapAccumKernel%d", "swap", %s);' % (prefix, id, table)
-  s._d += SWAP_ACCUM % dict(filename=filename,
-                            prefix=prefix,
+  s.output += 'm.run_all("%s_Swap_%d", "swap", %s);' % (s.code_prefix() , id, table)
+  s.content += SWAP_ACCUM % dict(filename=s.file,
+                            prefix=s.code_prefix() ,
                             line=s._stack[-1][1],
                             id=id,
                             code=code) + '\n'
@@ -296,18 +288,14 @@ def ProcessFile(f_in, f_out):
     elif g.group(0) == 'PRunAll': ParsePRunAll(s)
     elif g.group(0) == 'PSwapAccumulator': ParsePSwapAccumulator(s)
 
-  print >> f_out, s._out
-  print >> f_out, s._d
+  print >> f_out, s.output
+  print >> f_out, s.content
 
 if __name__ == '__main__':
   n_in = sys.argv[1]
-  n_out = n_in + '.cc' if len(sys.argv) < 3 else sys.argv[2]
-  f_out = open(n_out, 'w')
   try:
-    ProcessFile(n_in, f_out)
+    ProcessFile(n_in, sys.stdout)
   except ValueError, e:
     print >> sys.stderr, 'Parse error:', e
     sys.exit(1)
-
-  f_out.close()
 

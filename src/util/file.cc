@@ -176,6 +176,7 @@ void Encoder::write_bytes(const char* a, int len) {
   else { out_f_->write(a, len); }
 }
 
+#ifdef HAVE_LZO
 int LZOFile::write(const char* data, int len) {
   int left = len;
   do {
@@ -249,6 +250,7 @@ bool LZOFile::read_block() {
   block.pos = 0;
   return true;
 }
+#endif
 
 RecordFile::RecordFile(const string& path, const string& mode, int compression) {
   path_ = path;
@@ -260,9 +262,11 @@ RecordFile::RecordFile(const string& path, const string& mode, int compression) 
     fp = new LocalFile(path_ + ".tmp", mode);
   }
 
+#ifdef LZO
   if (compression == LZO) {
     fp = new LZOFile((LocalFile*)fp, mode);
   }
+#endif
 }
 
 RecordFile::~RecordFile() {

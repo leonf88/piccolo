@@ -30,13 +30,13 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
     VLOG(1) << "Skipping full checkpoint of untainted table (pseudo-read-only?)";
     deltaOnly = true;
   }
-  if (!deltaOnly) {	//don't checkpoint untainted tables!
+  if (!deltaOnly) {      //don't checkpoint untainted tables!
     Marshal<int64_t>  m_int64;
 
     // Do a full checkpoint
     table_capacity = capacity();
     LocalTableCoder c(f, "w", &table_capacity);
-    Serialize(&c, true);		//tryOptimize = true
+    Serialize(&c, true);            //tryOptimize = true
 
     // Set up for checkpointing bitset
     LocalTableCoder d(f + ".bitmap", "w", &table_capacity);
@@ -54,7 +54,7 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
 
 void LocalTable::finish_checkpoint() {
   if (delta_file_) {
-	VLOG(1) << "Closing delta log.";
+      VLOG(1) << "Closing delta log.";
     delete delta_file_;
     delta_file_ = NULL;
   }
@@ -79,8 +79,8 @@ void LocalTable::restore(const string& f) {
     VLOG(1) << "Resizing table to " << table_capacity << " entries for full restore.";
     resize(table_capacity);
 
-    updates = Deserialize(&rf,true);	//tryOptimize = true
-	VLOG(1) << "Restored full snapshot '" << f << "' with " << updates << " pieces in " << t.elapsed() << " sec";
+    updates = Deserialize(&rf,true);      //tryOptimize = true
+      VLOG(1) << "Restored full snapshot '" << f << "' with " << updates << " pieces in " << t.elapsed() << " sec";
   }
 
   if (!File::Exists(f + ".bitmap")) {
@@ -219,7 +219,7 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
     return false;
   }
   VLOG(1) << "Resizing table to size " << tablesize << " to match bitset";
-  table->resize(tablesize);		//important to make bitmaps match properly!
+  table->resize(tablesize);            //important to make bitmaps match properly!
 */
   
   string packmode_s;
@@ -254,4 +254,4 @@ bool LocalTableCoder::ReadBitMap(boost::dynamic_bitset<uint32_t>* bitset, LocalT
   return true;
 }
 
-}	// namespace piccolo {
+}      // namespace piccolo {

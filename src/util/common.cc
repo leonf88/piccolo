@@ -18,18 +18,21 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <lzo/lzo1x.h>
 #include <mpi.h>
 #include <google/protobuf/message.h>
 
-#ifdef CPUPROF
+#ifdef HAVE_CPU_PROFILER
 #include <google/profiler.h>
 DEFINE_bool(cpu_profile, false, "");
 #endif
 
-#ifdef HEAPPROF
+#ifdef HAVE_HEAP_PROFILER
 #include <google/heap-profiler.h>
 #include <google/malloc_extension.h>
+#endif
+
+#ifdef HAVE_LZO
+#include <lzo/lzo1x.h>
 #endif
 
 DEFINE_bool(dump_stacktrace, true, "");
@@ -78,7 +81,7 @@ void Histogram::add(double val) {
 }
 
 void DumpProfile() {
-#ifdef CPUPROF
+#ifdef HAVE_CPU_PROFILER
   ProfilerFlush();
 #endif
 }
@@ -190,7 +193,9 @@ void Init(int argc, char** argv) {
   FLAGS_logtostderr = true;
   FLAGS_logbuflevel = -1;
 
+#ifdef HAVE_LZO
   CHECK_EQ(lzo_init(), 0);
+#endif
 
   google::SetUsageMessage(
       StringPrintf(
@@ -200,7 +205,7 @@ void Init(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 
-#ifdef CPUPROF
+#ifdef HAVE_CPU_PROFILER
   if (FLAGS_cpu_profile) {
     mkdir("profile/", 0755);
     char buf[100];
@@ -209,7 +214,7 @@ void Init(int argc, char** argv) {
   }
 #endif
 
-#ifdef HEAPPROF
+#ifdef HAVE_HEAP_PROFILER
   char buf[100];
   gethostname(buf, 100);
   HeapProfilerStart(StringPrintf("profile/heap.%s.%d", buf, getpid()).c_str());

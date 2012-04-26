@@ -21,7 +21,7 @@ PROTO_FILES = [
   'examples/examples.proto',
   ]
 
-STANDARD_LIBS = [ 'PROTOBUF', 'BOOST_THREAD', 'LZO', 'UNWIND', 'RT' ]
+STANDARD_LIBS = [ 'PROTOBUF', 'BOOST_THREAD', 'UNWIND', 'RT' ]
 
 class piccolo_program(link_task):
   run_str = ' '.join(['${LINK_CXX}',
@@ -62,25 +62,17 @@ def configure(ctx):
   swig.configure(ctx)
   ppp_tool.configure(ctx)
 
-  ctx.find_program('distcc', var='DISTCC')
+  distcc = ctx.find_program('distcc', var='DISTCC', mandatory=False)
 
-  if ctx.env['DISTCC'] and ctx.env['DISTCC_HOSTS']:
+  if distcc and ctx.env['DISTCC_HOSTS']:
     ctx.env['CC'] = ['distcc'] + ctx.env['CC']
     ctx.env['CXX'] = ['distcc'] + ctx.env['CXX']
 
-  ctx.check(header_name='lzo/lzo1x.h', mandatory=False)
-  ctx.check(header_name='libunwind.h', mandatory=True)
-  if ctx.check(header_name='google/profiler.h', define_name='CPUPROF', mandatory=False) and\
-     ctx.check(lib='profiler', mandatory=False):
-    STANDARD_LIBS.append('PROFILER')
-  else:
-    ctx.msg('Google profiler library was not found; profiling will not be '
-            'available.', False)
-             
 
-  ctx.find_program('protoc', mandatory=True)
-  ctx.find_program('mpic++', mandatory=True)
-  ctx.find_program('swig', var='SWIG', mandatory=False)
+  ctx.check(header_name='libunwind.h')
+
+  ctx.find_program('protoc')
+  ctx.find_program('mpic++')
 
   ctx.env['CXX'] = 'mpic++'
 
@@ -88,17 +80,45 @@ def configure(ctx):
   ctx.check(lib='protobuf')
   ctx.check(lib='rt')
   ctx.check(lib='unwind')
-  ctx.check(lib='tcmalloc', uselib_store='TCMALLOC', mandatory=True)
 
-  if not ctx.check(lib='blas', mandatory=False):
+  def check_optional(*args, **kw):
+    try:
+      ctx.check(*args, **kw)
+      return True
+    except ctx.errors.ConfigurationError:
+      return False
+
+  profiler_h = check_optional(header_name='google/profiler.h')
+  profiler_lib = check_optional(lib='profiler')
+
+  if profiler_h and profiler_lib:
+    STANDARD_LIBS.append('PROFILER')
+    ctx.define('HAVE_CPU_PROFILER', 1)
+    ctx.env.HAVE_CPU_PROFILER = 1
+  else:
+    ctx.msg('Google profiler library was not found; profiling will not be available.', False)
+
+  tcmalloc_lib = check_optional(lib='tcmalloc')
+  if tcmalloc_lib:
+    ctx.define('HAVE_HEAP_PROFILER', 1)
+    ctx.define('HAVE_TCMALLOC', 1)
+    ctx.env.HAVE_TCMALLOC = 1
+  else:
+    ctx.msg('TCMalloc not found -- heap profiling will not be available.', False)
+    ctx.env.HAVE_TCMALLOC = 0
+
+  if not check_optional(lib='blas'):
     ctx.msg('BLAS library was not found; certain examples will not be built', False)
 
-  if not ctx.check(lib='z', mandatory=False):
+  if not check_optional(lib='z'):
     ctx.msg('Zlib library was not found; certain examples will not be built', False)
 
-  # check for either lzo or lzo2 availibility.
-  if not ctx.check(lib='lzo2', uselib_store='LZO', mandatory=False):
-    ctx.check(lib='lzo', uselib_store='LZO', mandatory=False)
+  lzo_h = check_optional(header_name='lzo/lzo1x.h')
+  lzo1_lib = check_optional(lib='lzo', uselib_store='LZO')
+  lzo2_lib = check_optional(lib='lzo2', uselib_store='LZO')
+
+  if lzo_h and (lzo1_lib or lzo2_lib):
+    ctx.define('HAVE_LZO', 1)
 
   # link all programs with the required MPI libraries
   ctx.env.append_unique('LIB', os.popen('mpic++ -showme:libs').read().split())
@@ -118,6 +138,7 @@ def configure(ctx):
   ctx.env.append_unique('INCLUDES',
                        [ctx.path.find_dir(top).abspath(),
                         out,
+                        ctx.path.find_or_declare('src').get_bld().abspath(),
                         ctx.path.find_dir('external/google-logging').abspath(),
                         ctx.path.find_dir('external/google-flags').abspath()])
 
@@ -125,6 +146,8 @@ def configure(ctx):
                                      '-ignoremissing',
                                      '-c++',
                                      '-w315', ])
+
+  ctx.write_config_header('src/piccolo-config.h')
 
 def build(bld):
   bld.env['SRCDIR'] = bld.path.get_src().abspath()
@@ -161,10 +184,11 @@ def build(bld):
        use=[ 'kernel', 'common' ],
        source=[ 'worker.cc' ])
 
-#  _lib(target='_piccolo.so',
-#            source='python_support.swig',
-#            features='pyext cxx',
-#            uses=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
+  if bld.env.HAVE_SWIG:
+    _lib(target='_piccolo.so',
+              source='python_support.swig',
+              features='pyext cxx',
+              uses=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
 
   _lib(target='master',
        dir='master',
@@ -196,11 +220,13 @@ def build(bld):
     # add system library dependencies
     piccolo_lib = [ 'piccolo_proto',
                     'worker', 'master', 'common', 'kernel',
-                    'gflags', 'glog', 'tcmalloc' ]
-    STANDARD_LIBS.append('tcmalloc')
-    use.append('tcmalloc')
+                    'gflags', 'glog', ]
 
-    if 'LIB_PROFILER' in bld.env:
+    if bld.env.HAVE_TCMALLOC:
+      STANDARD_LIBS.append('tcmalloc')
+      use.append('tcmalloc')
+
+    if bld.env.HAVE_CPU_PROFILER:
       STANDARD_LIBS.append('PROFILER')
       piccolo_lib.append('profiler')
       use.append('profiler')
@@ -209,7 +235,7 @@ def build(bld):
     bld.program(target=target,
                 source=[join('examples', src) for src in sources],
                 features='cxxprogram cxx',
-                use=use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS,
+                use=use + ['example_main.o', ] + piccolo_lib + STANDARD_LIBS,
                 lib=piccolo_lib)
 
   if 'LIB_BLAS' in bld.env:
@@ -219,7 +245,7 @@ def build(bld):
     _lib(target='webgraph',
          dir='external/webgraph',
          source=['webgraph.cc'],
-         use=['Z','tcmalloc'])
+         use=['Z', 'tcmalloc'])
 
     build_example('pagerank', ['pagerank.pp'], use=['webgraph'])
     build_example('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])

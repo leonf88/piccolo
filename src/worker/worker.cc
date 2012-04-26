@@ -726,8 +726,8 @@ void Worker::HandleStartCheckpointAsync(const CheckpointRequest& req,
 } 
 
 void Worker::HandleFinishCheckpointAsync(const CheckpointFinishRequest& req,
-										 EmptyMessage *resp,
-										 const rpc::RPCInfo& rpc) {
+                                                             EmptyMessage *resp,
+                                                             const rpc::RPCInfo& rpc) {
   VLOG(1) << "Async order for checkpoint finish received.";
   FinishCheckpoint(req.next_delta_only());
 }
