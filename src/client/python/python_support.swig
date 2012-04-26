@@ -1,5 +1,7 @@
 %module piccolo
 
+#include "kernel/table.h"
+#include "kernel/global-table.h"
 #include "client/python/python_support.h"
 
 using namespace std;
@@ -87,6 +89,7 @@ namespace std {
 %{
 #include "client/python/python_support.h"
 #include "kernel/table.h"
+#include "kernel/global-table.h"
 
 namespace dsm {
 typedef TypedGlobalTable<string, int64_t> IntTable;
@@ -101,7 +104,9 @@ typedef TypedTableIterator<string, string> StringIterator;
 typedef PythonTrigger<string, int64_t> IntPythonTrigger;
 typedef PythonTrigger<string, string> StringPythonTrigger;
 
-}%}
+}
+
+%}
 
 #define GOOGLE_PROTOBUF_VERSION 2003000
 #define LIBPROTOBUF_EXPORT
@@ -112,6 +117,8 @@ typedef long int64_t;
 
 %include "kernel/kernel.h"
 %include "kernel/table-registry.h"
+%include "kernel/table.h"
+%include "kernel/global-table.h"
 
 %include "master/master.h"
 %include "client/python/python_support.h"
@@ -256,7 +263,6 @@ public:
   %extend {
     // Register a trigger
     void py_swap_accumulator(const string& codeshort, const string& codelong) {
-//      PythonTrigger<K, V>* trigger = new PythonTrigger<K, V>($self, codeshort, codelong);
 		LOG(FATAL) << "Python may not yet swap accumulators" << endl;
         return;
     }
@@ -266,26 +272,12 @@ public:
 %template(IntTable) TypedGlobalTable<string, int64_t>;
 %template(StringTable) TypedGlobalTable<string, string>;
 
-/*
-%template(IntTrigger) Trigger<string, int64_t>;
-%template(StringTrigger) Trigger<string, string>;
-%template(IntPythonTrigger) PythonTrigger<string, int64_t>;
-%template(StringPythonTrigger) PythonTrigger<string, string>;
-*/
-
 %template(IntIterator) TypedTableIterator<string, int64_t>;
 %template(StringIterator) TypedTableIterator<string, string>;
 
 %extend DSMKernel {
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
-
-//  PythonTrigger<string, string>* GetStringPythonTrigger(int tidx, int idx) {
-//    return (PythonTrigger<string, string>*)($self->get_table<string, string>(tidx)->trigger(idx));
-//  }
-//  PythonTrigger<string, int64_t>* GetIntPythonTrigger(int tidx, int idx) {
-//    return (PythonTrigger<string, int64_t>*)($self->get_table<string, int64_t>(tidx)->trigger(idx));
-//  }
 }
 
 %template(CreateStringTable) CreateTable<string, string>;

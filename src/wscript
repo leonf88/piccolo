@@ -142,10 +142,9 @@ def configure(ctx):
                         ctx.path.find_dir('external/google-logging').abspath(),
                         ctx.path.find_dir('external/google-flags').abspath()])
 
-  ctx.env.append_unique('SWIGFLAGS', ['-python',
-                                     '-ignoremissing',
-                                     '-c++',
-                                     '-w315', ])
+  ctx.env.append_unique('SWIGFLAGS',
+      ['-python', '-ignoremissing', '-c++', '-w315', 
+       '-I%s' % ctx.path.find_dir(top).abspath()])
 
   ctx.write_config_header('src/piccolo-config.h')
 
@@ -155,12 +154,13 @@ def build(bld):
   bld.shlib(target='piccolo_proto', source=PROTO_FILES, features='cxx cxxshlib')
   bld.add_group()
 
-  def _lib(target, source, dir, use=None):
+  def _lib(target, source, dir, use=None, features=''):
     if not use: use = []
     source = [join(dir, src) for src in source]
     bld.shlib(target=target,
               use=use,
-              source=source)
+              source=source,
+              features=features)
 
   _lib(target='common',
        dir='util',
@@ -186,9 +186,10 @@ def build(bld):
 
   if bld.env.HAVE_SWIG:
     _lib(target='_piccolo.so',
-              source='python_support.swig',
-              features='pyext cxx',
-              uses=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
+         dir='client/python',
+         source=['python_support.swig'],
+         features='pyext cxx',
+         use=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
 
   _lib(target='master',
        dir='master',
