@@ -274,4 +274,5 @@ def build(bld):
   build_example('bipartmatch-trigger', ['bipartmatch-trigger.cc', ])
   build_example('conncomp', ['conncomp.pp', ])
   build_example('conncomp-trigger', ['conncomp-trigger.pp', ])
+  build_example('image-denoise-trigger', ['image-denoise-trigger.pp', 'imglib/pgmimage.cpp', ])
 
