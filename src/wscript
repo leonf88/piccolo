@@ -146,9 +146,10 @@ def configure(ctx):
       ['-python', '-ignoremissing', '-c++', '-w315', 
        '-I%s' % ctx.path.find_dir(top).abspath()])
 
-  ctx.write_config_header('src/piccolo-config.h')
+  ctx.write_config_header('../src/piccolo-config.h',remove=False)
 
 def build(bld):
+
   bld.env['SRCDIR'] = bld.path.get_src().abspath()
 
   bld.shlib(target='piccolo_proto', source=PROTO_FILES, features='cxx cxxshlib')
@@ -225,12 +226,17 @@ def build(bld):
 
     if bld.env.HAVE_TCMALLOC:
       STANDARD_LIBS.append('tcmalloc')
+      piccolo_lib.append('tcmalloc')
       use.append('tcmalloc')
 
     if bld.env.HAVE_CPU_PROFILER:
       STANDARD_LIBS.append('PROFILER')
       piccolo_lib.append('profiler')
       use.append('profiler')
+
+    if bld.env.HAVE_LZO:
+      STANDARD_LIBS.append('LZO')
+      use.append('lzo')
 
     #print " ".join(use + ['example_main.o',] + piccolo_lib + STANDARD_LIBS)
     bld.program(target=target,

@@ -91,7 +91,7 @@ namespace std {
 #include "kernel/table.h"
 #include "kernel/global-table.h"
 
-namespace dsm {
+namespace piccolo {
 typedef TypedGlobalTable<string, int64_t> IntTable;
 typedef TypedGlobalTable<string, string> StringTable;
 
@@ -128,30 +128,30 @@ typedef int TriggerID;
 void Init(int argc, char** argv);
 
 %inline %{
-  namespace dsm {
+  namespace piccolo {
   struct IntAccum { 
-    static Accumulator<int64_t>* Min() { return new dsm::Accumulators<int64_t>::Min; }
-    static Accumulator<int64_t>* Max() { return new dsm::Accumulators<int64_t>::Max; }
-    static Accumulator<int64_t>* Sum() { return new dsm::Accumulators<int64_t>::Sum; }
-    static Accumulator<int64_t>* Replace() { return new dsm::Accumulators<int64_t>::Replace; }
+    static Accumulator<int64_t>* Min() { return new piccolo::Accumulators<int64_t>::Min; }
+    static Accumulator<int64_t>* Max() { return new piccolo::Accumulators<int64_t>::Max; }
+    static Accumulator<int64_t>* Sum() { return new piccolo::Accumulators<int64_t>::Sum; }
+    static Accumulator<int64_t>* Replace() { return new piccolo::Accumulators<int64_t>::Replace; }
   };
   
   struct StringAccum { 
-    static Accumulator<string>* Min() { return new dsm::Accumulators<string>::Min; }
-    static Accumulator<string>* Max() { return new dsm::Accumulators<string>::Max; }
-    static Accumulator<string>* Sum() { return new dsm::Accumulators<string>::Sum; }
-    static Accumulator<string>* Replace() { return new dsm::Accumulators<string>::Replace; }
+    static Accumulator<string>* Min() { return new piccolo::Accumulators<string>::Min; }
+    static Accumulator<string>* Max() { return new piccolo::Accumulators<string>::Max; }
+    static Accumulator<string>* Sum() { return new piccolo::Accumulators<string>::Sum; }
+    static Accumulator<string>* Replace() { return new piccolo::Accumulators<string>::Replace; }
   };
 
   struct IntTrigger {
-    static Trigger<string,int64_t>* Null() { return new dsm::Triggers<string,int64_t>::NullTrigger; }
-    static Trigger<string,int64_t>* ReadOnly() { return new dsm::Triggers<string,int64_t>::ReadOnlyTrigger; }
+    static Trigger<string,int64_t>* Null() { return new piccolo::Triggers<string,int64_t>::NullTrigger; }
+    static Trigger<string,int64_t>* ReadOnly() { return new piccolo::Triggers<string,int64_t>::ReadOnlyTrigger; }
     static Trigger<string,int64_t>* PythonCode(const string& codeshort, const string& codelong) { return new IntPythonTrigger(0,codeshort,codelong); }
   };
 
   struct StringTrigger {
-    static Trigger<string,string>* Null() { return new dsm::Triggers<string,string>::NullTrigger; }
-    static Trigger<string,string>* ReadOnly() { return new dsm::Triggers<string,string>::ReadOnlyTrigger; }
+    static Trigger<string,string>* Null() { return new piccolo::Triggers<string,string>::NullTrigger; }
+    static Trigger<string,string>* ReadOnly() { return new piccolo::Triggers<string,string>::ReadOnlyTrigger; }
     static Trigger<string,string>* PythonCode(const string& codeshort, const string& codelong) { return new StringPythonTrigger(0,codeshort,codelong); }
   };
   
@@ -170,7 +170,8 @@ void Init(int argc, char** argv);
 }
 %};
 
-namespace dsm {
+%rename(__assign__) *::operator=;	//Workaround for SWIG "Operator= ignored" issue
+namespace piccolo {
 class ConfigData {
 public:
   ConfigData();
@@ -275,7 +276,7 @@ public:
 %template(IntIterator) TypedTableIterator<string, int64_t>;
 %template(StringIterator) TypedTableIterator<string, string>;
 
-%extend DSMKernel {
+%extend piccoloKernel {
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
 }
