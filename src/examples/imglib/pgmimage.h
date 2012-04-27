@@ -21,9 +21,12 @@
 #include <stdlib.h>
 #include <string>
 #include "util/common.h"
+#include <boost/random.hpp>
 
 using namespace std;
 
+#define MIN_PXL_VAL 0
+#define MAX_PXL_VAL 255
 class image {
   public:
     image();                              //create empty image
@@ -37,7 +40,7 @@ class image {
     int getpixel(int r, int c);
     int tofile(string filename);
 
-    void corrupt(double sigma);
+    void corrupt(float sigma);
 
     int rows() const { return _rows; }
     int cols() const { return _cols; }
