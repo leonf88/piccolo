@@ -74,6 +74,8 @@ inline int getColFromID(int ID) {
   return (ID%FLAGS_tidn_width);
 }
 
+
+// Tools for Unary Factors
 double factorNormalize(vector<double>& vec) {
   // Following the GraphLab example, this is done in terms
   // of log-stored values, so we need to sum their exponents
@@ -138,8 +140,51 @@ void factorUniform(vector<double>& vec, double value = 0.) {              // rem
   }
 }
 
-void factorConvolve(vector<double>* a, double factor) {
+class binfac {
+public:
+  binfac(unsigned int rows = 0, unsigned int cols = 0) : data_(rows*cols), rows_(rows), cols_(cols) {}
+  double get(int i, int j) { return data_[i*cols_+j]; }
+  void set(int i, int j, double v) { data_[i*cols_+j] = v; }
+  void resize(unsigned int rows, unsigned int cols) {
+    data_.resize(rows*cols);
+    rows_ = rows;
+    cols_ = cols;
+  }
 
+  void set_as_agreement(double lambda) {
+    for(unsigned int i = 0; i < rows_; i++) {
+      for(unsigned int j = 0; j < cols_; j++) {
+        set(i,j,(i == j)?0.:-lambda);
+      }
+    }
+  }
+
+  void set_as_laplace(double lambda) {
+    for(unsigned int i = 0; i < rows_; i++) {
+      for(unsigned int j = 0; j < cols_; j++) {
+        set(i,j,-std::abs((double)i-(double)j*lambda));
+      }
+    }
+  }
+
+private:
+  vector<double> data_;
+  unsigned int rows_;
+  unsigned int cols_;
+
+};
+
+binfac edge_factor;
+
+void factorConvolve(vector<double>& a, vector<double> b, binfac c) {
+  for(int i=0; i<a.size(); i++) {
+    double sum = 0.;
+    for(int j=0; j<b.size(); j++) {
+      sum += std::exp(c.get(i,j)+b[j]);
+    }
+    if (sum == 0.) sum = std::numeric_limits<double>::min();
+    a[i] = std::log(sum);
+  }
 }
 
 static int PopulateTables(int shards, string im_path, int colors) {
@@ -184,7 +229,7 @@ struct idn_trigger: public HybridTrigger<int, vector<double> > {
 public:
   bool Accumulate(vector<double>* a, const vector<double>& b) {
     LOG(FATAL) << "Must implement edge_factor!";
-//    factorConvolve((vector<double>&)b, edge_factor);
+    factorConvolve((vector<double>&)*a,(vector<double>&)b, edge_factor);
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
     return true;								//always run the long trigger for now
@@ -235,21 +280,6 @@ public:
 int ImageDenoiseTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
 
-  //initialize tables
-  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-//  beliefs     = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  //all of these edges are the INCOMING edges for a pixel. The only actual processing that has been done on
-  //them is a cavity and normalization; the edge_factor convolution, normalization, and damping must be
-  //performed in the receiver's Accumulator. With the processed edges, the trigger will take responsibility
-  //for combining the potentials and edges into a new belief, taking the normalized cavity, and propagating.
-
-  StartWorker(conf);
-  Master m(conf);
-
   //assertions on arguments
   CHECK_GT(FLAGS_tidn_width,0) << "Image must have a positive width";
   CHECK_GT(FLAGS_tidn_height,0) << "Image must have a positive height";
@@ -257,6 +287,30 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
 
   CHECK_GE(FLAGS_tidn_damping,0) << "Damping factor must be >= 0";
   CHECK_LT(FLAGS_tidn_damping,1) << "Damping factor must be < 1";
+
+  //initialize tables
+  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  //beliefs     = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+
+  //set up edge factor on all workers
+  edge_factor.resize(FLAGS_tidn_colors,FLAGS_tidn_colors);
+  if (FLAGS_tidn_smoothing == "sq") {
+    edge_factor.set_as_agreement(FLAGS_tidn_lambda);
+  } else {
+    edge_factor.set_as_laplace(FLAGS_tidn_lambda);
+  }
+
+  //all of these edges are the INCOMING edges for a pixel. The only actual processing that has been done on
+  //them is a cavity and normalization; the edge_factor convolution, normalization, and damping must be
+  //performed in the receiver's Accumulator. With the processed edges, the trigger will take responsibility
+  //for combining the potentials and edges into a new belief, taking the normalized cavity, and propagating.
+
+  StartWorker(conf);
+  Master m(conf);
 
   if (!m.restore()) {
     //do non-restore setup (populate tables from image data)
