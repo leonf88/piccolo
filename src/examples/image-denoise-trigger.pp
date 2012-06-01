@@ -21,10 +21,10 @@ using namespace piccolo;
 DEFINE_string(tidn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(tidn_width, 0, "Input image width");
 DEFINE_int32(tidn_height, 0, "Input image height");
-DEFINE_double(tidn_bound, 0, "Termination tolerance");
-DEFINE_int32(tidn_colors, 0, "Input image color depth");
-DEFINE_double(tidn_sigma, 0, "Stddev of noise to add to img");
-DEFINE_double(tidn_lambda, 0, "Smoothing parameter");
+DEFINE_double(tidn_bound, 1e-4, "Termination tolerance");
+DEFINE_int32(tidn_colors, 256, "Input image color depth");
+DEFINE_double(tidn_sigma, 2, "Stddev of noise to add to img");
+DEFINE_double(tidn_lambda, 2, "Smoothing parameter");
 DEFINE_string(tidn_smoothing, "sq", "Smoothing type ([sq]uare or [la]place)");
 DEFINE_double(tidn_propthresh, 1e-10, "Threshold to propagate updates");
 DEFINE_double(tidn_damping, 0.1, "Edge damping value");
@@ -40,6 +40,7 @@ static TypedGlobalTable<int, vector<double> >* edges_right;
 namespace piccolo {
 template<> struct Marshal<vector<double> > : MarshalBase {
   static void marshal(const vector<double>& t, string *out) {
+//    LOG(INFO) << "Marshalling vector of size " << t.size();
     int i;
     double j;
     int len = t.size();
@@ -48,6 +49,7 @@ template<> struct Marshal<vector<double> > : MarshalBase {
       j = t[i];
       out->append((char*) &j, sizeof(double));
     }
+//    LOG(INFO) << "Marshalled vector of size " << t.size() << " into string of size " << out->length();
   }
   static void unmarshal(const StringPiece &s, vector<double>* t) {
     int i;
@@ -191,6 +193,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Fetch image and initialize vectors
   image cleanim(im_path);
   cleanim.corrupt(FLAGS_tidn_sigma); //well, now cleanim is something of a misnomer.
+  cleanim.tofile(im_path + ".noisy");
   vector<double> initval;
   initval.resize(FLAGS_tidn_colors);
   factorUniform(initval);
@@ -210,14 +213,16 @@ static int PopulateTables(int shards, string im_path, int colors) {
           -(obs - pred)*(obs - pred) / (2.0 * sigma_squared);
       }
       factorNormalize(potential);
-      potentials->put(idx,potential);
-      //beliefs->put(idx, initval);
+   	  //VLOG(3) << "Putting vertex ID " << idx << "'s update in potentials";
+      potentials->update(idx,potential);
+      //beliefs->update(idx, initval);
 
       // Set up edges
-      edges_up->put(idx,initval);
-      edges_down->put(idx,initval);
-      edges_left->put(idx,initval);
-      edges_right->put(idx,initval);
+	  //VLOG(3) << "Putting vertex ID " << idx << "'s update in edges";
+      edges_up->update(idx,initval);
+      edges_down->update(idx,initval);
+      edges_left->update(idx,initval);
+      edges_right->update(idx,initval);
     }
   }
   return 0;
@@ -228,7 +233,6 @@ static int PopulateTables(int shards, string im_path, int colors) {
 struct idn_trigger: public HybridTrigger<int, vector<double> > {
 public:
   bool Accumulate(vector<double>* a, const vector<double>& b) {
-    LOG(FATAL) << "Must implement edge_factor!";
     factorConvolve((vector<double>&)*a,(vector<double>&)b, edge_factor);
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
@@ -248,7 +252,7 @@ public:
     factorTimes(P,C);
     factorTimes(P,D);
     factorNormalize(P);
-    //beliefs->put(key,P);
+    //beliefs->update(key,P);
 
     // Notify neighbors
     if (0 != getRowFromID(key)) {
@@ -268,7 +272,7 @@ public:
     }
     if (FLAGS_tidn_width-1 != getColFromID(key)) {
       factorDivide(P,D);
-      //beliefs->put(idx, initval);
+      //beliefs->update(idx, initval);
       factorNormalize(D);
       edges_left->update(key+1,D);
     }
@@ -279,6 +283,14 @@ public:
 
 int ImageDenoiseTrigger(const ConfigData& conf) {
   NUM_WORKERS = conf.num_workers();
+
+  {
+    image testim(FLAGS_tidn_image);
+    FLAGS_tidn_width = testim.cols();
+    FLAGS_tidn_height = testim.rows();
+    LOG(INFO) << "Opened image " << FLAGS_tidn_image << " with dimensions " << testim.cols() << " x "
+              << testim.rows();
+  }
 
   //assertions on arguments
   CHECK_GT(FLAGS_tidn_width,0) << "Image must have a positive width";
@@ -314,9 +326,11 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
 
   if (!m.restore()) {
     //do non-restore setup (populate tables from image data)
-    if (PopulateTables(FLAGS_shards, FLAGS_tidn_image, FLAGS_tidn_colors)) {
-      LOG(FATAL) << "Failed to turn image into an in-memory database";
-    }
+    PRunOne(potentials, {
+      if (PopulateTables(FLAGS_shards, FLAGS_tidn_image, FLAGS_tidn_colors)) {
+        LOG(FATAL) << "Failed to turn image into an in-memory database";
+      }
+    });
   }
 
   PSwapAccumulator(edges_up,   {(Trigger<int,vector<double> >*)new idn_trigger});
@@ -329,7 +343,18 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   gettimeofday(&start_time, NULL);
 
   //run the application!
+  PRunAll(potentials, {
+    vector<double> initval;
+    TypedGlobalTable<int, vector<double> >::Iterator *it =
+      potentials->get_typed_iterator(current_shard());
+      for(; !it->done(); it->Next()) {
+        if (0 != getColFromID(it->key())) {
+          initval = it->value();
+          edges_right->update(it->key()-1, initval);
+        }
+      }
 
+  });
 
   //Finish the timer!
   gettimeofday(&end_time, NULL);
@@ -341,6 +366,46 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   PSwapAccumulator(edges_down, {new Triggers<int,vector<double> >::ReadOnlyTrigger});
   PSwapAccumulator(edges_left, {new Triggers<int,vector<double> >::ReadOnlyTrigger});
   PSwapAccumulator(edges_right,{new Triggers<int,vector<double> >::ReadOnlyTrigger});
+
+  //Construct output image
+  PRunOne(potentials, {
+    image outim(FLAGS_tidn_image + ".output", FLAGS_tidn_height, FLAGS_tidn_width);
+    for(int i=0; i<FLAGS_tidn_height; i++) {
+      for(int j=0; j<FLAGS_tidn_width; j++) {
+        int key = getVertID(i, j);
+
+        // Get the potentials and incoming edges
+        vector<double> P = potentials->get(key);
+        vector<double> A = edges_up->get(key);
+        vector<double> B = edges_down->get(key);
+        vector<double> C = edges_left->get(key);
+        vector<double> D = edges_right->get(key);
+    
+    	// Calculate the new Belief [B = n(PABCD)]
+        factorTimes(P,A);
+        factorTimes(P,B);
+        factorTimes(P,C);
+        factorTimes(P,D);
+        factorNormalize(P);
+        //belief == P now
+
+        double maxval = P[0];
+        unsigned int maxidx = 0;
+
+        // Find index of max vector element
+        int k = 0;
+        for(vector<double>::iterator it = P.begin(); it != P.end(); it++, k++) {
+          if (*it > maxval) {
+            maxval = *it;
+            maxidx = k;
+          }
+        }
+
+        outim.setpixel(i,j,maxidx);
+      } 
+    }
+    outim.tofile(FLAGS_tidn_image + ".output");
+  });
 
   return 0;
 }

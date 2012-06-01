@@ -59,7 +59,14 @@ image::image(string filename) {
   CHECK_NE(result,static_cast<char*>(NULL)) << 
           "Failed to read PGM header from " << filename;
 
-  sscanf(line, "P%d %d %d %d", &type, &nc, &nr, &maxval);
+  if (1 == sscanf(line, "P%d %d %d %d", &type, &nc, &nr, &maxval)) {
+    result = fgets(line, 511, pgm);
+    if (2 == sscanf(line, "%d %d %d", &nc, &nr, &maxval)) {
+      result = fgets(line, 511, pgm);
+      sscanf(line, "%d", &maxval);
+    }
+  }
+
   if (type != 5 && type != 2) {
     LOG(FATAL) << "Can only open PGM files (type P5 or P2)";
   }
