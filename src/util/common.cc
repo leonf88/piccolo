@@ -29,6 +29,7 @@ DEFINE_bool(cpu_profile, false, "");
 #ifdef HAVE_HEAP_PROFILER
 #include <google/heap-profiler.h>
 #include <google/malloc_extension.h>
+DEFINE_bool(heap_profile, false, "");
 #endif
 
 #ifdef HAVE_LZO
@@ -215,9 +216,11 @@ void Init(int argc, char** argv) {
 #endif
 
 #ifdef HAVE_HEAP_PROFILER
-  char buf[100];
-  gethostname(buf, 100);
-  HeapProfilerStart(StringPrintf("profile/heap.%s.%d", buf, getpid()).c_str());
+  if (FLAGS_heap_profile) {
+    char buf[100];
+    gethostname(buf, 100);
+    HeapProfilerStart(StringPrintf("profile/heap.%s.%d", buf, getpid()).c_str());
+  }
 #endif
 
   RunInitializers();

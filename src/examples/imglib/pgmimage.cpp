@@ -36,6 +36,16 @@ image::image(string name, int nr, int nc) {
   }
 }
 
+image::image(const image& otherim) {
+  data = (int*)malloc(unsigned (otherim.rows() * otherim.cols() *
+                      sizeof(int)));
+  CHECK_NE(data, static_cast<int*>(NULL)) << "Failed to reserve memory for image!";
+  _rows = otherim.rows();
+  _cols = otherim.cols();
+  _name = otherim.name();
+  memcpy((void*)data,(void*)otherim.raw(),sizeof(int)*_rows*_cols); 
+}
+
 void image::realloc(string name, int nr, int nc) {
   if (data && _rows && _cols)
     free(data);
@@ -131,14 +141,6 @@ string image::basename(string filename)
   return filename.substr(idx+1);
 }
 
-void image::setpixel(int r, int c, int val) {
-  data[(r*_cols) + c] = val;
-}
-
-int image::getpixel(int r, int c) {
-  return data[(r*_cols) + c];
-}
-
 int image::tofile(string filename) {
   int k, val;
   FILE *iop;
@@ -177,7 +179,17 @@ void image::corrupt(float sigma) {
        setpixel(i,j,val);
     }
   }
+}
 
+double image::calcMSEfrom(image otherim) {
+  long long unsigned int sumerr = 0;
+  for(int i=0; i<_rows; i++) {
+    for(int j=0; j<_cols; j++) {
+      sumerr += (getpixel(i,j) - otherim.getpixel(i,j))*
+                (getpixel(i,j) - otherim.getpixel(i,j));
+    }
+  }
+  return (double)sumerr/(double)(_rows*_cols);
 }
 
 imagelist::imagelist() {
