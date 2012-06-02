@@ -93,7 +93,7 @@ double factorNormalize(vector<double>& vec) {
     total += exp(vec[i] -= max);
   }
   if (std::isnan(total) || std::isinf(total) || total <= 0.) {
-    LOG(FATAL) << "Normalization leadd to fin/NaN problem";
+    LOG(FATAL) << "Normalization led to fin/NaN problem";
   }
   total = log(total);
   for(int i=0; i<vec.size(); i++) {
@@ -189,11 +189,24 @@ void factorConvolve(vector<double>& a, vector<double> b, binfac c) {
   }
 }
 
+double factorResidual(vector<double>& a, vector<double>& b) {
+  double residual = 0;
+  for(vector<double>::iterator it1 = a.begin(), it2 = b.begin(); it1 != a.end(); it1++, it2++) {
+    residual += std::abs(std::exp(*it1) - std::exp(*it2));
+  }
+  return residual/a.size();
+}
+
 static int PopulateTables(int shards, string im_path, int colors) {
-  // Fetch image and initialize vectors
+  // Fetch image and add noise to it
   image cleanim(im_path);
-  cleanim.corrupt(FLAGS_tidn_sigma); //well, now cleanim is something of a misnomer.
-  cleanim.tofile(im_path + ".noisy");
+  image noisyim(cleanim);
+  noisyim.corrupt(FLAGS_tidn_sigma);
+  noisyim.tofile(im_path + ".noisy");
+  double mse = noisyim.calcMSEfrom(cleanim);
+  LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
+
+  // Set up initialization vectors (potential and initval)
   vector<double> initval;
   initval.resize(FLAGS_tidn_colors);
   factorUniform(initval);
@@ -201,13 +214,14 @@ static int PopulateTables(int shards, string im_path, int colors) {
   vector<double> potential(initval);
 
   // Set up all potentials and edges
+  int k=0;
   double sigma_squared = FLAGS_tidn_sigma*FLAGS_tidn_sigma;
   for(int i=0; i<FLAGS_tidn_height; i++) {
     for(int j=0; j<FLAGS_tidn_width; j++) {
       int idx = getVertID(i,j);
 
       // Set up potential from pixel
-      double obs = (double)cleanim.getpixel(i,j);
+      double obs = (double)noisyim.getpixel(i,j);
       for(size_t pred = 0; pred < FLAGS_tidn_colors; ++pred) {
         potential[pred] = 
           -(obs - pred)*(obs - pred) / (2.0 * sigma_squared);
@@ -223,8 +237,11 @@ static int PopulateTables(int shards, string im_path, int colors) {
       edges_down->update(idx,initval);
       edges_left->update(idx,initval);
       edges_right->update(idx,initval);
+      k++;
+      CHECK_EQ(initval.size(),FLAGS_tidn_colors) << "!!BUG!! initval got corrupted.";
     }
   }
+  LOG(INFO) << "Set up " << k << " pixels in potential and edge tables";
   return 0;
 }
 
@@ -233,12 +250,14 @@ static int PopulateTables(int shards, string im_path, int colors) {
 struct idn_trigger: public HybridTrigger<int, vector<double> > {
 public:
   bool Accumulate(vector<double>* a, const vector<double>& b) {
+    vector<double> old(*a);
     factorConvolve((vector<double>&)*a,(vector<double>&)b, edge_factor);
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
-    return true;								//always run the long trigger for now
+    return (factorResidual((vector<double>&)*a,old) > FLAGS_tidn_bound);			//always run the long trigger for now
   }
   bool LongFire(const int key, bool lastrun) {
+    //LOG(INFO) << "Running LongFire for key " << key;
     // Get the potentials and incoming edges
     vector<double> P = potentials->get(key);
     vector<double> A = edges_up->get(key);
@@ -302,10 +321,10 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
 
   //initialize tables
   potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
   //beliefs     = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
 
   //set up edge factor on all workers
@@ -320,6 +339,13 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   //them is a cavity and normalization; the edge_factor convolution, normalization, and damping must be
   //performed in the receiver's Accumulator. With the processed edges, the trigger will take responsibility
   //for combining the potentials and edges into a new belief, taking the normalized cavity, and propagating.
+  LOG(INFO) << "Resizing potentials and edges tables to " << 
+               (int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)) << " elements";
+  potentials->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
+  edges_up->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
+  edges_down->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
+  edges_left->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
+  edges_right->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
 
   StartWorker(conf);
   Master m(conf);
@@ -405,6 +431,9 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
       } 
     }
     outim.tofile(FLAGS_tidn_image + ".output");
+    image cleanim(FLAGS_tidn_image);
+    double mse = outim.calcMSEfrom(cleanim);
+    LOG(INFO) << "Reconstructed image has MSE=" << mse << " from original";
   });
 
   return 0;

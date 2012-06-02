@@ -32,15 +32,21 @@ class image {
     image();                              //create empty image
     image(string name, int nr, int nc);   //create with name and size
     image(string filename);               //create from file
+    image(const image& other);
     ~image();
 
     void realloc(string name, int nr, int nc);
     string basename(string filename);
-    void setpixel(int r, int c, int val);
-    int getpixel(int r, int c);
     int tofile(string filename);
+    inline void setpixel(int r, int c, int val) {
+      data[(r*_cols) + c] = val;
+    }
+    inline int getpixel(int r, int c) {
+      return data[(r*_cols) + c];
+    }
 
     void corrupt(float sigma);
+    double calcMSEfrom(image otherim);
 
     int rows() const { return _rows; }
     int cols() const { return _cols; }
