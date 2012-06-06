@@ -56,7 +56,7 @@ public:
     vector<int>::iterator it = thisnode.begin();
     for (; it != thisnode.end(); it++)
       if ((*it) != key)
-   { if ((*it) < 0) { printf("BAD KEY for neighbor of %d with %d neighbors\n",key,thisnode.size()); } else
+   { if ((*it) < 0) { printf("BAD KEY for neighbor of %d with %lu neighbors\n",key,thisnode.size()); } else
         distance_map->update((*it), distance + 1);
    }
     return false;

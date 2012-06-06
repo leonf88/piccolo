@@ -263,6 +263,7 @@ V SparseTable<K, V>::get(const K& k) {
 
 template <class K, class V>
 void SparseTable<K, V>::update(const K& k, const V& v) {
+  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());	//prevent a bunch of nasty resize side-effects
   int b = bucket_for_key(k);
 
   update_tainted_ = true;

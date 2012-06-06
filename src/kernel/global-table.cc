@@ -45,11 +45,14 @@ int64_t GlobalTableBase::shard_size(int shard) {
 }
 
 void MutableGlobalTableBase::resize(int64_t new_size) {
+  int j=0;
   for (int i = 0; i < partitions_.size(); ++i) {
     if (is_local_shard(i)) {
       partitions_[i]->resize(new_size / partitions_.size());
+      j++;
     }
   }
+  VLOG(1) << "On request for size " << new_size << ", resized " << j << " partitions.";
 }
 
 bool GlobalTableBase::get_remote(int shard, const StringPiece& k, string* v) {

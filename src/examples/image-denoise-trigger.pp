@@ -21,13 +21,12 @@ using namespace piccolo;
 DEFINE_string(tidn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(tidn_width, 0, "Input image width");
 DEFINE_int32(tidn_height, 0, "Input image height");
-DEFINE_double(tidn_bound, 1e-4, "Termination tolerance");
 DEFINE_int32(tidn_colors, 256, "Input image color depth");
 DEFINE_double(tidn_sigma, 2, "Stddev of noise to add to img");
-DEFINE_double(tidn_lambda, 2, "Smoothing parameter");
-DEFINE_string(tidn_smoothing, "sq", "Smoothing type ([sq]uare or [la]place)");
-DEFINE_double(tidn_propthresh, 1e-10, "Threshold to propagate updates");
-DEFINE_double(tidn_damping, 0.1, "Edge damping value");
+DEFINE_double(tidn_lambda, 4, "Smoothing parameter");
+DEFINE_string(tidn_smoothing, "la", "Smoothing type ([sq]uare or [la]place)");
+DEFINE_double(tidn_propthresh, 1e-20, "Threshold to propagate updates");
+DEFINE_double(tidn_damping, 0.05, "Edge damping value");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, vector<double> >* potentials;
@@ -76,6 +75,34 @@ inline int getColFromID(int ID) {
   return (ID%FLAGS_tidn_width);
 }
 
+struct BlockShard : public Sharder<int> {
+  BlockShard() { num_shards = -1; naive = 0; }
+  int operator()(const int& key, int shards) {
+    if (shards != num_shards) reblock(shards);
+    int retval = (naive?(key%shards):(
+      _BlockCols*((getRowFromID(key)*_BlockRows)/FLAGS_tidn_height)+
+      ((getColFromID(key)*_BlockCols)/FLAGS_tidn_width)
+      ));
+    return retval;
+  }
+private:
+  void reblock(int shards) {
+    CHECK_GT(shards,0) << "reblock() was called for BlockSharding with a shards value of 0";
+    num_shards = shards;
+	for (_BlockRows = sqrt(num_shards); _BlockRows > 0; _BlockRows--) {
+      if ((num_shards/_BlockRows)*_BlockRows == num_shards) {
+        _BlockCols = num_shards/_BlockRows;
+        LOG(INFO) << "Found non-naive blocking scheme " << _BlockCols << " blocks wide and "
+                  << _BlockRows << " blocks tall.";
+        return;
+      }
+    }
+    naive = 1;
+  }
+  int num_shards;
+  int _BlockRows, _BlockCols;
+  int naive;
+};
 
 // Tools for Unary Factors
 double factorNormalize(vector<double>& vec) {
@@ -185,7 +212,7 @@ void factorConvolve(vector<double>& a, vector<double> b, binfac c) {
       sum += std::exp(c.get(i,j)+b[j]);
     }
     if (sum == 0.) sum = std::numeric_limits<double>::min();
-    a[i] = std::log(sum);
+    b[i] = std::log(sum);
   }
 }
 
@@ -254,12 +281,14 @@ public:
     factorConvolve((vector<double>&)*a,(vector<double>&)b, edge_factor);
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
-    return (factorResidual((vector<double>&)*a,old) > FLAGS_tidn_bound);			//always run the long trigger for now
+    double resid = factorResidual((vector<double>&)*a,old);
+//    LOG(INFO) << "Residual is " << resid;
+    return (resid > FLAGS_tidn_propthresh);			//always run the long trigger for now
   }
   bool LongFire(const int key, bool lastrun) {
-    //LOG(INFO) << "Running LongFire for key " << key;
     // Get the potentials and incoming edges
     vector<double> P = potentials->get(key);
+    vector<double> old(P);
     vector<double> A = edges_up->get(key);
     vector<double> B = edges_down->get(key);
     vector<double> C = edges_left->get(key);
@@ -272,6 +301,7 @@ public:
     factorTimes(P,D);
     factorNormalize(P);
     //beliefs->update(key,P);
+//    LOG(INFO) << "Running LongFire for key " << key << " with resid " << factorResidual(P,old);
 
     // Notify neighbors
     if (0 != getRowFromID(key)) {
@@ -320,11 +350,11 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   CHECK_LT(FLAGS_tidn_damping,1) << "Damping factor must be < 1";
 
   //initialize tables
-  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+  edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+  edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+  edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+  edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
   //beliefs     = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
 
   //set up edge factor on all workers
@@ -339,18 +369,11 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   //them is a cavity and normalization; the edge_factor convolution, normalization, and damping must be
   //performed in the receiver's Accumulator. With the processed edges, the trigger will take responsibility
   //for combining the potentials and edges into a new belief, taking the normalized cavity, and propagating.
-  LOG(INFO) << "Resizing potentials and edges tables to " << 
-               (int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)) << " elements";
-  potentials->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
-  edges_up->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
-  edges_down->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
-  edges_left->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
-  edges_right->resize((int)(2.52f*(float)(FLAGS_tidn_width * FLAGS_tidn_height)));
-
   StartWorker(conf);
   Master m(conf);
 
   if (!m.restore()) {
+
     //do non-restore setup (populate tables from image data)
     PRunOne(potentials, {
       if (PopulateTables(FLAGS_shards, FLAGS_tidn_image, FLAGS_tidn_colors)) {
@@ -370,6 +393,7 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
 
   //run the application!
   PRunAll(potentials, {
+
     vector<double> initval;
     TypedGlobalTable<int, vector<double> >::Iterator *it =
       potentials->get_typed_iterator(current_shard());
@@ -396,12 +420,14 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   //Construct output image
   PRunOne(potentials, {
     image outim(FLAGS_tidn_image + ".output", FLAGS_tidn_height, FLAGS_tidn_width);
+    double sumresid = 0.;
     for(int i=0; i<FLAGS_tidn_height; i++) {
       for(int j=0; j<FLAGS_tidn_width; j++) {
         int key = getVertID(i, j);
 
         // Get the potentials and incoming edges
         vector<double> P = potentials->get(key);
+        vector<double> Pold(P);
         vector<double> A = edges_up->get(key);
         vector<double> B = edges_down->get(key);
         vector<double> C = edges_left->get(key);
@@ -414,6 +440,7 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
         factorTimes(P,D);
         factorNormalize(P);
         //belief == P now
+        sumresid += factorResidual(P,Pold);
 
         double maxval = P[0];
         unsigned int maxidx = 0;
@@ -434,6 +461,7 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
     image cleanim(FLAGS_tidn_image);
     double mse = outim.calcMSEfrom(cleanim);
     LOG(INFO) << "Reconstructed image has MSE=" << mse << " from original";
+    LOG(INFO) << "Sum of residuals between Ps and Bs is " << sumresid;
   });
 
   return 0;
