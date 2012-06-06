@@ -611,7 +611,7 @@ void TypedGlobalTable<K, V>::retrigger_start(void) {
   while (retrigger_termthreads_ < retrigger_threadcount_) {
     Sleep(RETRIGGER_SCAN_INTERVAL);
   }
-  VLOG(1) << "All retriggers now running!";
+  VLOG(3) << "All retriggers now running!";
   return;
 }
 
@@ -630,7 +630,7 @@ unsigned int TypedGlobalTable<K, V>::retrigger_stop(void) {
 */				//why??
     return 0;
   } else {
-    VLOG(1) << "All retriggers stopping.";
+    VLOG(2) << "All retriggers stopping.";
     boost::mutex::scoped_lock sl(retrigger_mutex());		//Saves us a bit of pain here
     retrigger_termthreads_ = 0;
     retrigger_updates_ = 0;
@@ -705,6 +705,7 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
           bool retain = false;
           if (info_.accum->type() != AccumulatorBase::ACCUMULATOR) {
             updates++;				//this is for the Flush/Apply finalization
+            CHECK_EQ(shard_id,get_shard(key)) << "!!BUG!! Mismatched shard IDs";
             retain = ((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
                      key, terminating);
             if (retain)

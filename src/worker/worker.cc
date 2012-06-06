@@ -288,10 +288,10 @@ void Worker::UpdateEpoch(int peer, int peer_epoch) {
 void Worker::UpdateEpochContinuous(int peer, int peer_epoch) {
   peers_[peer]->epoch = peer_epoch;
   peers_[peer]->epoch = peer_epoch;
-  bool checkpoint_done = true;
+//  bool checkpoint_done = true;
   for (size_t i = 0; i < peers_.size(); ++i) {
     if (peers_[i]->epoch != epoch_) {
-      checkpoint_done = false;
+//      checkpoint_done = false;
       VLOG(1)
           << "Channel is out of date: " << i << " : "
               << MP(peers_[i]->epoch, epoch_);
@@ -638,10 +638,13 @@ void Worker::HandleApply(const EmptyMessage& req, EmptyMessage *resp,
 
   HandlePutRequest();
 
+// XXX Why did I put this code here? It doesn't seem to do anything. --CRM 2012-06-05
+/*
   TableRegistry::Map &tmap = TableRegistry::Get()->tables();
   for (TableRegistry::Map::iterator i = tmap.begin(); i != tmap.end(); ++i) {
     MutableGlobalTable* t = dynamic_cast<MutableGlobalTable*>(i->second);
   }
+*/
   network_->Send(config_.master_id(), MTYPE_WORKER_APPLY_DONE, *resp);
 }
 
