@@ -283,7 +283,10 @@ public:
   }
 
   int bitset_epoch() {
-    boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
+    //this is fine, because resize must hold BOTH bitset_update and bitset_retrig.
+    //if we get exactly one lock, then resize can't be in progress. The update mutex
+    //should be held for a shorter duty cycle than teh retrig mutex, so let's use it.
+    boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_update_mutex());
     return bitset_epoch_;
   }
 

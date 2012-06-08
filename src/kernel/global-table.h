@@ -668,14 +668,10 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
     bool terminated = false;
     unsigned int updates = 0;
 
-    //printf("Currently have %d pending set bits\n",partition(shard_id)->bitset_getbitset()->count());
-
     while (!terminated) {
       if (is_local_shard(shard_id)) {
-        //     boost::mutex::scoped_lock sl(retrigger_mutex());
-        //LOG(FATAL) << "Retrigger mode 1 not yet implemented!";
 
-      boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
+      boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_retrig_mutex());
       bitset_scan_restart:
         bitset_epoch_ = partition(shard_id)->bitset_epoch();
         bool terminating = retrigger_terminate_;
@@ -684,11 +680,9 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
         size_t bititer = ltflags->find_first();
 
         while(bititer != ltflags->npos) {
-          //VLOG(2) << "Key on bit " << bititer << " in table " << info_.table_id << " set.";
           K key = partition(shard_id)->bitset_getkeyforbit(bititer);
           bool dorestart = false;
           {
-            //boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_mutex());
             if (bitset_epoch_ != partition(shard_id)->bitset_epoch()) {
               dorestart = true;
             } else {
@@ -697,19 +691,22 @@ void TypedGlobalTable<K, V>::retrigger_thread(int shard_id) {
             }
           }
 
+          // CRM 2012-06-08: I _think_ this is no longer necessary because of the locking
+          // around resizing the table/bitset... Check and remove if possible.
           if (dorestart) {	//in case someone else resized/rearranged the hashmap
-            VLOG(2) << "Tainted bitset_epoch_!";
+            VLOG(1) << "Tainted bitset_epoch_!";
             goto bitset_scan_restart;
           }
 
           bool retain = false;
           if (info_.accum->type() != AccumulatorBase::ACCUMULATOR) {
             updates++;				//this is for the Flush/Apply finalization
-            CHECK_EQ(shard_id,get_shard(key)) << "!!BUG!! Mismatched shard IDs";
+            //CHECK_EQ(shard_id,get_shard(key)) << "!!BUG!! Mismatched shard IDs";
             retain = ((Trigger<K, V>*) info_.accum)->LongFire(		//retain temporarily removed
                      key, terminating);
             if (retain)
-              enable_retrigger(key);
+              ltflags->set(bititer);		//need to think about concurrency issues on this
+              //enable_retrigger(key);
           }
           bititer = ltflags->find_next(bititer);
         }
