@@ -42,7 +42,8 @@ void LocalTable::start_checkpoint(const string& f, bool deltaOnly) {
     LocalTableCoder d(f + ".bitmap", "w", &table_capacity);
 
     {
-      boost::recursive_mutex::scoped_lock sl(rt_bitset_mutex()); //prevent a bunch of nasty resize side-effects
+      // Block resizes during this checkpoint!
+      boost::recursive_mutex::scoped_lock sl(rt_bitset_update_mutex()); //prevent a bunch of nasty resize side-effects
       d.WriteBitMap(bitset_getbitset(),capacity());
     }
     clear_update_tainted();

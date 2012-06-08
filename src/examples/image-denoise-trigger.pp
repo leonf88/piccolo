@@ -21,12 +21,13 @@ using namespace piccolo;
 DEFINE_string(tidn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(tidn_width, 0, "Input image width");
 DEFINE_int32(tidn_height, 0, "Input image height");
-DEFINE_int32(tidn_colors, 256, "Input image color depth");
+DEFINE_int32(tidn_colors, 5, "Input image color depth");
 DEFINE_double(tidn_sigma, 2, "Stddev of noise to add to img");
-DEFINE_double(tidn_lambda, 4, "Smoothing parameter");
+DEFINE_double(tidn_lambda, 2, "Smoothing parameter");
 DEFINE_string(tidn_smoothing, "la", "Smoothing type ([sq]uare or [la]place)");
-DEFINE_double(tidn_propthresh, 1e-20, "Threshold to propagate updates");
-DEFINE_double(tidn_damping, 0.05, "Edge damping value");
+DEFINE_double(tidn_propthresh, 1e-10, "Threshold to propagate updates");
+DEFINE_double(tidn_damping, 0.1, "Edge damping value");
+DEFINE_int32(tidn_passes, 1, "Number of async denoising passes");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, vector<double> >* potentials;
@@ -92,7 +93,7 @@ private:
 	for (_BlockRows = sqrt(num_shards); _BlockRows > 0; _BlockRows--) {
       if ((num_shards/_BlockRows)*_BlockRows == num_shards) {
         _BlockCols = num_shards/_BlockRows;
-        LOG(INFO) << "Found non-naive blocking scheme " << _BlockCols << " blocks wide and "
+        VLOG(1) << "Found non-naive blocking scheme " << _BlockCols << " blocks wide and "
                   << _BlockRows << " blocks tall.";
         return;
       }
@@ -112,7 +113,7 @@ double factorNormalize(vector<double>& vec) {
   double max=vec[0],total=0.;
   for(int i=0; i<vec.size(); i++) {
     if (std::isnan(vec[i]) || std::isinf(vec[i])) {
-      LOG(FATAL) << "Infinite/NaN pixel detected, aborting.";
+      LOG(FATAL) << "Infinite/NaN pixel detected in Normalize (1), aborting.";
     }
     max = std::max(max,vec[i]);
   }
@@ -120,7 +121,7 @@ double factorNormalize(vector<double>& vec) {
     total += exp(vec[i] -= max);
   }
   if (std::isnan(total) || std::isinf(total) || total <= 0.) {
-    LOG(FATAL) << "Normalization led to fin/NaN problem";
+    LOG(FATAL) << "Normalizati (2) (2)on led to fin/NaN problem";
   }
   total = log(total);
   for(int i=0; i<vec.size(); i++) {
@@ -213,6 +214,7 @@ void factorConvolve(vector<double>& a, vector<double> b, binfac c) {
     }
     if (sum == 0.) sum = std::numeric_limits<double>::min();
     b[i] = std::log(sum);
+    if (std::isnan(b[i]) || std::isinf(b[i])) LOG(FATAL) << "Detected NaN/inf sum in convolution";
   }
 }
 
@@ -228,7 +230,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Fetch image and add noise to it
   image cleanim(im_path);
   image noisyim(cleanim);
-  noisyim.corrupt(FLAGS_tidn_sigma);
+  noisyim.corrupt(FLAGS_tidn_sigma*((double)256./(double)FLAGS_tidn_colors));
   noisyim.tofile(im_path + ".noisy");
   double mse = noisyim.calcMSEfrom(cleanim);
   LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
@@ -249,6 +251,9 @@ static int PopulateTables(int shards, string im_path, int colors) {
 
       // Set up potential from pixel
       double obs = (double)noisyim.getpixel(i,j);
+      //map 0..255 color to 0...[FLAGS_tidn_colors-1]
+      obs = (obs*FLAGS_tidn_colors)/256.;
+
       for(size_t pred = 0; pred < FLAGS_tidn_colors; ++pred) {
         potential[pred] = 
           -(obs - pred)*(obs - pred) / (2.0 * sigma_squared);
@@ -282,7 +287,6 @@ public:
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
     double resid = factorResidual((vector<double>&)*a,old);
-//    LOG(INFO) << "Residual is " << resid;
     return (resid > FLAGS_tidn_propthresh);			//always run the long trigger for now
   }
   bool LongFire(const int key, bool lastrun) {
@@ -301,32 +305,33 @@ public:
     factorTimes(P,D);
     factorNormalize(P);
     //beliefs->update(key,P);
-//    LOG(INFO) << "Running LongFire for key " << key << " with resid " << factorResidual(P,old);
+    double resid = factorResidual(P,old);
 
     // Notify neighbors
     if (0 != getRowFromID(key)) {
-      factorDivide(P,A);
+      factorDivideToDivisor(P,A);
       factorNormalize(A);
       edges_down->update(key-FLAGS_tidn_width,A);
     }
     if (FLAGS_tidn_height-1 != getRowFromID(key)) {
-      factorDivide(P,B);
+      factorDivideToDivisor(P,B);
       factorNormalize(B);
       edges_up->update(key+FLAGS_tidn_width,B);
     }
     if (0 != getColFromID(key)) {
-      factorDivide(P,C);
+      factorDivideToDivisor(P,C);
       factorNormalize(C);
       edges_right->update(key-1,C);
     }
     if (FLAGS_tidn_width-1 != getColFromID(key)) {
-      factorDivide(P,D);
+      factorDivideToDivisor(P,D);
       //beliefs->update(idx, initval);
       factorNormalize(D);
       edges_left->update(key+1,D);
     }
-    return false;		// don't re-run this long trigger unless another
-                        // Accumulator says to do so.
+    return false;                       	// don't re-run this long trigger unless another
+                                            // Accumulator says to do so.
+//    return resid > FLAGS_tidn_propthresh;                        // Accumulator says to do so.
   }
 };
 
@@ -397,14 +402,52 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
     vector<double> initval;
     TypedGlobalTable<int, vector<double> >::Iterator *it =
       potentials->get_typed_iterator(current_shard());
+    for(; !it->done(); it->Next()) {
+      if (0 != getColFromID(it->key())) {
+        initval = it->value();
+        edges_right->update(it->key()-1, initval);
+      }
+    }
+
+  });
+
+  while (--FLAGS_tidn_passes > 0) {
+    PRunAll(potentials, {
+      TypedGlobalTable<int, vector<double> >::Iterator *it = 
+        potentials->get_typed_iterator(current_shard());
+      for(; !it->done(); it->Next()) {
+        int key = it->key();
+        vector<double> P = it->value();
+        vector<double> A = edges_up->get(key);
+        vector<double> B = edges_down->get(key);
+        vector<double> C = edges_left->get(key);
+        vector<double> D = edges_right->get(key);
+     
+        // Calculate the new Belief [B = n(PABCD)]
+        factorTimes(P,A);
+        factorTimes(P,B);
+        factorTimes(P,C);
+        factorTimes(P,D);
+        factorNormalize(P);
+        potentials->update(key,P);
+      }
+
+    });
+
+    PRunAll(potentials, {
+  
+      vector<double> initval;
+      TypedGlobalTable<int, vector<double> >::Iterator *it =
+        potentials->get_typed_iterator(current_shard());
       for(; !it->done(); it->Next()) {
         if (0 != getColFromID(it->key())) {
           initval = it->value();
           edges_right->update(it->key()-1, initval);
         }
       }
-
-  });
+  
+    });
+  }
 
   //Finish the timer!
   gettimeofday(&end_time, NULL);
@@ -453,6 +496,10 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
             maxidx = k;
           }
         }
+
+        //map 0...[FLAGS_tidn_colors-1] to 0..255 color 
+        //ie, the reverse of the load step
+        maxidx = (maxidx*256)/FLAGS_tidn_colors;
 
         outim.setpixel(i,j,maxidx);
       } 

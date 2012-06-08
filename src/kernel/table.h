@@ -197,7 +197,10 @@ struct UntypedTable {
   virtual string get_str(const StringPiece &k) = 0;
   virtual void update_str(const StringPiece &k, const StringPiece &v) = 0;
   virtual boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) = 0;
-  virtual boost::recursive_mutex& rt_bitset_mutex() = 0;
+  // Updates lock the update mutex. The retrigger mutex locks the retrig
+  // mutex. The resize operation requires both mutices.
+  virtual boost::recursive_mutex& rt_bitset_update_mutex() = 0;
+  virtual boost::recursive_mutex& rt_bitset_retrig_mutex() = 0;
 };
 
 struct TableIterator {
@@ -220,10 +223,14 @@ public:
   virtual boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) = 0;
   virtual const K bitset_getkeyforbit(unsigned long int bit_offset) = 0;
   virtual int bitset_epoch(void) = 0;
-  boost::recursive_mutex& rt_bitset_mutex() {
-    return rt_bitset_m_;
+  boost::recursive_mutex& rt_bitset_update_mutex() {
+    return rt_bitset_update_m_;
   }
-  boost::recursive_mutex rt_bitset_m_;
+  boost::recursive_mutex& rt_bitset_retrig_mutex() {
+    return rt_bitset_retrig_m_;
+  }
+  boost::recursive_mutex rt_bitset_update_m_;
+  boost::recursive_mutex rt_bitset_retrig_m_;
 
 
   // Default specialization for untyped methods
