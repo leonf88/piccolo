@@ -174,7 +174,7 @@ void image::corrupt(float sigma) {
   boost::normal_distribution<float> noise_model(0, sigma);
   for(int i=0; i<_rows; i++) {
     for(int j=0; j<_cols; j++) {
-       int val = getpixel(i,j) + 255*noise_model(rng);
+       int val = getpixel(i,j) + noise_model(rng);
        val = (val > MAX_PXL_VAL)?MAX_PXL_VAL:((val < MIN_PXL_VAL)?MIN_PXL_VAL:val);
        setpixel(i,j,val);
     }
