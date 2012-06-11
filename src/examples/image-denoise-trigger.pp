@@ -113,7 +113,7 @@ double factorNormalize(vector<double>& vec) {
   double max=vec[0],total=0.;
   for(int i=0; i<vec.size(); i++) {
     if (std::isnan(vec[i]) || std::isinf(vec[i])) {
-      LOG(FATAL) << "Infinite/NaN pixel detected in Normalize (1), aborting.";
+      LOG(FATAL) << "Infinite/NaN pixel " << vec[i] << " detected in Normalize (1), aborting.";
     }
     max = std::max(max,vec[i]);
   }
@@ -121,7 +121,7 @@ double factorNormalize(vector<double>& vec) {
     total += exp(vec[i] -= max);
   }
   if (std::isnan(total) || std::isinf(total) || total <= 0.) {
-    LOG(FATAL) << "Normalizati (2) (2)on led to fin/NaN problem";
+    LOG(FATAL) << "Normalization (2) led to fin/NaN problem, total = " << total;
   }
   total = log(total);
   for(int i=0; i<vec.size(); i++) {
@@ -192,10 +192,12 @@ public:
   void set_as_laplace(double lambda) {
     for(unsigned int i = 0; i < rows_; i++) {
       for(unsigned int j = 0; j < cols_; j++) {
-        set(i,j,-std::abs((double)i-(double)j*lambda));
+        set(i,j,-std::abs((double)i-(double)j)*lambda);
       }
     }
   }
+  int cols() { return cols_; }
+  int rows() { return rows_; }
 
 private:
   vector<double> data_;
@@ -206,15 +208,16 @@ private:
 
 binfac edge_factor;
 
-void factorConvolve(vector<double>& a, vector<double> b, binfac c) {
+void factorConvolve(vector<double> a, binfac b) {
+  CHECK_EQ(a.size(),b.cols()) << "factorConvolve() requires dimensionally-identical vectors";
   for(int i=0; i<a.size(); i++) {
     double sum = 0.;
-    for(int j=0; j<b.size(); j++) {
-      sum += std::exp(c.get(i,j)+b[j]);
+    for(int j=0; j<a.size(); j++) {
+      sum += std::exp(b.get(i,j)+a[j]);
     }
     if (sum == 0.) sum = std::numeric_limits<double>::min();
-    b[i] = std::log(sum);
-    if (std::isnan(b[i]) || std::isinf(b[i])) LOG(FATAL) << "Detected NaN/inf sum in convolution";
+    a[i] = std::log(sum);
+    if (std::isnan(a[i]) || std::isinf(a[i])) LOG(FATAL) << "Detected NaN/inf sum " << a[i] << " in convolution";
   }
 }
 
@@ -283,7 +286,7 @@ struct idn_trigger: public HybridTrigger<int, vector<double> > {
 public:
   bool Accumulate(vector<double>* a, const vector<double>& b) {
     vector<double> old(*a);
-    factorConvolve((vector<double>&)*a,(vector<double>&)b, edge_factor);
+    factorConvolve((vector<double>&)b, edge_factor);
     factorNormalize((vector<double>&)b);
     factorDamp((vector<double>&)*a,(vector<double>&)b,FLAGS_tidn_damping);
     double resid = factorResidual((vector<double>&)*a,old);
@@ -412,9 +415,19 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   });
 
   while (--FLAGS_tidn_passes > 0) {
+
+    PSwapAccumulator(edges_up,   {new Accumulators<vector<double> >::Replace});
+    PSwapAccumulator(edges_down, {new Accumulators<vector<double> >::Replace});
+    PSwapAccumulator(edges_left, {new Accumulators<vector<double> >::Replace});
+    PSwapAccumulator(edges_right,{new Accumulators<vector<double> >::Replace});
+
     PRunAll(potentials, {
       TypedGlobalTable<int, vector<double> >::Iterator *it = 
         potentials->get_typed_iterator(current_shard());
+      vector<double> edgereset;
+      edgereset.resize(FLAGS_tidn_colors);
+      factorUniform(edgereset);
+      factorNormalize(edgereset);
       for(; !it->done(); it->Next()) {
         int key = it->key();
         vector<double> P = it->value();
@@ -430,12 +443,23 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
         factorTimes(P,D);
         factorNormalize(P);
         potentials->update(key,P);
+
+        // By doing this, we can then poke each edge with a "null" (raw potential) update
+        edges_up->update(key,edgereset);
+		edges_down->update(key,edgereset);
+        edges_left->update(key,edgereset);
+        edges_right->update(key,edgereset);
       }
 
     });
 
+    PSwapAccumulator(edges_up,   {(Trigger<int,vector<double> >*)new idn_trigger});
+    PSwapAccumulator(edges_down, {(Trigger<int,vector<double> >*)new idn_trigger});
+    PSwapAccumulator(edges_left, {(Trigger<int,vector<double> >*)new idn_trigger});
+    PSwapAccumulator(edges_right,{(Trigger<int,vector<double> >*)new idn_trigger});
+
     PRunAll(potentials, {
-  
+
       vector<double> initval;
       TypedGlobalTable<int, vector<double> >::Iterator *it =
         potentials->get_typed_iterator(current_shard());
@@ -445,8 +469,33 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
           edges_right->update(it->key()-1, initval);
         }
       }
+
+    });
+/*
+    PRunAll(potentials, {
+  
+      vector<double> initval, divval;
+      TypedGlobalTable<int, vector<double> >::Iterator *it =
+        potentials->get_typed_iterator(current_shard());
+      for(; !it->done(); it->Next()) {
+        if (0 != getColFromID(it->key())) {
+          initval = it->value();
+          // for non-first pass, no longer valid to assume that
+          // A=B=C=D=[1..1], so we must normalize it out:
+          //       A | 
+          //         v   D
+          //     --->o<---
+          //     C   ^ 
+          //         | B
+          divval = edges_left->get(it->key());
+          factorDivide(initval,divval);
+          factorNormalize(initval);
+          edges_right->update(it->key()-1, initval);
+        }
+      }
   
     });
+*/
   }
 
   //Finish the timer!
