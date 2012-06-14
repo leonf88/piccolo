@@ -275,4 +275,5 @@ def build(bld):
   build_example('conncomp', ['conncomp.pp', ])
   build_example('conncomp-trigger', ['conncomp-trigger.pp', ])
   build_example('image-denoise-trigger', ['image-denoise-trigger.pp', 'imglib/pgmimage.cpp', ])
+  build_example('image-denoise', ['image-denoise.pp', 'imglib/pgmimage.cpp', ])
 
