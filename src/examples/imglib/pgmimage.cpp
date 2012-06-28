@@ -169,14 +169,46 @@ int image::tofile(string filename) {
   return 1;
 }
 
-void image::corrupt(float sigma) {
+int image::tofile_graphlab(string filename) {
+  int k, val;
+  FILE *iop;
+
+  int maxval = MIN_PXL_VAL, minval = MAX_PXL_VAL;
+  iop = fopen(filename.c_str(), "w");
+  CHECK_NE(iop,static_cast<FILE*>(NULL)) << "Failed to open " << filename << " for writing";
+  fprintf(iop, "P2\n");
+  fprintf(iop, "%d %d\n", _cols, _rows);
+  fprintf(iop, "255\n");
+
+  for (int i=0; i<_rows; i++) {
+    for (int j=0; j<_cols; j++) {
+      if (getpixel(i,j) > maxval) maxval = getpixel(i,j);
+      if (getpixel(i,j) < minval) minval = getpixel(i,j);
+    }
+  }
+  printf("max %d min %d\n",maxval,minval);
+
+  k=1;
+  for (int i=0; i<_rows; i++) {
+    for (int j=0; j<_cols; j++) {
+      val = (int)(255.f*(((float)getpixel(i,j) - (float)minval)/((float)maxval-(float)minval)));
+      fprintf(iop, "%d%c", val, (k%10)?' ':'\n');
+      k++;
+    }
+  }
+  fprintf(iop, "\n");
+  fclose(iop);
+  return 1;
+}
+
+void image::corrupt(float sigma, float scaling = 1.0f) {
   boost::lagged_fibonacci607 rng;
   boost::normal_distribution<float> noise_model(0, sigma);
   for(int i=0; i<_rows; i++) {
     for(int j=0; j<_cols; j++) {
-       int val = getpixel(i,j) + noise_model(rng);
+       float val = ((float)getpixel(i,j) + scaling*noise_model(rng));
        val = (val > MAX_PXL_VAL)?MAX_PXL_VAL:((val < MIN_PXL_VAL)?MIN_PXL_VAL:val);
-       setpixel(i,j,val);
+       setpixel(i,j,(int)val);
     }
   }
 }
