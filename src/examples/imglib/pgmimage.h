@@ -38,6 +38,7 @@ class image {
     void realloc(string name, int nr, int nc);
     string basename(string filename);
     int tofile(string filename);
+    int tofile_graphlab(string filename);
     inline void setpixel(int r, int c, int val) {
       data[(r*_cols) + c] = val;
     }
@@ -45,7 +46,7 @@ class image {
       return data[(r*_cols) + c];
     }
 
-    void corrupt(float sigma);
+    void corrupt(float sigma, float scaling);
     double calcMSEfrom(image otherim);
 
     int rows() const { return _rows; }

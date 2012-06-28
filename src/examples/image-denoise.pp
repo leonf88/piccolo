@@ -25,8 +25,8 @@ DEFINE_int32(idn_colors, 5, "Input image color depth");
 DEFINE_double(idn_sigma, 2, "Stddev of noise to add to img");
 DEFINE_double(idn_lambda, 2, "Smoothing parameter");
 DEFINE_string(idn_smoothing, "la", "Smoothing type ([sq]uare or [la]place)");
-DEFINE_double(idn_propthresh, 1e-10, "Threshold to propagate updates");
-DEFINE_double(idn_damping, 0.1, "Edge damping value");
+DEFINE_double(idn_propthresh, 1e-5, "Threshold to propagate updates");
+DEFINE_double(idn_damping, 0.5, "Edge damping value");
 DEFINE_int32(idn_maxiters, 20, "Maximum iterations, even if not yet converged");
 // No passes argument! Does a single "meta-pass" but with residual awareness.
 
@@ -86,6 +86,7 @@ struct BlockShard : public Sharder<int> {
       _BlockCols*((getRowFromID(key)*_BlockRows)/FLAGS_idn_height)+
       ((getColFromID(key)*_BlockCols)/FLAGS_idn_width)
       ));
+//	VLOG(0) << "Key " << key << " at (x=" << getColFromID(key) << ",y=" << getRowFromID(key) << ") in shard " << retval;
     return retval;
   }
 private:
@@ -235,7 +236,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Fetch image and add noise to it
   image cleanim(im_path);
   image noisyim(cleanim);
-  noisyim.corrupt(FLAGS_idn_sigma*((double)256./(double)FLAGS_idn_colors));
+  noisyim.corrupt(FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
   noisyim.tofile(im_path + ".noisy");
   double mse = noisyim.calcMSEfrom(cleanim);
   LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
@@ -257,7 +258,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
       // Set up potential from pixel
       double obs = (double)noisyim.getpixel(i,j);
       //map 0..255 color to 0...[FLAGS_idn_colors-1]
-      obs = (obs*FLAGS_idn_colors)/256.;
+      obs = (obs*(float)FLAGS_idn_colors)/255.;
 
       for(size_t pred = 0; pred < FLAGS_idn_colors; ++pred) {
         potential[pred] = 
@@ -319,12 +320,21 @@ int ImageDenoise(const ConfigData& conf) {
   CHECK_LT(FLAGS_idn_damping,1) << "Damping factor must be < 1";
 
   //initialize tables
+/*
   potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
   edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
   edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
   edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
   edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
   residuals   = CreateTable(5, FLAGS_shards, new BlockShard, new Accumulators<double>::Replace);
+*/
+  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+  residuals   = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Replace);
+
   globalresid = CreateTable(6, 1, new Sharding::Mod, new Accumulators<double>::Max);
 
   //set up edge factor on all workers
@@ -481,7 +491,7 @@ int ImageDenoise(const ConfigData& conf) {
 
         //map 0...[FLAGS_idn_colors-1] to 0..255 color 
         //ie, the reverse of the load step
-        maxidx = (maxidx*256)/FLAGS_idn_colors;
+        maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
 
         outim.setpixel(i,j,maxidx);
       } 
