@@ -10,10 +10,6 @@ using namespace piccolo;
 // application, but the data and control flow bear no
 // resemblance to that reference.
 
-// Notes to self:
-// - Following the example of GraphLab, it seems as though it makes sense to 
-//   store data in logarithmic format. Some kind of magnitude or BP issue?
-
 DEFINE_string(tidn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(tidn_width, 0, "Input image width");
 DEFINE_int32(tidn_height, 0, "Input image height");
@@ -39,7 +35,6 @@ static TypedGlobalTable<int, vector<double> >* edges_right;
 namespace piccolo {
 template<> struct Marshal<vector<double> > : MarshalBase {
   static void marshal(const vector<double>& t, string *out) {
-//    LOG(INFO) << "Marshalling vector of size " << t.size();
     int i;
     double j;
     int len = t.size();
@@ -48,7 +43,6 @@ template<> struct Marshal<vector<double> > : MarshalBase {
       j = t[i];
       out->append((char*) &j, sizeof(double));
     }
-//    LOG(INFO) << "Marshalled vector of size " << t.size() << " into string of size " << out->length();
   }
   static void unmarshal(const StringPiece &s, vector<double>* t) {
     int i;
@@ -83,7 +77,6 @@ struct BlockShard : public Sharder<int> {
       _BlockCols*((getRowFromID(key)*_BlockRows)/FLAGS_tidn_height)+
       ((getColFromID(key)*_BlockCols)/FLAGS_tidn_width)
       ));
-//	VLOG(0) << "Key " << key << " at (x=" << getColFromID(key) << ",y=" << getRowFromID(key) << ") in shard " << retval;
     return retval;
   }
 private:
@@ -336,7 +329,6 @@ public:
     factorTimes(P,D);
     factorNormalize(P);
     //beliefs->update(key,P);
-    double resid = factorResidual(P,old);
 
     // Notify neighbors
     if (0 != getRowFromID(key)) {
@@ -362,7 +354,6 @@ public:
     }
     return false;                       	// don't re-run this long trigger unless another
                                             // Accumulator says to do so.
-//    return resid > FLAGS_tidn_propthresh;                        // Accumulator says to do so.
   }
 };
 
@@ -566,11 +557,6 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
             maxidx = k;
           }
         }
-
-        //N.B.: Trying WITHOUT this step to try to match graphlab output
-        //map 0...[FLAGS_idn_colors-1] to 0..255 color 
-        //ie, the reverse of the load step
-        //maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
 
         outim.setpixel(getRowFromID(it_P->key()),getColFromID(it_P->key()),maxidx);
       } 
