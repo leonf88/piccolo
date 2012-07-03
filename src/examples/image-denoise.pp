@@ -10,14 +10,6 @@ using namespace piccolo;
 // application, but the data and control flow bear no
 // resemblance to that reference.
 
-// Notes to self:
-// - Following the example of GraphLab, it seems as though it makes sense to 
-//   store data in logarithmic format. Some kind of magnitude or BP issue?
-// - In order to make the algorithm work properly, the _beliefs_ table will
-//   actually have values packed as [B][edge 1][edge 2][edge 3][edge 4].
-// - Updates will have to take the form of [vertex #][belief]
-// - Need to switch to a matrix-mult-style block sharding!
-
 DEFINE_string(idn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(idn_width, 0, "Input image width");
 DEFINE_int32(idn_height, 0, "Input image height");
@@ -45,7 +37,6 @@ static TypedGlobalTable<int, double >* globalresid;
 namespace piccolo {
 template<> struct Marshal<vector<double> > : MarshalBase {
   static void marshal(const vector<double>& t, string *out) {
-//    LOG(INFO) << "Marshalling vector of size " << t.size();
     int i;
     double j;
     int len = t.size();
@@ -54,7 +45,6 @@ template<> struct Marshal<vector<double> > : MarshalBase {
       j = t[i];
       out->append((char*) &j, sizeof(double));
     }
-//    LOG(INFO) << "Marshalled vector of size " << t.size() << " into string of size " << out->length();
   }
   static void unmarshal(const StringPiece &s, vector<double>* t) {
     int i;
@@ -89,7 +79,6 @@ struct BlockShard : public Sharder<int> {
       _BlockCols*((getRowFromID(key)*_BlockRows)/FLAGS_idn_height)+
       ((getColFromID(key)*_BlockCols)/FLAGS_idn_width)
       ));
-//	VLOG(0) << "Key " << key << " at (x=" << getColFromID(key) << ",y=" << getRowFromID(key) << ") in shard " << retval;
     return retval;
   }
 private:
@@ -455,11 +444,6 @@ int ImageDenoise(const ConfigData& conf) {
 
     maxresid = std::numeric_limits<double>::min();
     PRunAll(residuals, {
-      //TypedTableIterator<int, double>* it = residuals->get_typed_iterator(current_shard());
-      //double localmaxresid = std::numeric_limits<double>::min();
-      //for(; !it->done(); it->Next()) {
-      //  localmaxresid = std::max(localmaxresid,it->value());
-      //}
       globalresid->update(0,globalresid->get(current_shard()));
     });
     maxresid = globalresid->get(0);
@@ -471,18 +455,6 @@ int ImageDenoise(const ConfigData& conf) {
     PSwapAccumulator(globalresid, {new Accumulators<double>::Replace});
     PRunAll(globalresid, { globalresid->update(current_shard(),0); });
     PSwapAccumulator(globalresid, {new Accumulators<double>::Max});
-
-    // Clear residuals table
-    /*
-    PSwapAccumulator(residuals, {new Accumulators<double>::Replace});
-    PRunAll(residuals, {
-      TypedTableIterator<int, double>* it = residuals->get_typed_iterator(current_shard());
-      for(; !it->done(); it->Next()) {
-        residuals->update(it->key(),0.);
-      }
-    });
-    PSwapAccumulator(residuals, {new Accumulators<double>::Max});
-    */
 
   } while (maxresid > FLAGS_idn_propthresh && iters < FLAGS_idn_maxiters);
 
@@ -538,11 +510,6 @@ int ImageDenoise(const ConfigData& conf) {
             maxidx = k;
           }
         }
-
-        //N.B.: Trying WITHOUT this step to try to match graphlab output
-        //map 0...[FLAGS_idn_colors-1] to 0..255 color 
-        //ie, the reverse of the load step
-        //maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
 
         outim.setpixel(getRowFromID(it_P->key()),getColFromID(it_P->key()),maxidx);
       } 
