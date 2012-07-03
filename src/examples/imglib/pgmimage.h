@@ -47,6 +47,7 @@ class image {
     }
 
     void corrupt(float sigma, float scaling);
+    void corrupt_area(int x0, int y0, int width, int height, float sigma, float scaling);
     double calcMSEfrom(image otherim);
 
     int rows() const { return _rows; }

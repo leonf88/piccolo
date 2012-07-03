@@ -24,7 +24,9 @@ DEFINE_string(tidn_smoothing, "la", "Smoothing type ([sq]uare or [la]place)");
 DEFINE_double(tidn_propthresh, 1e-4, "Threshold to propagate updates");
 DEFINE_double(tidn_damping, 0.9, "Edge damping value");
 DEFINE_int32(tidn_passes, 1, "Number of async denoising passes");
-DEFINE_bool(tidn_corrupt, true, "Set to 0 if pre-corrupted image");
+DEFINE_bool(tidn_corrupt, true, "Set to false if pre-corrupted image");
+DEFINE_double(tidn_corrupt_pct, 1.0, "When corruption is specified, pick a random area to corrupt");
+DEFINE_bool(tidn_useblock, true, "Set to true for Block sharding, false for Mod sharding");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, vector<double> >* potentials;
@@ -232,7 +234,22 @@ static int PopulateTables(int shards, string im_path, int colors) {
   image cleanim(im_path);
   image noisyim(cleanim);
   if (FLAGS_tidn_corrupt) {
-    noisyim.corrupt(FLAGS_tidn_sigma,(float)((double)255./(double)FLAGS_tidn_colors));
+    if (FLAGS_tidn_corrupt_pct < 1.0) {
+      double totalarea = noisyim.rows()*noisyim.cols();
+      double corruptarea = totalarea*FLAGS_tidn_corrupt_pct;
+      int x0, y0, width, height;
+      do {
+        x0 = rand() % noisyim.cols();
+        width = rand() % (noisyim.cols()-x0);
+        y0 = rand() % noisyim.rows();
+        height = floor(corruptarea/width);
+      } while(x0+width > noisyim.cols() || y0+height > noisyim.rows());
+      LOG(INFO) << "Corrupting " << FLAGS_tidn_corrupt_pct*100 << "% of image from ("
+                << x0 << ", " << y0 << ") to (" << (x0+width-1) << ", " << (y0+height-1) << ")";
+      noisyim.corrupt_area(x0,y0,width,height,FLAGS_tidn_sigma,(float)((double)255./(double)FLAGS_tidn_colors));
+    } else {
+      noisyim.corrupt(FLAGS_tidn_sigma,(float)((double)255./(double)FLAGS_tidn_colors));
+    }
     noisyim.tofile(im_path + ".noisy");
     double mse = noisyim.calcMSEfrom(cleanim);
     LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
@@ -248,7 +265,6 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Set up all potentials and edges
   int k=0;
   double sigma_squared = FLAGS_tidn_sigma*FLAGS_tidn_sigma;
-
 
   int minval,maxval;
   minval = maxval = noisyim.getpixel(0,0);
@@ -370,19 +386,20 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   CHECK_LT(FLAGS_tidn_damping,1) << "Damping factor must be < 1";
 
   //initialize tables
-  potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
-  edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
-  edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
-  edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
-/*
-  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
-  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  if (FLAGS_tidn_useblock) {
+    potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+    edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+    edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+    edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace,1);
+  } else {
+    potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+    edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+    edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+    edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace,1);
+  }
   //beliefs     = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-*/
 
   //set up edge factor on all workers
   edge_factor.resize(FLAGS_tidn_colors,FLAGS_tidn_colors);
@@ -507,18 +524,28 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
   PRunOne(potentials, {
     image outim(FLAGS_tidn_image + ".output", FLAGS_tidn_height, FLAGS_tidn_width);
     double sumresid = 0.;
-    for(int i=0; i<FLAGS_tidn_height; i++) {
-      for(int j=0; j<FLAGS_tidn_width; j++) {
-        int key = getVertID(i, j);
+    for(int shard=0; shard<potentials->num_shards(); shard++) {
+      TypedTableIterator<int, vector<double> >* it_P = potentials->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_A = edges_up->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_B = edges_down->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_C = edges_left->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_D = edges_right->get_typed_iterator(shard);
 
-        // Get the potentials and incoming edges
-        vector<double> P = potentials->get(key);
+      for(; !it_P->done() && !it_A->done() && !it_B->done() && !it_C->done() && !it_D->done(); 
+            it_P->Next(), it_A->Next(), it_B->Next(), it_C->Next(), it_D->Next()) {
+
+        if (it_P->key() != it_A->key() || it_A->key() != it_B->key() || 
+            it_B->key() != it_C->key() || it_C->key() != it_D->key()
+        ) {
+          LOG(FATAL) << "Rebuilding image: key iteration mismatch";
+        }
+
+        vector<double> P = it_P->value();
         vector<double> Pold(P);
-        vector<double> A = edges_up->get(key);
-        vector<double> B = edges_down->get(key);
-        vector<double> C = edges_left->get(key);
-        vector<double> D = edges_right->get(key);
-    
+        vector<double> A = it_A->value();
+        vector<double> B = it_B->value();
+        vector<double> C = it_C->value();
+        vector<double> D = it_D->value();
     	// Calculate the new Belief [B = n(PABCD)]
         factorTimes(P,A);
         factorTimes(P,B);
@@ -541,11 +568,11 @@ int ImageDenoiseTrigger(const ConfigData& conf) {
         }
 
         //N.B.: Trying WITHOUT this step to try to match graphlab output
-        //map 0...[FLAGS_tidn_colors-1] to 0..255 color 
+        //map 0...[FLAGS_idn_colors-1] to 0..255 color 
         //ie, the reverse of the load step
-        //maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_tidn_colors);
+        //maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
 
-        outim.setpixel(i,j,maxidx);
+        outim.setpixel(getRowFromID(it_P->key()),getColFromID(it_P->key()),maxidx);
       } 
     }
     outim.tofile_graphlab(FLAGS_tidn_image + ".output");

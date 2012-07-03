@@ -22,13 +22,16 @@ DEFINE_string(idn_image, "input_image.pgm", "Input image to denoise");
 DEFINE_int32(idn_width, 0, "Input image width");
 DEFINE_int32(idn_height, 0, "Input image height");
 DEFINE_int32(idn_colors, 5, "Input image color depth");
-DEFINE_double(idn_sigma, 2, "Stddev of noise to add to img");
+DEFINE_double(idn_sigma, 1, "Stddev of noise to add to img");
 DEFINE_double(idn_lambda, 2, "Smoothing parameter");
 DEFINE_string(idn_smoothing, "la", "Smoothing type ([sq]uare or [la]place)");
-DEFINE_double(idn_propthresh, 1e-5, "Threshold to propagate updates");
-DEFINE_double(idn_damping, 0.5, "Edge damping value");
-DEFINE_int32(idn_maxiters, 20, "Maximum iterations, even if not yet converged");
-// No passes argument! Does a single "meta-pass" but with residual awareness.
+DEFINE_double(idn_propthresh, 1e-4, "Threshold to propagate updates");
+DEFINE_double(idn_damping, 0.9, "Edge damping value");
+DEFINE_int32(idn_maxiters, 10, "Maximum iterations, even if not yet converged");
+// No passes argument! Does a single "meta-pass" but with residual awareness. (TODO: broken atm)
+DEFINE_bool(idn_corrupt, true, "Set to false if pre-corrupted image");
+DEFINE_double(idn_corrupt_pct, 1.0, "When corruption is specified, pick a random area to corrupt");
+DEFINE_bool(idn_useblock, true, "Set to true to use Block sharding, false for Mod sharding");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, vector<double> >* potentials;
@@ -236,10 +239,27 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Fetch image and add noise to it
   image cleanim(im_path);
   image noisyim(cleanim);
-  noisyim.corrupt(FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
-  noisyim.tofile(im_path + ".noisy");
-  double mse = noisyim.calcMSEfrom(cleanim);
-  LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
+  if (FLAGS_idn_corrupt) {
+    if (FLAGS_idn_corrupt_pct < 1.0) {
+      double totalarea = noisyim.rows()*noisyim.cols();
+      double corruptarea = totalarea*FLAGS_idn_corrupt_pct;
+      int x0, y0, width, height;
+      do {
+        x0 = rand() % noisyim.cols();
+        width = rand() % (noisyim.cols()-x0);
+        y0 = rand() % noisyim.rows();
+        height = floor(corruptarea/width);
+      } while(x0+width > noisyim.cols() || y0+height > noisyim.rows());
+      LOG(INFO) << "Corrupting " << FLAGS_idn_corrupt_pct*100 << "% of image from ("
+                << x0 << ", " << y0 << ") to (" << (x0+width-1) << ", " << (y0+height-1) << ")";
+      noisyim.corrupt_area(x0,y0,width,height,FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
+    } else {
+      noisyim.corrupt(FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
+    }
+    noisyim.tofile(im_path + ".noisy");
+    double mse = noisyim.calcMSEfrom(cleanim);
+    LOG(INFO) << "Noisy image has MSE=" << mse << " from original";
+  }
 
   // Set up initialization vectors (potential and initval)
   vector<double> initval;
@@ -251,6 +271,16 @@ static int PopulateTables(int shards, string im_path, int colors) {
   // Set up all potentials and edges
   int k=0;
   double sigma_squared = FLAGS_idn_sigma*FLAGS_idn_sigma;
+
+  int minval,maxval;
+  minval = maxval = noisyim.getpixel(0,0);
+  for(int i=0; i<FLAGS_idn_height; i++) {
+    for(int j=0; j<FLAGS_idn_width; j++) {
+      if (noisyim.getpixel(i,j) < minval) minval = noisyim.getpixel(i,j);
+      if (noisyim.getpixel(i,j) > maxval) maxval = noisyim.getpixel(i,j);
+    }
+  }
+
   for(int i=0; i<FLAGS_idn_height; i++) {
     for(int j=0; j<FLAGS_idn_width; j++) {
       int idx = getVertID(i,j);
@@ -258,7 +288,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
       // Set up potential from pixel
       double obs = (double)noisyim.getpixel(i,j);
       //map 0..255 color to 0...[FLAGS_idn_colors-1]
-      obs = (obs*(float)FLAGS_idn_colors)/255.;
+      obs = (double)(FLAGS_idn_colors-1)*((obs-(double)minval)/((double)maxval-(double)minval));
 
       for(size_t pred = 0; pred < FLAGS_idn_colors; ++pred) {
         potential[pred] = 
@@ -266,7 +296,7 @@ static int PopulateTables(int shards, string im_path, int colors) {
       }
       factorNormalize(potential);
       potentials->update(idx,potential);
-      residuals->update(idx,std::numeric_limits<double>::max());
+      residuals->update(idx,0);
 
       // Set up edges
       edges_up->update(idx,initval);
@@ -280,13 +310,6 @@ static int PopulateTables(int shards, string im_path, int colors) {
   LOG(INFO) << "Set up " << k << " pixels in potential and edge tables";
   return 0;
 }
-
-struct idn_accum_delta: public Accumulator<double> {
-public:
-  void Accumulate(double* a, const double& b) {
-    *a = std::abs(b-*a);
-  }
-};
 
 struct idn_accum: public Accumulator<vector<double> > {
 public:
@@ -320,22 +343,23 @@ int ImageDenoise(const ConfigData& conf) {
   CHECK_LT(FLAGS_idn_damping,1) << "Damping factor must be < 1";
 
   //initialize tables
-/*
-  potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
-  residuals   = CreateTable(5, FLAGS_shards, new BlockShard, new Accumulators<double>::Replace);
-*/
-  potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
-  residuals   = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Replace);
+  if (FLAGS_idn_useblock) {
+    potentials  = CreateTable(0, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    edges_up    = CreateTable(1, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    edges_down  = CreateTable(2, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    edges_left  = CreateTable(3, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    edges_right = CreateTable(4, FLAGS_shards, new BlockShard, new Accumulators<vector<double> >::Replace);
+    residuals   = CreateTable(5, FLAGS_shards, new BlockShard, new Accumulators<double>::Replace);
+  } else {
+    potentials  = CreateTable(0, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    edges_up    = CreateTable(1, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    edges_down  = CreateTable(2, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    edges_left  = CreateTable(3, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    edges_right = CreateTable(4, FLAGS_shards, new Sharding::Mod, new Accumulators<vector<double> >::Replace);
+    residuals   = CreateTable(5, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Replace);
+  }
 
-  globalresid = CreateTable(6, 1, new Sharding::Mod, new Accumulators<double>::Max);
+  globalresid = CreateTable(6, FLAGS_shards, new Sharding::Mod, new Accumulators<double>::Max);
 
   //set up edge factor on all workers
   edge_factor.resize(FLAGS_idn_colors,FLAGS_idn_colors);
@@ -362,7 +386,7 @@ int ImageDenoise(const ConfigData& conf) {
     });
   }
 
-  PSwapAccumulator(residuals  ,{(Accumulator<double>*)new idn_accum_delta});
+//  PSwapAccumulator(residuals  ,{new Accumulators<double>::Max});
   PSwapAccumulator(edges_up   ,{(Accumulator<vector<double> >*)new idn_accum});
   PSwapAccumulator(edges_down ,{(Accumulator<vector<double> >*)new idn_accum});
   PSwapAccumulator(edges_left ,{(Accumulator<vector<double> >*)new idn_accum});
@@ -400,7 +424,9 @@ int ImageDenoise(const ConfigData& conf) {
 
         // Calculate the residual and "store" it
         double resid = factorResidual(P,old);
+        double deltaresid = std::abs(resid-residuals->get(key));
         residuals->update(key,resid);
+        globalresid->update(current_shard(),deltaresid);
     
         // Notify neighbors
         if (0 != getRowFromID(key)) {
@@ -427,23 +453,37 @@ int ImageDenoise(const ConfigData& conf) {
       }
     });
 
-    PSwapAccumulator(globalresid, {new Accumulators<double>::Replace});
-    PRunOne(globalresid, { globalresid->update(0,std::numeric_limits<double>::min()); });
-    PSwapAccumulator(globalresid, {new Accumulators<double>::Max});
-
     maxresid = std::numeric_limits<double>::min();
     PRunAll(residuals, {
-      TypedTableIterator<int, double>* it = residuals->get_typed_iterator(current_shard());
-      double localmaxresid = std::numeric_limits<double>::min();
-      for(; !it->done(); it->Next()) {
-        localmaxresid = std::max(localmaxresid,it->value());
-      }
-      globalresid->update(0,localmaxresid);
+      //TypedTableIterator<int, double>* it = residuals->get_typed_iterator(current_shard());
+      //double localmaxresid = std::numeric_limits<double>::min();
+      //for(; !it->done(); it->Next()) {
+      //  localmaxresid = std::max(localmaxresid,it->value());
+      //}
+      globalresid->update(0,globalresid->get(current_shard()));
     });
     maxresid = globalresid->get(0);
 
     iters++;
     LOG(INFO) << "Completed " << iters << " iterations, maxresid " << maxresid;
+
+    //Reset global residual
+    PSwapAccumulator(globalresid, {new Accumulators<double>::Replace});
+    PRunAll(globalresid, { globalresid->update(current_shard(),0); });
+    PSwapAccumulator(globalresid, {new Accumulators<double>::Max});
+
+    // Clear residuals table
+    /*
+    PSwapAccumulator(residuals, {new Accumulators<double>::Replace});
+    PRunAll(residuals, {
+      TypedTableIterator<int, double>* it = residuals->get_typed_iterator(current_shard());
+      for(; !it->done(); it->Next()) {
+        residuals->update(it->key(),0.);
+      }
+    });
+    PSwapAccumulator(residuals, {new Accumulators<double>::Max});
+    */
+
   } while (maxresid > FLAGS_idn_propthresh && iters < FLAGS_idn_maxiters);
 
   //Finish the timer!
@@ -456,18 +496,28 @@ int ImageDenoise(const ConfigData& conf) {
   PRunOne(potentials, {
     image outim(FLAGS_idn_image + ".output", FLAGS_idn_height, FLAGS_idn_width);
     double sumresid = 0.;
-    for(int i=0; i<FLAGS_idn_height; i++) {
-      for(int j=0; j<FLAGS_idn_width; j++) {
-        int key = getVertID(i, j);
+    for(int shard=0; shard<potentials->num_shards(); shard++) {
+      TypedTableIterator<int, vector<double> >* it_P = potentials->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_A = edges_up->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_B = edges_down->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_C = edges_left->get_typed_iterator(shard);
+      TypedTableIterator<int, vector<double> >* it_D = edges_right->get_typed_iterator(shard);
 
-        // Get the potentials and incoming edges
-        vector<double> P = potentials->get(key);
+      for(; !it_P->done() && !it_A->done() && !it_B->done() && !it_C->done() && !it_D->done(); 
+            it_P->Next(), it_A->Next(), it_B->Next(), it_C->Next(), it_D->Next()) {
+
+        if (it_P->key() != it_A->key() || it_A->key() != it_B->key() || 
+            it_B->key() != it_C->key() || it_C->key() != it_D->key()
+        ) {
+          LOG(FATAL) << "Rebuilding image: key iteration mismatch";
+        }
+
+        vector<double> P = it_P->value();
         vector<double> Pold(P);
-        vector<double> A = edges_up->get(key);
-        vector<double> B = edges_down->get(key);
-        vector<double> C = edges_left->get(key);
-        vector<double> D = edges_right->get(key);
-    
+        vector<double> A = it_A->value();
+        vector<double> B = it_B->value();
+        vector<double> C = it_C->value();
+        vector<double> D = it_D->value();
     	// Calculate the new Belief [B = n(PABCD)]
         factorTimes(P,A);
         factorTimes(P,B);
@@ -489,20 +539,24 @@ int ImageDenoise(const ConfigData& conf) {
           }
         }
 
+        //N.B.: Trying WITHOUT this step to try to match graphlab output
         //map 0...[FLAGS_idn_colors-1] to 0..255 color 
         //ie, the reverse of the load step
-        maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
+        //maxidx = roundf(((float)maxidx*255.f)/(float)FLAGS_idn_colors);
 
-        outim.setpixel(i,j,maxidx);
+        outim.setpixel(getRowFromID(it_P->key()),getColFromID(it_P->key()),maxidx);
       } 
     }
-    outim.tofile(FLAGS_idn_image + ".output");
-    image cleanim(FLAGS_idn_image);
-    double mse = outim.calcMSEfrom(cleanim);
-    LOG(INFO) << "Reconstructed image has MSE=" << mse << " from original";
+    outim.tofile_graphlab(FLAGS_idn_image + ".output");
+    if (FLAGS_idn_corrupt) {
+      image cleanim(FLAGS_idn_image);
+      double mse = outim.calcMSEfrom(cleanim);
+      LOG(INFO) << "Reconstructed image has MSE=" << mse << " from original";
+    }
     LOG(INFO) << "Sum of residuals between Ps and Bs is " << sumresid;
   });
 
   return 0;
 }
 REGISTER_RUNNER(ImageDenoise);
+
