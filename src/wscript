@@ -255,7 +255,7 @@ def build(bld):
          use=['Z', 'tcmalloc'])
 
     build_example('pagerank', ['pagerank.pp'], use=['webgraph'])
-    build_example('accelpagerank', ['accelpagerank.pp'], use=['webgraph'])
+    build_example('pagerank-trigger', ['pagerank-trigger.pp'], use=['webgraph'])
 
   build_example('k-means', ['k-means.pp', ])
   build_example('shortest-path', ['shortest-path.pp', ])
