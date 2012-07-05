@@ -205,14 +205,31 @@ void image::corrupt(float sigma, float scaling = 1.0f) {
   corrupt_area(0,0,_rows,_cols,sigma,scaling);
 }
 
+void image::corrupt_pct(float sigma, float pct, float scaling = 1.0f) {
+  boost::lagged_fibonacci607 rng;
+  boost::normal_distribution<float> noise_model(0.f, sigma);
+  boost::uniform_real<float> pixel_picker(0.f,1.f);
+  boost::variate_generator<boost::lagged_fibonacci607, boost::uniform_real<float> >
+                          pixel_model(rng,pixel_picker);
+  for(int i=0; i<_cols; i++) {
+    for(int j=0; j<_rows; j++) {
+      if (pixel_model() < pct) {
+        float val = ((float)getpixel(i,j) + scaling*noise_model(rng));
+        val = (val > MAX_PXL_VAL)?MAX_PXL_VAL:((val < MIN_PXL_VAL)?MIN_PXL_VAL:val);
+        setpixel(i,j,(int)val);
+      }
+    }
+  }
+}
+
 void image::corrupt_area(int x0, int y0, int width, int height, float sigma, float scaling = 1.0f) {
   boost::lagged_fibonacci607 rng;
   boost::normal_distribution<float> noise_model(0, sigma);
   for(int i=y0; i<y0+height; i++) {
     for(int j=x0; j<x0+width; j++) {
-       float val = ((float)getpixel(i,j) + scaling*noise_model(rng));
-       val = (val > MAX_PXL_VAL)?MAX_PXL_VAL:((val < MIN_PXL_VAL)?MIN_PXL_VAL:val);
-       setpixel(i,j,(int)val);
+      float val = ((float)getpixel(i,j) + scaling*noise_model(rng));
+      val = (val > MAX_PXL_VAL)?MAX_PXL_VAL:((val < MIN_PXL_VAL)?MIN_PXL_VAL:val);
+      setpixel(i,j,(int)val);
     }
   }
 }

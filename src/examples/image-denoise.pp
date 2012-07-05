@@ -23,6 +23,7 @@ DEFINE_int32(idn_maxiters, 10, "Maximum iterations, even if not yet converged");
 // No passes argument! Does a single "meta-pass" but with residual awareness. (TODO: broken atm)
 DEFINE_bool(idn_corrupt, true, "Set to false if pre-corrupted image");
 DEFINE_double(idn_corrupt_pct, 1.0, "When corruption is specified, pick a random area to corrupt");
+DEFINE_bool(idn_corrupt_area, true, "When false, corrupt random pixels; true = corrupt in a rectangle");
 DEFINE_bool(idn_useblock, true, "Set to true to use Block sharding, false for Mod sharding");
 
 static int NUM_WORKERS = 0;
@@ -230,18 +231,26 @@ static int PopulateTables(int shards, string im_path, int colors) {
   image noisyim(cleanim);
   if (FLAGS_idn_corrupt) {
     if (FLAGS_idn_corrupt_pct < 1.0) {
-      double totalarea = noisyim.rows()*noisyim.cols();
-      double corruptarea = totalarea*FLAGS_idn_corrupt_pct;
-      int x0, y0, width, height;
-      do {
-        x0 = rand() % noisyim.cols();
-        width = rand() % (noisyim.cols()-x0);
-        y0 = rand() % noisyim.rows();
-        height = floor(corruptarea/width);
-      } while(x0+width > noisyim.cols() || y0+height > noisyim.rows());
-      LOG(INFO) << "Corrupting " << FLAGS_idn_corrupt_pct*100 << "% of image from ("
-                << x0 << ", " << y0 << ") to (" << (x0+width-1) << ", " << (y0+height-1) << ")";
-      noisyim.corrupt_area(x0,y0,width,height,FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
+      if (FLAGS_idn_corrupt_area) {
+
+        //Corrupt pct % of the image area in one rectangle
+        double totalarea = noisyim.rows()*noisyim.cols();
+        double corruptarea = totalarea*FLAGS_idn_corrupt_pct;
+        int x0, y0, width, height;
+        do {
+          x0 = rand() % noisyim.cols();
+          width = rand() % (noisyim.cols()-x0);
+          y0 = rand() % noisyim.rows();
+          height = floor(corruptarea/width);
+        } while(x0+width > noisyim.cols() || y0+height > noisyim.rows());
+        LOG(INFO) << "Corrupting " << FLAGS_idn_corrupt_pct*100 << "% of image from ("
+                  << x0 << ", " << y0 << ") to (" << (x0+width-1) << ", " << (y0+height-1) << ")";
+        noisyim.corrupt_area(x0,y0,width,height,FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
+      } else {
+
+        // Corrupt pct % of the image pixels at random
+        noisyim.corrupt_pct(FLAGS_idn_sigma,FLAGS_idn_corrupt_pct,(float)((double)255./(double)FLAGS_idn_colors));
+      }
     } else {
       noisyim.corrupt(FLAGS_idn_sigma,(float)((double)255./(double)FLAGS_idn_colors));
     }
