@@ -17,8 +17,8 @@ from Queue import PriorityQueue, Queue, Empty, Full
 
 from tlds import domain_from_site
 
-sys.path += ['bin/release/client/python']
-sys.path += ['bin/debug/client/python']
+sys.path += ['build/client/python']
+sys.path += ['build/client/python']
 
 try:
   from piccolo import *

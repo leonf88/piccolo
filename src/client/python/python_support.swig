@@ -144,15 +144,15 @@ void Init(int argc, char** argv);
   };
 
   struct IntTrigger {
-    static Trigger<string,int64_t>* Null() { return new piccolo::Triggers<string,int64_t>::NullTrigger; }
-    static Trigger<string,int64_t>* ReadOnly() { return new piccolo::Triggers<string,int64_t>::ReadOnlyTrigger; }
-    static Trigger<string,int64_t>* PythonCode(const string& codeshort, const string& codelong) { return new IntPythonTrigger(0,codeshort,codelong); }
+    static HybridTrigger<string,int64_t>* Null() { return new piccolo::Triggers<string,int64_t>::NullTrigger; }
+    static HybridTrigger<string,int64_t>* ReadOnly() { return new piccolo::Triggers<string,int64_t>::ReadOnlyTrigger; }
+    static HybridTrigger<string,int64_t>* PythonCode(const string& codeshort, const string& codelong) { return new IntPythonTrigger(0,codeshort,codelong); }
   };
 
   struct StringTrigger {
-    static Trigger<string,string>* Null() { return new piccolo::Triggers<string,string>::NullTrigger; }
-    static Trigger<string,string>* ReadOnly() { return new piccolo::Triggers<string,string>::ReadOnlyTrigger; }
-    static Trigger<string,string>* PythonCode(const string& codeshort, const string& codelong) { return new StringPythonTrigger(0,codeshort,codelong); }
+    static HybridTrigger<string,string>* Null() { return new piccolo::Triggers<string,string>::NullTrigger; }
+    static HybridTrigger<string,string>* ReadOnly() { return new piccolo::Triggers<string,string>::ReadOnlyTrigger; }
+    static HybridTrigger<string,string>* PythonCode(const string& codeshort, const string& codelong) { return new StringPythonTrigger(0,codeshort,codelong); }
   };
   
   static Sharding::String* StringSharding() { return new Sharding::String; }
@@ -228,9 +228,11 @@ struct Trigger<K, V> {
 private:
   Trigger();
 public:
+  Accumulator(GlobalTable* thistable);
   Trigger(GlobalTable* thistable);
   Init(GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update, bool isNew);
+  bool Accumulate(V& value, const V& update);
+  bool LongFire(const K& k, bool isNew);
 };
 
 template <class K, class V>
@@ -238,7 +240,8 @@ struct PythonTrigger<K, V> {
 public:
   PythonTrigger(GlobalTable* thistable, const string& code);
   void Init(GlobalTable* thistable);
-  bool Fire(const K& k, const V& current, V& update, bool isNew);
+  bool Accumulate(V& value, const V& update);
+  bool LongFire(const K& k, bool isNew);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, const V& current, V& update);
 };
 

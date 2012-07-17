@@ -24,6 +24,7 @@ DEFINE_int32(apr_nodes, 10000, "");
 DEFINE_double(apr_tol, 1.5e-8, "threshold for updates");
 DEFINE_double(apr_d, kPropagationFactor, "alpha/restart probability");
 DEFINE_int32(ashow_top, 10, "number of top results to display");
+DEFINE_string(ashow_top_tofile, "", "set to non-blank to dump results to file");
 DEFINE_int32(machines, 1, "number of physical filesystem(s), assuming round-robin MPI schedulinG");
 
 #define PREFETCH 1024
@@ -294,9 +295,10 @@ public:
     //if (!lastrun) {
       AccelPRStruct value = prs->get(key);
       if (abs(value.pr_int-value.pr_ext) >= FLAGS_apr_tol) { //BAD || newvalue.pr_ext == 0.0) {
-        //VLOG(2) << "LongFire propagate on key " << key.site << ":" << key.page;
+        VLOG(2) << "LongFire propagate on key " << key.site << ":" << key.page;
         // Get neighbors
         APageInfo p = apages->get(key);
+        VLOG(2) << "LongFire propagate fetched on key " << key.site << ":" << key.page;
         struct AccelPRStruct updval = { 0, (value.pr_int
             - value.pr_ext)/((float)value.L), 0 };
 
@@ -416,6 +418,9 @@ int AccelPagerank(const ConfigData& conf) {
         prs->update(p, initval);
         i++;
       }
+      if (!apages->contains(p)) {
+        LOG(FATAL) << "Something is wrong! No adjacency for key " << n.site() << ":" << n.id();
+      }
     }
     fprintf(stderr,"Shard %d: %d new vertices initialized.\n",current_shard(),i);
   });
@@ -497,11 +502,19 @@ int AccelPagerank(const ConfigData& conf) {
       }
     }
     float pr_avg = pr_sum/totalpages;
-    fprintf(stdout,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
-    fprintf(stdout,"Top Pages:\n");
+
+    FILE* fh;
+    if (FLAGS_ashow_top_tofile != "") {
+      fh = fopen(FLAGS_ashow_top_tofile.c_str(),"w");
+    } else { fh = stdout; }
+
+    fprintf(fh,"RESULTS: min=%e, max=%e, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,prs->num_shards());
+    fprintf(fh,"Top Pages:\n");
     for(int i=0;i<FLAGS_ashow_top;i++) {
-      fprintf(stdout,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+      fprintf(fh,"%d\t%f\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
     }
+    if (fh != stdout) fclose(fh);
+
   });
 
   return 0;
