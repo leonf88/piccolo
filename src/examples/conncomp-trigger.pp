@@ -2,12 +2,14 @@
 #include "kernel/disk-table.h"
 
 using std::vector;
+using std::map;
 
 using namespace piccolo;
 
 DEFINE_int32(tcc_num_nodes, 10000, "");
 DEFINE_int32(tcc_dump_nodes, 0, "");
 DEFINE_bool(tcc_directed, false, "Set to change edges to be directed");
+DEFINE_string(tcc_from_sdfile, "", "Set to load from whitespace-delimited file");
 
 static int NUM_WORKERS = 0;
 static TypedGlobalTable<int, int>* maxcomp_map;
@@ -90,27 +92,58 @@ static void BuildGraph(int shards, int nodes, int density) {
     }
   } else {
     // Pass 1: edge generation
-    vector< vector<int> > edgestage;
-    edgestage.resize(nodes);
-    for (int i = 0; i < nodes; i++) {
-      for (int j = 0; j < random() % density; j++) {
-	    int neighbor = random() % nodes;
-        edgestage[neighbor].push_back(i);
-        edgestage[i].push_back(neighbor);
-        edges++;
+    map<int, vector<int> > edgestage;
+    //edgestage.resize(nodes);
+    if (FLAGS_tcc_from_sdfile != "") {
+      //load from [GIANT] file
+      FILE* fh;
+      char buf[1024];
+      int src,dest;
+
+      //try to open the specified file
+      if (0 > (fh = fopen(FLAGS_tcc_from_sdfile.c_str(),"r"))) {
+        LOG(FATAL) << "Could not open file '" << FLAGS_tcc_from_sdfile << "' to load!";
       }
+
+      //read out all the lines
+      while(!feof(fh)) {
+        if ('#' == fgetc(fh)) {
+          fgets(buf,1023,fh); //waste a comment line
+        } else {
+          fseek(fh, -1, SEEK_CUR); //rewind
+          fscanf(fh,"%d %d",&src,&dest);
+          edgestage[src].push_back(dest);
+          edgestage[dest].push_back(src);
+          edges++;
+        }
+        if (edges % (nodes / 50) == 0) {
+          fprintf(stderr, ".");
+        }
+      }
+      fclose(fh);
+    } else {
+      //generate random edges
+      for (int i = 0; i < nodes; i++) {
+        for (int j = 0; j < random() % density; j++) {
+  	      int neighbor = random() % nodes;
+          edgestage[neighbor].push_back(i);
+          edgestage[i].push_back(neighbor);
+          edges++;
+        }
   
-      if (i % (nodes / 50) == 0) {
-        fprintf(stderr, ",");
+        if (i % (nodes / 50) == 0) {
+          fprintf(stderr, ".");
+        }
       }
     }
     // Pass 2: write to file
-    for (int i = 0; i < nodes; i++) {
+    for (map<int, vector<int> >::iterator it=edgestage.begin(); it != edgestage.end(); it++) {
+      int i = (*it).first;
       PathNode n;
       n.set_id(i);
   
-      for (int j = 0; j < edgestage[i].size(); j++) {
-        n.add_target(edgestage[i][j]);
+      for (vector<int>::iterator it2=(*it).second.begin(); it2 != (*it).second.end(); it2++) {
+        n.add_target(*it2);
       }
   
       out[i % shards]->write(n);
@@ -164,23 +197,24 @@ int ShortestPathTrigger(const ConfigData& conf) {
   if (!m.restore()) {
     maxcomp_map->resize(FLAGS_tcc_num_nodes);
     nodes->resize(FLAGS_tcc_num_nodes);
+
     PRunAll(maxcomp_map, {
        vector<int> v;
        v.clear();
        for(int i=current_shard();i<FLAGS_tcc_num_nodes;i+=FLAGS_shards) {
-         maxcomp_map->update(i, -1);	//Initialize all distances to min_ID-1
+         maxcomp_map->update(i, -1);	//initialize all distances to min_id-1
          nodes->update(i,v);	//Start all vectors with empty adjacency lists
        }
     });
-
 
     //Build adjacency lists by appending RecordTables' contents
     PMap({n: nodes_record}, {
       vector<int> v=nodes->get(n.id());
       for(int i=0; i < n.target_size(); i++) {
         v.push_back(n.target(i));
-		nodes->update(n.id(),v);
       }
+      nodes->update(n.id(),v);
+      maxcomp_map->update(n.id(), -1);	//initialize all distances to min_id-1
 	});
 
 	PRunAll(maxcomp_map, {

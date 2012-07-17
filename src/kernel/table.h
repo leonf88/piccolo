@@ -107,22 +107,18 @@ struct Sharder: public SharderBase {
 // Commonly-used trigger operators.
 template<class K, class V>
 struct Triggers {
-  struct NullTrigger: public Trigger<K, V> {
-    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
-              bool isNew) {
-      *value = updateval;
-      *doUpdate = true;
-      return;
+  struct NullTrigger: public HybridTrigger<K, V> {
+    bool Accumulate(V* a, const V& b) {
+      *a = b;
+      return false;
     }
     bool LongFire(const K key, bool lastrun) {
       return false;
     }
   };
-  struct ReadOnlyTrigger: public Trigger<K, V> {
-    void Fire(const K* key, V* value, const V& updateval, bool* doUpdate,
-              bool isNew) {
-      *doUpdate = false;
-      return;
+  struct ReadOnlyTrigger: public HybridTrigger<K, V> {
+    bool Accumulate(V* a, const V& b) {
+      return false;
     }
     bool LongFire(const K key, bool lastrun) {
       return false;

@@ -22,6 +22,7 @@ DEFINE_string(graph_prefix, kTestPrefix, "Path to web graph.");
 DEFINE_int32(nodes, 10000, "");
 DEFINE_int32(show_top, 10, "number of top results to display");
 DEFINE_double(tol,0.0, "convergence tolerance (0 to use iteration count)");
+DEFINE_string(show_top_tofile, "", "set to non-blank to dump results to file");
 
 DEFINE_string(convert_graph, "", "Path to WebGraph .graph.gz database to convert");
 
@@ -530,11 +531,18 @@ int Pagerank(const ConfigData& conf) {
         }
         if (0 >= totalpages) {LOG(FATAL) << "No pages found in output table!" << endl;}
         float pr_avg = pr_sum/totalpages;
-        fprintf(stdout,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,curr_pr->num_shards());
-        fprintf(stdout,"Top Pages:\n");
+
+        FILE* fh;
+        if (FLAGS_show_top_tofile != "") {
+          fh = fopen(FLAGS_show_top_tofile.c_str(),"w");
+        } else { fh = stdout; }
+
+        fprintf(fh,"RESULTS: min=%f, max=%f, sum=%f, avg=%f [%d pages in %d shards]\n",pr_min,pr_max,pr_sum,pr_avg,totalpages,curr_pr->num_shards());
+        fprintf(fh,"Top Pages:\n");
         for(int i=0;i<FLAGS_show_top;i++) {
-          fprintf(stdout,"%d\t%e\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
+          fprintf(fh,"%d\t%e\t%ld-%ld\n",i+1,topscores[i],toplist[i].site,toplist[i].page);
         }
+        if (fh != stdout) fclose(fh);
       });
 
   return 0;
