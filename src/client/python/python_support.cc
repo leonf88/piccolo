@@ -8,13 +8,8 @@ using namespace std;
 
 DEFINE_double(crawler_runtime, -1, "Amount of time to run, in seconds.");
 DEFINE_bool(crawler_triggers, false, "Use trigger-based crawler (t/f).");
-static KernelBase *the_kernel;
 
 namespace piccolo {
-
-KernelBase* kernel() {
-  return the_kernel;
-}
 
 double crawler_runtime() {
   return FLAGS_crawler_runtime;
@@ -49,7 +44,7 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
 }
 
 template<class K, class V>
-PythonTrigger<K, V>::PythonTrigger(piccolo::GlobalTable* thistable, const string& codeshort, const string& codelong) {
+PythonTrigger<K, V>::PythonTrigger(GlobalTable* thistable, const string& codeshort, const string& codelong) {
   Init(thistable);
   params_.put("python_code_short", codeshort);
   params_.put("python_code_long", codelong);
@@ -57,7 +52,7 @@ PythonTrigger<K, V>::PythonTrigger(piccolo::GlobalTable* thistable, const string
 }
 
 template<class K, class V>
-void PythonTrigger<K, V>::Init(piccolo::GlobalTable* thistable) {
+void PythonTrigger<K, V>::Init(GlobalTable* thistable) {
   try {
     object sys_module = import("sys");
     object sys_ns = sys_module.attr("__dict__");

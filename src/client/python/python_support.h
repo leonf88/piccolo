@@ -15,12 +15,14 @@ using namespace std;
 
 namespace piccolo {
 
-DSMKernel* kernel();
+static KernelBase *the_kernel;
+
+KernelBase* kernel() { return the_kernel; }
 
 double crawler_runtime();
 bool crawler_triggers();
 
-#ifndef SWIG
+//#ifndef SWIG
 // gcc errors out if we don't use this hack - complaining about
 // operator() not being implemented.  sigh.
 typedef PyObject* PyObjectPtr;
@@ -69,7 +71,7 @@ struct PythonMarshal : public Marshal<PyObjectPtr> {
 template<class K, class V>
 class PythonTrigger : public HybridTrigger<K, V> {
 public:
-  PythonTrigger(piccolo::GlobalTable* thistable, const string& codeshort, const string& codelong);
+  PythonTrigger(GlobalTable* thistable, const string& codeshort, const string& codelong);
   void Init(piccolo::GlobalTable* thistable);
   bool Accumulate(V* value, const V& update);
   bool LongFire(const K key, bool lastrun);
@@ -83,5 +85,5 @@ private:
 };
 
 
-#endif
+//#endif //close namespace
 }
