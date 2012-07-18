@@ -223,6 +223,13 @@ public:
   V& value();
 }; 
 
+struct PythonAccumulate {
+  PythonAccumulate(PyObjectPtr callback) : c_(callback) {}
+  void Accumulate(PyObjectPtr* a, const PyObjectPtr& b);
+private:
+  PyObjectPtr c_;
+};
+
 template <class K, class V>
 struct Trigger<K, V> {
 private:
@@ -238,7 +245,7 @@ public:
 template <class K, class V>
 struct PythonTrigger<K, V> {
 public:
-  PythonTrigger(GlobalTable* thistable, const string& code);
+  PythonTrigger(GlobalTable* thistable, const string& codeshort, const string& codelong);
   void Init(GlobalTable* thistable);
   bool Accumulate(V& value, const V& update);
   bool LongFire(const K& k, bool isNew);

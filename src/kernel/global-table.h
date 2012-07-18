@@ -13,6 +13,10 @@
 #include <queue>
 #include <tr1/unordered_map>
 
+//#ifdef SWIG
+#include "kernel/table.h"		//avoid complaints about TableBase
+//#endif
+
 //#define GLOBAL_TABLE_USE_SCOPEDLOCK
 
 #define RETRIGGER_SCAN_INTERVAL 0.01
