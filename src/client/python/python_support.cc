@@ -11,6 +11,8 @@ DEFINE_bool(crawler_triggers, false, "Use trigger-based crawler (t/f).");
 
 namespace piccolo {
 
+KernelBase* kernel() { return the_kernel; }
+
 double crawler_runtime() {
   return FLAGS_crawler_runtime;
 }
@@ -38,9 +40,7 @@ void PythonAccumulate::Accumulate(PyObjectPtr* a, const PyObjectPtr& b) {
     exit(1);
   }
 
-//  Py_DecRef(*a);
   *a = result;
-//  Py_DecRef(const_cast<PyObjectPtr>(b));
 }
 
 template<class K, class V>
@@ -86,39 +86,36 @@ bool PythonTrigger<K, V>::LongFire(const K k, bool lastrun) {
 }
 
 template<class K, class V>
-void PythonTrigger<K, V>::Accumulate(V* value, const V& newvalue) {
+bool PythonTrigger<K, V>::Accumulate(V* value, const V& newvalue) {
   string python_code = params_.get<string> ("python_code_short");
-  PyObject *key, *callable;
+  PyObject *callable;
   callable = PyObject_GetAttrString(crawl_module_.ptr(), python_code.c_str());
-  key = PyString_FromString(k->c_str());
 
   // Make sure all the callfunctionobjarg arguments are fine
-  if (key == NULL || callable == NULL) {
+  if (callable == NULL) {
     LOG(ERROR) << "Failed to launch trigger " << python_code << "!";
-    if (key == NULL) LOG(ERROR) << "[FAIL] key was null";
-    if (callable == NULL) LOG(ERROR) << "[FAIL] callable was null";
-    *doUpdate = true;
-    return;
+    LOG(ERROR) << "[FAIL] callable was null";
+    return false;
   }
 
-  bool rv = PythonTrigger<K, V>::CallPythonAccumulator(callable, key, value, newvalue, false, isNew);
+  bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, NULL, value, newvalue, false, false);
   LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from normal trigger";
-  *doUpdate = rv;
-  return;
+  return rv;
 }
 
 template<class K, class V>
-bool PythonTrigger<K, V>::CallPythonHybridTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isTrigger, bool isNewOrLast) {
+bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& newvalue, bool isTrigger, bool isNewOrLast) {
   LOG(FATAL) << "No such CallPythonTrigger for this key/value pair type!";
   exit(1);
 }
 
 template<>
-bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& update, bool isLongTrigger, bool isLast) 
+bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& update, bool isTrigger, bool isLast) {
+  PyObjectPtr retval;
 
   //Handle LongTriggers
   if (isTrigger) {
-    PyObject* lastrun_obj = PyBool_FromLong((long)isNewOrLast);
+    PyObject* lastrun_obj = PyBool_FromLong((long)isLast);
     if (lastrun_obj == NULL) {
       LOG(ERROR) << "Failed to bootstrap <int,int> trigger (trigger) launch";
       return true;
@@ -134,7 +131,7 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
   }
  
   PyObject* cur_obj = PyLong_FromLongLong(*value);
-  PyObject* upd_obj = PyLong_FromLongLong(newvalue);
+  PyObject* upd_obj = PyLong_FromLongLong(update);
 
   if (cur_obj == NULL || upd_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <int,int> trigger (accumulator) launch";
@@ -176,7 +173,7 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
   }
  
   PyObject* cur_obj = PyString_FromString(value->c_str());
-  PyObject* upd_obj = PyString_FromString(newvalue.c_str());
+  PyObject* upd_obj = PyString_FromString(update.c_str());
 
   if (cur_obj == NULL || upd_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <string,string> trigger (accumulator) launch";
@@ -254,4 +251,4 @@ REGISTER_METHOD(PythonKernel, swap_python_accumulator)
 template class PythonTrigger<string, string>;
 template class PythonTrigger<string, int64_t>;
 
-}
+} //End namespace piccolo

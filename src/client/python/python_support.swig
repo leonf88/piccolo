@@ -1,6 +1,7 @@
 %module piccolo
 
 #include "kernel/table.h"
+#include "kernel/table-inl.h"
 #include "kernel/global-table.h"
 #include "client/python/python_support.h"
 
@@ -87,8 +88,10 @@ namespace std {
 }
 
 %{
+
 #include "client/python/python_support.h"
 #include "kernel/table.h"
+#include "kernel/table-inl.h"
 #include "kernel/global-table.h"
 
 namespace piccolo {
@@ -116,17 +119,18 @@ typedef long int64_t;
 %include "util/rpc.h"
 
 %include "kernel/kernel.h"
-%include "kernel/table-registry.h"
 %include "kernel/table.h"
+%include "kernel/table-registry.h"
+%include "kernel/table-inl.h"
 %include "kernel/global-table.h"
 
 %include "master/master.h"
 %include "client/python/python_support.h"
-
-typedef int TriggerID;
+//typedef int TriggerID;
 
 void Init(int argc, char** argv);
 
+%warnfilter(401) SwigDomainSharding;
 %inline %{
   namespace piccolo {
   struct IntAccum { 
@@ -159,7 +163,7 @@ void Init(int argc, char** argv);
   static Sharding::Mod* ModSharding() { return new Sharding::Mod; }
   static Sharding::UintMod* UintModSharding() { return new Sharding::UintMod; }
   
-  struct SwigDomainSharding : public Sharder<string> {
+  struct SwigDomainSharding : public Sharder<string> {    //SWIG stupidly complains about this; couldn't find a fix. :(
     int operator()(const string& in, int num_shards) {
       int d_end = in.find(" ");
       return SuperFastHash(in.data(), d_end) % num_shards;
@@ -167,11 +171,13 @@ void Init(int argc, char** argv);
   };
   
   static Sharder<string>* DomainSharding() { return new SwigDomainSharding; }
-}
+
+  }
 %};
 
 %rename(__assign__) *::operator=;	//Workaround for SWIG "Operator= ignored" issue
 namespace piccolo {
+
 class ConfigData {
 public:
   ConfigData();
@@ -209,6 +215,7 @@ public:
 
 bool StartWorker(const ConfigData& conf);
 
+/*
 template <class K, class V>
 struct TypedTableIterator {
 private:
@@ -222,6 +229,7 @@ public:
   const K& key();
   V& value();
 }; 
+*/
 
 struct PythonAccumulate {
   PythonAccumulate(PyObjectPtr callback) : c_(callback) {}
@@ -286,7 +294,7 @@ public:
 %template(IntIterator) TypedTableIterator<string, int64_t>;
 %template(StringIterator) TypedTableIterator<string, string>;
 
-%extend piccoloKernel {
+%extend KernelBase {
   TypedGlobalTable<string, string>* GetStringTable(int idx) { return $self->get_table<string, string>(idx); }
   TypedGlobalTable<string, int64_t>* GetIntTable(int idx) { return $self->get_table<string, int64_t>(idx); }
 }
@@ -312,4 +320,4 @@ public:
 
 }
 
-}
+} //End namespace piccolo
