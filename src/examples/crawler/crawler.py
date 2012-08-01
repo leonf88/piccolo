@@ -35,7 +35,7 @@ num_crawlers = NetworkThread.Get().size() - 1
 crawler_id = NetworkThread.Get().id()
 
 import logging
-LOGLEVEL = logging.INFO
+LOGLEVEL = logging.WARN
 
 os.system('mkdir -p logs.%d' % num_crawlers)
 logging.basicConfig(level=LOGLEVEL)
@@ -234,7 +234,7 @@ def update_fetch_table(key, status, byte_count=0): #, inside_trigger=0):
     #  if byte_count > 0: 
     #    fetch_counts.enqueue_update(FetchStatus.as_str[FetchStatus.FETCHED_BYTES], byte_count)
     #else:
-    #print "Updating fetch table with %s -> %d" % (key,status)
+    #console("Updating fetch table with %s -> %d" % (key,status))
     fetch_table.update(key, status)
     fetch_counts.update(FetchStatus.as_str[status], 1)
     if byte_count > 0:
@@ -247,7 +247,7 @@ def fetch_page(page):
     url_log.write(page.url_s + '\n')
     data_log.writeRecord(page.content, url=page.url_s, domain=page.domain)
     update_fetch_table(page.key(), FetchStatus.FETCH_DONE, len(page.content))
-    error('Fetched page: %s', page.url_s)
+    info('Fetched page: %s', page.url_s)
   except (urllib2.URLError, socket.timeout):
     info('Fetch of %s failed: %s', page.url_s, sys.exc_info()[1])
     warn('Fetch of %s failed.', page.url_s, exc_info=1)
@@ -439,8 +439,9 @@ def crawl():
 def fetchadd(current,update):
   console("Fetch Accumulator: %d %d" % (current, update))
   
-  current = update
-  return (update < FetchStatus.DONE)
+  if update > current: #max!
+    current = update
+  return (current, (update < FetchStatus.DONE))
 
 def fetchtrigger(k,lastrun):
   url = url_from_key(k)
@@ -452,20 +453,30 @@ def fetchtrigger(k,lastrun):
     if fetchchecked_status == FetchCheckStatus.PENDING:
       console("%s not yet ready, setting long trigger" % (url.geturl()))
       return True
-    elif fetchadd_status == FetchCheckStatus.CRAWLING:
-      console("%s is now being CRAWLED")
+    elif fetchchecked_status == FetchCheckStatus.CRAWLING:
+      console("%s is now being CRAWLED" % (url.geturl()))
     else:
-      console("%s has been blacklisted")
-  else:
-    console("%s determined not to be SHOULD_FETCH" & (url))
-  print(logging.Logger.root)
+      console("%s has been blacklisted" % (url.geturl()))
+  elif value == FetchStatus.FETCHING:
+    console("%s determined to be crawlable" % (url.geturl()))
+    page = Page.create(url)
+    try:
+      fetch_page(page)
+      extract_links(page)
+      add_links(page)
+      fetch_table.update(page.key(), FetchStatus.DONE)
+    except:
+      warn('Error when processing page %s', page.url_s, exc_info=1)
+      update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
+  elif value == FetchStatus.DONE:
+    warn("%s crawling complete." % url.geturl())
   return False
 
 def robotsadd(current,update):
   console("Robots Accumulator: %s %s" % (current, update))
   if current == 'FETCHING':
     current = update
-  return (current == 'FETCHING')
+  return (current, (current == 'FETCHING'))
 
 def robotscrawl(k,islast):
   console("Robots Trigger: %s %d" % (k, islast))
@@ -576,7 +587,7 @@ def check_url(url, status):
   
   if not check_robots(url):
     console('Blocked by robots "%s"', url_s)
-    update_fetch_table(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST, 1, 1)
+    update_fetch_table(key_from_url(url), FetchStatus.ROBOTS_BLACKLIST, 1)
     return FetchCheckStatus.BLACKLIST
     
   last_crawl = 0
@@ -585,17 +596,17 @@ def check_url(url, status):
     last_crawl = crawltime_table.get(domain)
   
   if now() - last_crawl < POLITE_INTERVAL:
-    console('Waiting for politeness: %s, %d', url_s, now() - last_crawl)
+    console('Waiting for politeness: %s, %d' % (url_s, now() - last_crawl))
     return FetchCheckStatus.PENDING
   else:
     console('Queueing: %s', url_s)
-    if crawler_triggers() == 0:
+    if not crawler_triggers():
       crawl_queue.put(Page.create(url))
     fetch_table.update(key_from_url(url), FetchStatus.FETCHING)
     domain_counts.update(domain, 1)
     crawltime_table.update(domain, int(now()))
+    error("Lastcrawl for %s is %d" % (domain,int(now())))
     return FetchCheckStatus.CRAWLING
-    
     
 def initialize():
   console('Initializing...')
