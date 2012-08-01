@@ -736,6 +736,7 @@ void Worker::HandleFinishCheckpointAsync(const CheckpointFinishRequest& req,
 }
 
 bool StartWorker(const ConfigData& conf) {
+
   if (rpc::NetworkThread::Get()->id() == 0) return false;
 
   Worker w(conf);

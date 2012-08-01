@@ -79,10 +79,31 @@ bool PythonTrigger<K, V>::LongFire(const K k, bool lastrun) {
     return true;
   }
 
+  Py_INCREF(callable);
+  Py_INCREF(key);
+
   V dummyv;
   bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, key, &dummyv, dummyv, true, lastrun); //hijack "isNew" for "lastrun"
-  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from long trigger";
+
+  Py_DECREF(key);
+  Py_DECREF(callable);
+
+  //LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from trigger";
   return rv;
+}
+
+template<class K, class V>
+bool PythonTrigger<K, V>::ProcessPyRetval(PyObjectPtr retval) {
+  if (NULL == retval) {
+    PyErr_Print();
+    LOG(FATAL) << "Attempting to flush and die because Trigger/Accumulator returned non-bool/non-int.";
+  }
+  if (!PyBool_Check(retval) && !PyInt_Check(retval)) {
+    PyErr_SetString(PyExc_RuntimeError,"Trigger returned neither bool nor int!");
+    PyErr_Print();
+    LOG(FATAL) << "Python trigger returned invalid value";
+  }
+  return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
 }
 
 template<class K, class V>
@@ -98,8 +119,13 @@ bool PythonTrigger<K, V>::Accumulate(V* value, const V& newvalue) {
     return false;
   }
 
+  Py_INCREF(callable);
+
   bool rv = PythonTrigger<K, V>::CallPythonTrigger(callable, NULL, value, newvalue, false, false);
-  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from normal trigger";
+
+  Py_DECREF(callable);
+
+  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from trigger-connected accumulator";
   return rv;
 }
 
@@ -113,6 +139,7 @@ template<>
 bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& update, bool isTrigger, bool isLast) {
   PyObjectPtr retval;
 
+  //LOG(ERROR) << "Handling Python trigger call type " << isTrigger << " on string:int64_t table";
   //Handle LongTriggers
   if (isTrigger) {
     PyObject* lastrun_obj = PyBool_FromLong((long)isLast);
@@ -121,13 +148,17 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
       return true;
     }
     try {
+
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
       retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
-      Py_DECREF(callable);
+      PyGILState_Release(gstate);
+
     } catch (error_already_set& e) {
       PyErr_Print();
-      exit(1);
+      LOG(FATAL) << "Fatal Python error aborted Oolong";
     }
-    return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
+    return ProcessPyRetval(retval);
   }
  
   PyObject* cur_obj = PyLong_FromLongLong(*value);
@@ -138,23 +169,28 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
     return true;
   }
   try {
-    retval = PyObject_CallFunctionObjArgs(
-            callable, cur_obj, upd_obj, NULL);
-    Py_DECREF(callable);
+
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    retval = PyObject_CallFunction(
+               callable, Py_BuildValue("OO",*cur_obj, upd_obj));
+    PyGILState_Release(gstate);
+
   } catch (error_already_set& e) {
     PyErr_Print();
-    exit(1);
+    LOG(FATAL) << "Fatal Python error aborted Oolong";
   }
 
   *value = PyLong_AsLongLong(cur_obj);
 
-  return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
+  return ProcessPyRetval(retval);
 }
 
 template<>
 bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, string* value, const string& update, bool isTrigger, bool isLast) {
   PyObjectPtr retval;
 
+  //LOG(ERROR) << "Handling Python trigger call type " << isTrigger << " on string:string table";
   //Handle LongTriggers
   if (isTrigger) {
     PyObject* lastrun_obj = PyBool_FromLong((long)isLast);
@@ -163,13 +199,17 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
       return true;
     }
     try {
+
+      PyGILState_STATE gstate;
+      gstate = PyGILState_Ensure();
       retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
-      Py_DECREF(callable);
+      PyGILState_Release(gstate);
+
     } catch (error_already_set& e) {
       PyErr_Print();
-      exit(1);
+      LOG(FATAL) << "Fatal Python error aborted Oolong";
     }
-    return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
+    return ProcessPyRetval(retval);
   }
  
   PyObject* cur_obj = PyString_FromString(value->c_str());
@@ -180,17 +220,22 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
     return true;
   }
   try {
-    retval = PyObject_CallFunctionObjArgs(
-            callable, cur_obj, upd_obj, NULL);
-    Py_DECREF(callable);
+
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    retval = PyObject_CallFunction(
+               callable, Py_BuildValue("OO",*cur_obj, upd_obj));
+    
+    PyGILState_Release(gstate);
+
   } catch (error_already_set& e) {
     PyErr_Print();
-    exit(1);
+    LOG(FATAL) << "Fatal Python error aborted Oolong";
   }
 
   *value = PyString_AsString(cur_obj);
-
-  return (retval == Py_True)?true:((retval == Py_False)?false:(bool)PyInt_AsLong(retval));
+  LOG(ERROR) << "New value is " << *value;
+  return ProcessPyRetval(retval);
 }
 
 class PythonKernel: public KernelBase {
@@ -214,6 +259,14 @@ public:
   }
 
   void run_python_code() {
+    if (!PyEval_ThreadsInitialized()) {
+      PyEval_InitThreads();
+      PyEval_ReleaseLock(); //cf. SO question 5140998 answer #1
+      LOG(ERROR) << "Initializing Python C threading safety support";
+    } else {
+      LOG(ERROR) << "Python C threading safety support already initialized";
+    }
+
     the_kernel = this;
     string python_code = get_arg<string> ("python_code");
     LOG(INFO) << "Executing python code: " << python_code;
