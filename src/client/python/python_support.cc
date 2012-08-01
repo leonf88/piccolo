@@ -125,7 +125,7 @@ bool PythonTrigger<K, V>::Accumulate(V* value, const V& newvalue) {
 
   Py_DECREF(callable);
 
-  LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from trigger-connected accumulator";
+  //LOG(INFO) << "returning " << (rv?"TRUE":"FALSE") << " from trigger-connected accumulator";
   return rv;
 }
 
@@ -138,6 +138,7 @@ bool PythonTrigger<K, V>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr ke
 template<>
 bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, int64_t* value, const int64_t& update, bool isTrigger, bool isLast) {
   PyObjectPtr retval;
+  PyGILState_STATE gstate;
 
   //LOG(ERROR) << "Handling Python trigger call type " << isTrigger << " on string:int64_t table";
   //Handle LongTriggers
@@ -149,15 +150,19 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
     }
     try {
 
-      PyGILState_STATE gstate;
       gstate = PyGILState_Ensure();
       retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
-      PyGILState_Release(gstate);
 
     } catch (error_already_set& e) {
       PyErr_Print();
+      PyGILState_Release(gstate);
       LOG(FATAL) << "Fatal Python error aborted Oolong";
     }
+    if (PyErr_Occurred()) {
+      PyErr_Print();
+      LOG(FATAL) << "Fatal Python error aborted Oolong";
+    }
+    PyGILState_Release(gstate);
     return ProcessPyRetval(retval);
   }
  
@@ -170,25 +175,38 @@ bool PythonTrigger<string, int64_t>::CallPythonTrigger(PyObjectPtr callable, PyO
   }
   try {
 
-    PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
-    retval = PyObject_CallFunction(
-               callable, Py_BuildValue("OO",*cur_obj, upd_obj));
-    PyGILState_Release(gstate);
+    retval = PyEval_CallFunction(
+               callable, "OO", cur_obj, upd_obj);
 
   } catch (error_already_set& e) {
     PyErr_Print();
+    PyGILState_Release(gstate);
+    LOG(FATAL) << "Fatal Python error aborted Oolong";
+  }
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    PyGILState_Release(gstate);
     LOG(FATAL) << "Fatal Python error aborted Oolong";
   }
 
-  *value = PyLong_AsLongLong(cur_obj);
+  if (retval == NULL || !PyTuple_Check(retval) || 2 != PyTuple_GET_SIZE(retval)) {
+    PyErr_SetString(PyExc_RuntimeError,"Accum/Trigger must return 2-item tuple");
+    PyErr_Print();
+    PyGILState_Release(gstate);
+    LOG(FATAL) << "Python accum/trigger returned invalid value";
+  }
+ 
+  *value = PyLong_AsLongLong(PyTuple_GetItem(retval,0));
 
-  return ProcessPyRetval(retval);
+  PyGILState_Release(gstate);
+  return ProcessPyRetval(PyTuple_GetItem(retval,1));
 }
 
 template<>
 bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, string* value, const string& update, bool isTrigger, bool isLast) {
   PyObjectPtr retval;
+  PyGILState_STATE gstate;
 
   //LOG(ERROR) << "Handling Python trigger call type " << isTrigger << " on string:string table";
   //Handle LongTriggers
@@ -200,20 +218,26 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
     }
     try {
 
-      PyGILState_STATE gstate;
       gstate = PyGILState_Ensure();
       retval = PyObject_CallFunctionObjArgs(callable, key, lastrun_obj, NULL);
-      PyGILState_Release(gstate);
 
     } catch (error_already_set& e) {
       PyErr_Print();
+      PyGILState_Release(gstate);
       LOG(FATAL) << "Fatal Python error aborted Oolong";
     }
+    if (PyErr_Occurred()) {
+      PyErr_Print();
+      PyGILState_Release(gstate);
+      LOG(FATAL) << "Fatal Python error aborted Oolong";
+    }
+
+    PyGILState_Release(gstate);
     return ProcessPyRetval(retval);
   }
  
-  PyObject* cur_obj = PyString_FromString(value->c_str());
-  PyObject* upd_obj = PyString_FromString(update.c_str());
+  PyObject* cur_obj = PyString_FromStringAndSize(value->c_str(),value->length());
+  PyObject* upd_obj = PyString_FromStringAndSize(update.c_str(),update.length());
 
   if (cur_obj == NULL || upd_obj == NULL) {
     LOG(ERROR) << "Failed to bootstrap <string,string> trigger (accumulator) launch";
@@ -221,21 +245,33 @@ bool PythonTrigger<string, string>::CallPythonTrigger(PyObjectPtr callable, PyOb
   }
   try {
 
-    PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
-    retval = PyObject_CallFunction(
-               callable, Py_BuildValue("OO",*cur_obj, upd_obj));
+    retval = PyObject_CallFunctionObjArgs(
+               callable, cur_obj, upd_obj, NULL);
     
-    PyGILState_Release(gstate);
-
   } catch (error_already_set& e) {
     PyErr_Print();
+    PyGILState_Release(gstate);
     LOG(FATAL) << "Fatal Python error aborted Oolong";
   }
 
-  *value = PyString_AsString(cur_obj);
-  LOG(ERROR) << "New value is " << *value;
-  return ProcessPyRetval(retval);
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    PyGILState_Release(gstate);
+    LOG(FATAL) << "Fatal Python error aborted Oolong";
+  }
+
+  if (retval == NULL || !PyTuple_Check(retval) || 2 != PyTuple_GET_SIZE(retval)) {
+    PyErr_SetString(PyExc_RuntimeError,"Accum/Trigger must return 2-item tuple");
+    PyErr_Print();
+    PyGILState_Release(gstate);
+    LOG(FATAL) << "Python accum/trigger returned invalid value";
+  }
+ 
+  *value = PyString_AsString(PyTuple_GetItem(retval,0));
+
+  PyGILState_Release(gstate);
+  return ProcessPyRetval(PyTuple_GetItem(retval,1));
 }
 
 class PythonKernel: public KernelBase {
@@ -262,9 +298,9 @@ public:
     if (!PyEval_ThreadsInitialized()) {
       PyEval_InitThreads();
       PyEval_ReleaseLock(); //cf. SO question 5140998 answer #1
-      LOG(ERROR) << "Initializing Python C threading safety support";
+      LOG(INFO) << "Initializing Python C threading safety support";
     } else {
-      LOG(ERROR) << "Python C threading safety support already initialized";
+      LOG(INFO) << "Python C threading safety support already initialized";
     }
 
     the_kernel = this;

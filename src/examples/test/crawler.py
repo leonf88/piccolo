@@ -7,7 +7,7 @@ usetriggers = "false"
 if len(sys.argv) > 1 and (sys.argv[1] == "-t" or sys.argv[1] == "--crawler_triggers"):
   usetriggers = "true"
 
-for n in [1]:#runutil.parallelism:
+for n in [4]:#runutil.parallelism:
   os.system('mkdir -p logs.%d' % n)
   os.system('rm logs.%d/*' % n)
   cmd = ' '.join(['mpirun',
