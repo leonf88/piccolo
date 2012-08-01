@@ -76,6 +76,7 @@ public:
   bool Accumulate(V* value, const V& update);
   bool LongFire(const K key, bool lastrun);
   bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& update, bool isTrigger, bool isLast);
+  bool ProcessPyRetval(PyObjectPtr retval);
 
   //TriggerID trigid;
 private:
