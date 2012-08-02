@@ -653,6 +653,7 @@ void Master::assign_tasks(const RunDescriptor& r, vector<int> shards) {
   }
 
   for (size_t i = 0; i < shards.size(); ++i) {
+    VLOG(1) << "Assigning worker for table " << r.table->id() << " for shard " << i << " of " << shards.size();
     assign_worker(r.table->id(), shards[i]);
   }
 }
@@ -747,7 +748,7 @@ void Master::run(RunDescriptor r) {
   CHECK_NE(k, (void*)NULL) << "Invalid kernel class " << r.kernel;
   CHECK_EQ(k->has_method(r.method), true) << "Invalid method: " << MP(r.kernel, r.method);
 
-  VLOG(1) << "Running: " << r.kernel << " : " << r.method << " : " << *r.params.ToMessage();
+  VLOG(1) << "Running: " << r.kernel << " : " << r.method << " on table " << r.table->id() << " : " << *r.params.ToMessage();
 
   vector<int> shards = r.shards;
 

@@ -166,6 +166,8 @@ void Init(int argc, char** argv);
   struct SwigDomainSharding : public Sharder<string> {    //SWIG stupidly complains about this; couldn't find a fix. :(
     int operator()(const string& in, int num_shards) {
       int d_end = in.find(" ");
+      d_end = (d_end > 0)?d_end:in.length();
+      //printf("hashing %s (length %d) -> %u/%d = %u\n",in.data(),d_end, SuperFastHash(in.data(), d_end), num_shards,SuperFastHash(in.data(), d_end) % num_shards);
       return SuperFastHash(in.data(), d_end) % num_shards;
     }
   };
@@ -303,19 +305,32 @@ public:
 %template(CreateIntTable) CreateTable<string, int64_t>;
 
 %extend Master {
-  void py_run_all(const string& code, void *locality) {
-    RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
-    r.params.put<string>("python_code", code);
-    r.shards = range(((GlobalTable*)locality)->num_shards());
-    $self->run(r);
+  // Run the given kernel function on all worker nodes.
+  #define py_run_all(code, locality) { \
+    RunDescriptor r("PythonKernel", "run_python_code", locality); \
+    r.params.put<string>("python_code", code); \
+    r.shards = range(locality->num_shards()); \
+    $self->run(r); \
+  }
+  void py_run_all_stringtable(const string& code, TypedGlobalTable<string, string>* locality) {
+    py_run_all(code, locality);
+  }
+  void py_run_all_inttable(const string& code, TypedGlobalTable<string, int64_t>* locality) {
+    py_run_all(code, locality);
   }
 
   // Run the given kernel function on one (arbitrary) worker node.
-  void py_run_one(const string& code, void*locality) {
-    RunDescriptor r("PythonKernel", "run_python_code", (GlobalTable*)locality);
-    r.params.put<string>("python_code", code);
-    r.shards = range(1);
-    $self->run(r);
+  #define py_run_one(code, locality) { \
+    RunDescriptor r("PythonKernel", "run_python_code", locality); \
+    r.params.put<string>("python_code", code); \
+    r.shards = range(1); \
+    $self->run(r); \
+  }
+  void py_run_one_stringtable(const string& code, TypedGlobalTable<string, string>* locality) {
+    py_run_one(code, locality);
+  }
+  void py_run_one_inttable(const string& code, TypedGlobalTable<string, int64_t>* locality) {
+    py_run_one(code, locality);
   }
 
 }
