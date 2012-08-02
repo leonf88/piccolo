@@ -42,17 +42,20 @@ logging.basicConfig(level=LOGLEVEL)
                     #filename='logs.%d/crawl.log.%s.%d' % (num_crawlers, socket.gethostname(), os.getpid()),
                                    
 def now(): return time.time()
+def logpretreat(fmt): return str(kernel().current_shard()) + ' ' + str(fmt)
+def urlescape(url_s): return url_s.replace('%','%%')
 
-def debug(fmt, *args, **kwargs): logging.debug(str(fmt) % args, **kwargs)
-def info(fmt, *args, **kwargs): logging.info(str(fmt) % args, **kwargs)
-def warn(fmt, *args, **kwargs): logging.warn(str(fmt) % args, **kwargs)
-def error(fmt, *args, **kwargs): logging.error(str(fmt) % args, **kwargs)
-def fatal(fmt, *args, **kwargs): logging.fatal(str(fmt) % args, **kwargs)
+def debug(fmt, *args, **kwargs): logging.debug(logpretreat(fmt) % args, **kwargs)
+def info(fmt, *args, **kwargs): logging.info(logpretreat(fmt) % args, **kwargs)
+def warn(fmt, *args, **kwargs): logging.warn(logpretreat(fmt) % args, **kwargs)
+def error(fmt, *args, **kwargs): logging.error(logpretreat(fmt) % args, **kwargs)
+def fatal(fmt, *args, **kwargs): logging.fatal(logpretreat(fmt) % args, **kwargs)
 def console(fmt, *args, **kwargs):
   if LOGLEVEL == logging.INFO or LOGLEVEL == logging.DEBUG:
-    logging.info(str(fmt) % args, **kwargs)
-    print >> sys.stderr, str(fmt) % args 
+    logging.info(logpretreat(fmt) % args, **kwargs)
+    print >> sys.stderr, logpretreat(fmt) % args
 
+THREADS_PER_WORKER = 10
 CRAWLER_THREADS = 5
 ROBOTS_REJECT_ALL = '/'
 MAX_ROBOTS_SIZE = 50000
@@ -91,6 +94,7 @@ class CrawlOpener(object):
       return ""
     except:
       error("Unknown open error")
+      return ""
        
 crawl_opener = CrawlOpener()
 
@@ -448,7 +452,7 @@ def fetchtrigger(k,lastrun):
   value = fetch_table.get(k)
   console("Fetch Trigger: %s %d -> %d" % (k, lastrun,value))
   if value == FetchStatus.SHOULD_FETCH:
-    console("Calling check_url with (%s,%d)" % (url,value))
+    console("Calling check_url with (%s,%d)" % (url.geturl(),value))
     fetchchecked_status = check_url(url, value)
     if fetchchecked_status == FetchCheckStatus.PENDING:
       console("%s not yet ready, setting long trigger" % (url.geturl()))
@@ -469,7 +473,7 @@ def fetchtrigger(k,lastrun):
       warn('Error when processing page %s', page.url_s, exc_info=1)
       update_fetch_table(page.key(), FetchStatus.GENERIC_ERROR)
   elif value == FetchStatus.DONE:
-    warn("%s crawling complete." % url.geturl())
+    warn("%s crawling complete." % urlescape(url.geturl()));
   return False
 
 def robotsadd(current,update):
@@ -564,7 +568,6 @@ def blocking_crawl():
 
 
 def check_url(url, status):
-  console('Checking: %s', url)
   url_s = url.geturl()
   site = url.netloc
   robots_key = key_from_site(site)
@@ -605,7 +608,8 @@ def check_url(url, status):
     fetch_table.update(key_from_url(url), FetchStatus.FETCHING)
     domain_counts.update(domain, 1)
     crawltime_table.update(domain, int(now()))
-    error("Lastcrawl for %s is %d" % (domain,int(now())))
+    crawltime_table.SendUpdates()
+    crawltime_table.HandlePutRequests()
     return FetchCheckStatus.CRAWLING
     
 def initialize():
@@ -630,16 +634,16 @@ def main():
   global fetch_table, crawltime_table, robots_table, domain_counts, fetch_counts, robotfetchtrigid;
   num_workers = NetworkThread.Get().size() - 1
 
-  crawltime_table = CreateIntTable(1,  num_workers, DomainSharding(), IntAccum.Max())
   if crawler_triggers() == 1:
-    robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringTrigger.PythonCode("robotsadd","robotscrawl"),1)
-  else:
-    robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
-
-  if crawler_triggers() == 1:
-    fetch_table = CreateIntTable(0,  num_workers, DomainSharding(), IntTrigger.PythonCode("fetchadd","fetchtrigger"),1)
+    fetch_table = CreateIntTable(0,  num_workers, DomainSharding(), IntTrigger.PythonCode("fetchadd","fetchtrigger"),THREADS_PER_WORKER)
   else:
     fetch_table = CreateIntTable(0,  num_workers, DomainSharding(), IntAccum.Max())
+
+  crawltime_table = CreateIntTable(1,  num_workers, DomainSharding(), IntAccum.Max())
+  if crawler_triggers() == 1:
+    robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringTrigger.PythonCode("robotsadd","robotscrawl"),THREADS_PER_WORKER)
+  else:
+    robots_table = CreateStringTable(2,  num_workers, DomainSharding(), StringAccum.Replace())
 
   domain_counts = CreateIntTable(3,  num_workers, DomainSharding(), IntAccum.Sum())
   fetch_counts = CreateIntTable(4,  num_workers, DomainSharding(), IntAccum.Sum())
@@ -663,13 +667,14 @@ def main():
 #    m.enable_trigger(robotretrigid,0,False)
 
     if crawler_triggers() == 1:
-      m.py_run_all('initialize()', fetch_table)
-      m.py_run_all('trigger_crawl()', fetch_table)
+      print fetch_table
+      m.py_run_all_inttable('initialize()', fetch_table)
+      m.py_run_all_inttable('trigger_crawl()', fetch_table)
     else:    
-      m.py_run_all('initialize()', fetch_table)
+      m.py_run_all_inttable('initialize()', fetch_table)
       #m.py_run_all('crawl()', fetch_table)
       for i in range(100):
-        m.py_run_all('blocking_crawl()', fetch_table)
+        m.py_run_all_inttable('blocking_crawl()', fetch_table)
   
 if __name__ == '__main__':
   main()

@@ -101,6 +101,8 @@ static TypedGlobalTable<K, V>* CreateTable(const TableDescriptor *info,
   TypedGlobalTable<K, V> *t = new TypedGlobalTable<K, V>();
   t->Init(info, retrigt_count);
   TableRegistry::Get()->tables().insert(std::make_pair(info->table_id, t));
+  VLOG(2) << "Created table ID " << t->info().table_id << " with " <<
+             t->info().num_shards;
   return t;
 }
 
