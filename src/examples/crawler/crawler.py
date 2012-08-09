@@ -55,7 +55,7 @@ def console(fmt, *args, **kwargs):
     logging.info(logpretreat(fmt) % args, **kwargs)
     print >> sys.stderr, logpretreat(fmt) % args
 
-THREADS_PER_WORKER = 10
+THREADS_PER_WORKER = 1
 CRAWLER_THREADS = 5
 ROBOTS_REJECT_ALL = '/'
 MAX_ROBOTS_SIZE = 50000

@@ -186,9 +186,9 @@ def build(bld):
        source=[ 'worker.cc' ])
 
   if bld.env.HAVE_SWIG:
-    _lib(target='_piccolo.so',
+    _lib(target='_piccolo',
          dir='client/python',
-         source=['python_support.swig'],
+         source=['python_support.swig', 'python_support.cc'],
          features='pyext cxx',
          use=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
 
