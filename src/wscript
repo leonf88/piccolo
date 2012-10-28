@@ -76,17 +76,18 @@ def configure(ctx):
 
   ctx.env['CXX'] = 'mpic++'
 
-  ctx.check(lib='boost_thread')
-  ctx.check(lib='protobuf')
-  ctx.check(lib='rt')
-  ctx.check(lib='unwind')
-
   def check_optional(*args, **kw):
     try:
       ctx.check(*args, **kw)
       return True
     except ctx.errors.ConfigurationError:
       return False
+
+  ctx.check(lib='boost_thread')
+  check_optional(lib='boost_python')
+  ctx.check(lib='protobuf')
+  ctx.check(lib='rt')
+  ctx.check(lib='unwind')
 
   profiler_h = check_optional(header_name='google/profiler.h')
   profiler_lib = check_optional(lib='profiler')
@@ -190,7 +191,7 @@ def build(bld):
          dir='client/python',
          source=['python_support.swig', 'python_support.cc'],
          features='pyext cxx',
-         use=['worker', 'common', 'kernel', 'master', 'gflags', 'glog'])
+         use=['worker', 'common', 'kernel', 'master', 'gflags', 'glog', 'boost_thread', 'boost_python'])
 
   _lib(target='master',
        dir='master',

@@ -17,7 +17,7 @@ from Queue import PriorityQueue, Queue, Empty, Full
 
 from tlds import domain_from_site
 
-sys.path += ['build/client/python']
+sys.path += ['build']
 sys.path += ['build/client/python']
 
 try:

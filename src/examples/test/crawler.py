@@ -17,7 +17,7 @@ for n in [1]:#runutil.parallelism:
 #                  '-nooversubscribe',
                   '-n %d' % (1 + n),
 #                  'xterm -display beaker-2:1 -hold -e gdb -ex run --args python src/examples/crawler/crawler.py',
-                  'valgrind --tool=memcheck --log-file=/scratch0/kerm/crawler-1.log',
+#                  'valgrind --tool=memcheck --log-file=/scratch0/kerm/crawler-1.log',
                   'python src/examples/crawler/crawler.py',
                   '--log_prefix=false',
                   '-v=0',
