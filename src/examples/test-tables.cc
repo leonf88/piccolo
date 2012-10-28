@@ -3,6 +3,7 @@
 using namespace piccolo;
 
 DEFINE_int32(table_size, 100000, "");
+DEFINE_int32(stress_count, 2e7, "");
 
 static TypedGlobalTable<int, int>* min_hash = NULL;
 static TypedGlobalTable<int, int>* max_hash = NULL;
@@ -59,6 +60,27 @@ public:
     }
   }
 
+  void TestGetStress() {
+    //try to make sure this is a remote key
+    int k = current_shard()+1; 
+    while(min_hash->get_shard(k) == current_shard())
+      k++;
+
+    //do the stress test.
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
+    LOG(INFO) << "Fetching key " << k << " at shard " << current_shard() <<
+                 " precisely " << FLAGS_stress_count << " times.";
+    for (int i=0; i < FLAGS_stress_count; i++) {
+      min_hash->get(k);
+    }
+    gettimeofday(&end_time, NULL);
+    long long totaltime = (long long) (end_time.tv_sec - start_time.tv_sec)
+      * 1000000 + (end_time.tv_usec - start_time.tv_usec);
+    LOG(INFO) << "Total stress test time: " << (totaltime / 1000000.0) << " seconds.";
+    LOG(INFO) << "Average get time is " << (totaltime / (double)FLAGS_stress_count) << "us.";
+  }
+
   void TestIterator() {
     int n = min_hash->num_shards();
     for (int k = 0; k < n; k++) {
@@ -77,6 +99,7 @@ REGISTER_KERNEL(TableKernel);
 REGISTER_METHOD(TableKernel, TestPut);
 REGISTER_METHOD(TableKernel, TestGet);
 REGISTER_METHOD(TableKernel, TestGetLocal);
+REGISTER_METHOD(TableKernel, TestGetStress);
 REGISTER_METHOD(TableKernel, TestIterator);
 
 static int TestTables(const ConfigData &conf) {
@@ -98,9 +121,9 @@ static int TestTables(const ConfigData &conf) {
     m.run_all("TableKernel", "TestGetLocal",  min_hash);
 
     //m.checkpoint();
+    m.run_one("TableKernel", "TestGetStress", min_hash);
     m.run_all("TableKernel", "TestGet",  min_hash);
-
-            m.run_one("TableKernel", "TestIterator",  min_hash);
+    m.run_one("TableKernel", "TestIterator",  min_hash);
   }
   return 0;
 }
