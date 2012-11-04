@@ -232,7 +232,7 @@ into the example library, let's define our entry point:
 \begin{lstlisting}
 static TypedGlobalTable<int32_t, double> *a, *b, *c;
 
-static int SimpleProgram(ConfigData& conf) {
+static int SimpleProgram(const ConfigData& conf) {
 \end{lstlisting} 
 
 This declares a set of tables which we will reference later, and starts the main
@@ -240,8 +240,8 @@ program code. {\ttfamily ConfigData} is passed into us by the example driver
 program, but we don't need to worry about it just yet.  Let's create our tables:
 
 \begin{lstlisting}
-a = CreateTable(0, 100, new Sharding::Mod, new Accumulators::Sum);
-b = CreateTable(1, 100, new Sharding::Mod, new Accumulators::Sum);
+a = CreateTable(0, 100, new Sharding::Mod, new Accumulators<double>::Sum);
+b = CreateTable(1, 100, new Sharding::Mod, new Accumulators<double>::Sum);
 c = CreateTable(2, 100, new Sharding::Mod, new Accumulators::Sum);
 \end{lstlisting}
 
@@ -249,9 +249,9 @@ These tables all have 100 shards, are sharded by taking the modulo of the key,
 and will respond to update calls by adding the current and new values together.
 
 \begin{lstlisting}
-if (!StartWorker(conf)) {
-    Master m(conf);
-}   
+StartWorker(conf);
+
+Master m(conf);
 \end{lstlisting}
 
 We now check if we are running as the master node of the system.  If
@@ -264,7 +264,7 @@ to our 'a' and 'b' tables:
     PRunAll(a, {
       a->resize(100000);
       b->resize(100000);
-      const int num_shards = points->num_shards();
+      const int num_shards = a->num_shards();
       for (int64_t i = current_shard(); i < 100000; i += num_shards) {
         a->update(i, random());
         b->update(i, random()); 
