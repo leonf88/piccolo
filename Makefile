@@ -1,8 +1,9 @@
-all: configure
+all: build/.configured
 	cd src && ./waf.py build
 
-configure: src/wscript
+build/.configured: src/wscript
 	cd src && ./waf.py configure
+	touch build/.configured
 
 clean:
 	rm -rf build/
