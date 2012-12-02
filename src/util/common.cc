@@ -236,9 +236,7 @@ void Init(int argc, char** argv) {
     string cmd = StringPrintf(
         "mpirun "
         " -x LD_LIBRARY_PATH"
-        " -x LD_PRELOAD=/usr/lib/openmpi/lib/libmpi.so"
         " -hostfile %s"
-        " -bycore"
         " -nooversubscribe"
         " -n %d"
         " %s",
