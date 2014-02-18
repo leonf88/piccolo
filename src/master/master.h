@@ -1,16 +1,13 @@
 #ifndef MASTER_H_
 #define MASTER_H_
 
-#include "kernel/kernel.h"
-#include "kernel/table-registry.h"
 #include "util/common.h"
 #include "util/rpc.h"
 #include "worker/worker.pb.h"
+#include "kernel/kernel.h"
+#include "kernel/table-registry.h"
 
-#include <vector>
-#include <map>
-
-namespace piccolo {
+namespace dsm {
 
 class WorkerState;
 class TaskState;
@@ -26,8 +23,8 @@ struct RunDescriptor {
    int checkpoint_interval;
 
    // Tables to checkpoint.  If empty, commit all tables.
-   std::vector<int> checkpoint_tables;
-   std::vector<int> shards;
+   vector<int> checkpoint_tables;
+   vector<int> shards;
 
    int epoch;
 
@@ -41,21 +38,21 @@ struct RunDescriptor {
    RunDescriptor(const string& kernel,
                  const string& method,
                  GlobalTable *table,
-                 std::vector<int> cp_tables=std::vector<int>()) {
+                 vector<int> cp_tables=vector<int>()) {
      Init(kernel, method, table, cp_tables);
    }
 
    void Init(const string& kernel,
              const string& method,
              GlobalTable *table,
-             std::vector<int> cp_tables=std::vector<int>()) {
+             vector<int> cp_tables=vector<int>()) {
      barrier = true;
      checkpoint_type = CP_NONE;
      checkpoint_interval = -1;
      checkpoint_tables = cp_tables;
 
      if (!checkpoint_tables.empty()) {
-       checkpoint_type = CP_TASK_COMMIT;
+       checkpoint_type = CP_MASTER_CONTROLLED;
      }
 
      this->kernel = kernel;
@@ -64,23 +61,14 @@ struct RunDescriptor {
    }
  };
 
-
-class Master : public TableHelper {
+class Master {
 public:
   Master(const ConfigData &conf);
   ~Master();
 
-  //TableHelper methods
-  int id() const { return -1; }
-  int epoch() const { return kernel_epoch_; }
-  int peer_for_shard(int table, int shard) const {
-    return tables_[table]->owner(shard);
-  }
-  void HandlePutRequest() { return; }
-
   void run_all(RunDescriptor r);
   void run_one(RunDescriptor r);
-  void run_range(RunDescriptor r, std::vector<int> shards);
+  void run_range(RunDescriptor r, vector<int> shards);
 
   // N.B.  All run_* methods are blocking.
   void run_all(const string& kernel, const string& method, GlobalTable* locality) {
@@ -94,11 +82,9 @@ public:
 
   // Run the kernel function on the given set of shards.
   void run_range(const string& kernel, const string& method,
-                 GlobalTable* locality, std::vector<int> shards) {
+                 GlobalTable* locality, vector<int> shards) {
     run_range(RunDescriptor(kernel, method, locality), shards);
   }
-
-//  void enable_trigger(const TriggerID triggerid, int table,  bool enable);
 
   void run(RunDescriptor r);
 
@@ -112,7 +98,6 @@ public:
 
 
   void barrier();
-  void barriertasks();
   void cp_barrier();
 
   // Blocking.  Instruct workers to save table and kernel state.
@@ -127,9 +112,8 @@ public:
 private:
   void start_checkpoint();
   void start_worker_checkpoint(int worker_id, const RunDescriptor& r);
-  void finish_worker_checkpoint(int worker_id, const RunDescriptor& r, bool deltaOnly);
+  void finish_worker_checkpoint(int worker_id, const RunDescriptor& r);
   void finish_checkpoint();
-  void finish_checkpoint_writefile(int epoch);
 
   WorkerState* worker_for_shard(int table, int shard);
 
@@ -141,7 +125,7 @@ private:
   void send_table_assignments();
   bool steal_work(const RunDescriptor& r, int idle_worker, double avg_time);
   void assign_tables();
-  void assign_tasks(const RunDescriptor& r, std::vector<int> shards);
+  void assign_tasks(const RunDescriptor& r, vector<int> shards);
   int dispatch_work(const RunDescriptor& r);
 
   void dump_stats();
@@ -155,8 +139,8 @@ private:
 
   RunDescriptor current_run_;
   double current_run_start_;
-  size_t dispatched_; //# of dispatched tasks
-  size_t finished_; //# of finished tasks
+  int dispatched_; //# of dispatched tasks
+  int finished_; //# of finished tasks
 
   bool shards_assigned_;
 
@@ -165,17 +149,13 @@ private:
   // Used for interval checkpointing.
   double last_checkpoint_;
 
-  //Used for continuous checkpointing.
-  double start_deltacheckpoint_;
-  double prev_ccp_full_;
+  vector<WorkerState*> workers_;
 
-  std::vector<WorkerState*> workers_;
-
-  typedef std::map<string, MethodStats> MethodStatsMap;
+  typedef map<string, MethodStats> MethodStatsMap;
   MethodStatsMap method_stats_;
 
   TableRegistry::Map& tables_;
-  rpc::NetworkThread* network_;
+  NetworkThread* network_;
   Timer runtime_;
 };
 }

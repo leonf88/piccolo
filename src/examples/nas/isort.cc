@@ -2,7 +2,7 @@
 #include "examples/examples.h"
 #include <algorithm>
 
-using namespace piccolo;
+using namespace dsm;
 typedef uint32_t KeyType;
 typedef Bucket ValueType;
 
@@ -24,7 +24,7 @@ struct KeyGen {
   uint64_t a_;
 };
 
-static std::vector<int> src;
+static vector<int> src;
 static TypedGlobalTable<KeyType, ValueType> *dst = NULL;
 
 DEFINE_int64(sort_size, 1000000, "");
@@ -64,7 +64,7 @@ REGISTER_METHOD(SortKernel, Init);
 REGISTER_METHOD(SortKernel, Partition);
 REGISTER_METHOD(SortKernel, Sort);
 
-int IntegerSort(const ConfigData& conf) {
+int IntegerSort(ConfigData& conf) {
   dst = CreateTable(0, conf.num_workers(),
       new Sharding::UintMod, new BucketMerge);
 

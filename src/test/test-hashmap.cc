@@ -5,7 +5,7 @@
 DEFINE_int32(count, 10000, "");
 DEFINE_int32(size, 10000, "");
 
-using namespace piccolo;
+using namespace dsm;
 
 int main(int argc, char **argv) {
   Init(argc, argv);

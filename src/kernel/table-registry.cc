@@ -4,9 +4,9 @@
 #include "kernel/global-table.h"
 #include "kernel/local-table.h"
 
-#include "util/static-initializers.h"
+static const int kStatsTableId = 1000000;
 
-namespace piccolo {
+namespace dsm {
 
 TableRegistry* TableRegistry::Get() {
   static TableRegistry* t = new TableRegistry;
@@ -22,12 +22,11 @@ GlobalTable* TableRegistry::table(int id) {
   return tmap_[id];
 }
 
-MutableGlobalTable* TableRegistry::mutable_table(int id) {
-  CHECK(tmap_.find(id) != tmap_.end());
-  return dynamic_cast<MutableGlobalTable*>(tmap_[id]);
+
+static void CreateStatsTable() {
+  CreateTable(
+      kStatsTableId, 1, new Sharding::String, new Accumulators<string>::Replace);
+}
 }
 
-}
-
-REGISTER_INITIALIZER(CreateStatsTable,
-                     piccolo::CreateStatsTable());
+REGISTER_INITIALIZER(CreateStatsTable, dsm::CreateStatsTable());

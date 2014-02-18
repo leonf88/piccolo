@@ -10,7 +10,7 @@ def read_tlds():
         
 tlds = read_tlds()
 def domain_from_site(site):
-    last = -1 
+    last = 0
     p = site.find('.')
     while p != -1:
         suffix = site[p + 1:]

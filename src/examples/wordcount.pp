@@ -1,14 +1,14 @@
 #include "client/client.h"
 
 using namespace std;
-using namespace piccolo;
+using namespace dsm;
 
 DEFINE_string(book_source, "/home/yavcular/books/520.txt", "");
 
 static TextTable* books;
 static TypedGlobalTable<string, int>* counts;
 
-static int WordCount(const ConfigData& conf) {
+static int WordCount(ConfigData& conf) {
   counts = CreateTable(0, 1, new Sharding::String, new Accumulators<int>::Sum);
   books = CreateTextTable(1, FLAGS_book_source, false);
 

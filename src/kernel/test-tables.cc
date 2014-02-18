@@ -1,13 +1,12 @@
 #include "util/common.h"
 #include "kernel/sparse-table.h"
 #include "kernel/dense-table.h"
-#include "kernel/global-table.h"
 
 #include "util/static-initializers.h"
 #include <gflags/gflags.h>
 
 using std::tr1::unordered_map;
-using namespace piccolo;
+using namespace dsm;
 
 int optimizer_hack;
 
@@ -120,16 +119,9 @@ static void TestSerialize() {
   TableData tdata;
   T* t2 = GetTable<T>();
 
-  ProtoTableCoder c(&tdata);
+  RPCTableCoder c(&tdata);
   t->Serialize(&c);
-
-  //The following replaces the old t2->ApplyUpdate() <CRM>
-/*
-  DecodeIterator* it = t2->partitions_[t2->req.shard()]->DecodeUpdates(&c);
-  for(;!it->done(); it->Next()) {
-    t2->update(it->key(),it->value());
-  }
-*/
+  t2->ApplyUpdates(&c);
 
   LOG(INFO) << "Serialized table to: " << tdata.ByteSize() << " bytes.";
 

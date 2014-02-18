@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-namespace piccolo {
+namespace dsm {
 
 using std::string;
 
@@ -39,9 +39,7 @@ static bool operator==(const StringPiece& a, const StringPiece& b) {
   return a.data == b.data && a.len == b.len;
 }
 
-static inline const char* strnstr(const char* haystack,
-                                  const char* needle,
-                                  int len) {
+static const char* strnstr(const char* haystack, const char* needle, int len) {
   int nlen = strlen(needle);
   for (int i = 0; i < len - nlen; ++i) {
     if (strncmp(haystack + i, needle, nlen) == 0) {
@@ -73,18 +71,5 @@ string ToString(string);
 string ToString(StringPiece);
 
 }
-
-#include <tr1/functional_hash.h>
-
-namespace std { namespace tr1 {
-template <>
-struct hash<piccolo::StringPiece> : public unary_function<piccolo::StringPiece, size_t> {
-  size_t operator()(const piccolo::StringPiece& k) const {
-    return k.hash();
-  }
-};
-}}
-
-
 
 #endif /* STRING_H_ */
