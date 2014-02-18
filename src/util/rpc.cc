@@ -1,28 +1,16 @@
 #include "util/rpc.h"
 #include "util/common.h"
 #include "util/common.pb.h"
-#include "util/hash.h"
-#include "util/timer.h"
-#include "util/tuple.h"
-
-#include <mpi.h>
 #include <signal.h>
-
-#include <tr1/unordered_map>
-#include <tr1/unordered_set>
 
 DECLARE_bool(localtest);
 DECLARE_double(sleep_time);
+DEFINE_bool(rpc_log, false, "");
 
-using std::tr1::unordered_set;
-
-namespace piccolo {
-namespace rpc {
-
-int ANY_SOURCE = MPI::ANY_SOURCE;
+namespace dsm {
 
 static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
-  static piccolo::SpinLock l;
+  static dsm::SpinLock l;
   l.lock();
 
   char buffer[1024];
@@ -32,8 +20,9 @@ static void CrashOnMPIError(MPI_Comm * c, int * errorCode, ...) {
 }
 
 struct Header {
-  Header() : is_reply(false) {}
-  bool is_reply;
+  Header() : sync_request(0), sync_reply(0) {}
+  bool sync_request;
+  bool sync_reply;
 };
 
 // Represents an active RPC to a remote peer.
@@ -140,18 +129,11 @@ void NetworkThread::CollectActive() {
   }
 }
 
-void NetworkThread::InvokeCallback(CallbackInfo *ci, RPCInfo rpc) {
-  ci->call(rpc);
-  Header reply_header;
-  reply_header.is_reply = true;
-  Send(new RPCRequest(rpc.source, rpc.tag, *ci->resp, reply_header));
-}
-
 void NetworkThread::Run() {
   while (running) {
     MPI::Status st;
 
-    if (world_->Iprobe(rpc::ANY_SOURCE, MPI::ANY_TAG, st)) {
+    if (world_->Iprobe(MPI::ANY_SOURCE, MPI::ANY_TAG, st)) {
       int tag = st.Get_tag();
       int source = st.Get_source();
       int bytes = st.Get_count(MPI::BYTE);
@@ -162,34 +144,25 @@ void NetworkThread::Run() {
       world_->Recv(&data[0], bytes, MPI::BYTE, source, tag, st);
 
       Header *h = (Header*)&data[0];
+      if (h->sync_request) {
+//        LOG(INFO) << "Got sync packet; replying...";
+        EmptyMessage msg;
+        Send(source, MTYPE_SYNC_REPLY, msg);
+      }
 
       stats["bytes_received"] += bytes;
       stats[StringPrintf("received.%s", MessageTypes_Name((MessageTypes)tag).c_str())] += 1;
       CHECK_LT(source, kMaxHosts);
 
       VLOG(3) << "Received packet - source: " << source << " tag: " << tag;
-      if (h->is_reply) {
-        boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
-        replies[tag][source].push_back(data);
-      } else {
-        if (callbacks_[tag] != NULL) {
-          CallbackInfo *ci = callbacks_[tag];
-          ci->req->ParseFromArray(&data[0] + sizeof(Header), data.size() - sizeof(Header));
-          VLOG(2) << "Got incoming: " << ci->req->ShortDebugString();
 
-          RPCInfo rpc = { source, id(), tag };
-          if (ci->spawn_thread) {
-            boost::thread(boost::bind(&NetworkThread::InvokeCallback, this, ci, rpc));
-          } else {
-            ci->call(rpc);
-            Header reply_header;
-            reply_header.is_reply = true;
-            Send(new RPCRequest(source, tag, *ci->resp, reply_header));
-          }
-        } else {
-          boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
-          requests[tag][source].push_back(data);
-        }
+      {
+        boost::recursive_mutex::scoped_lock sl(q_lock[tag]);
+        incoming[tag][source].push_back(data);
+      }
+
+      if (callbacks_[tag] != NULL) {
+        callbacks_[tag]();
       }
     } else {
       Sleep(FLAGS_sleep_time);
@@ -200,7 +173,7 @@ void NetworkThread::Run() {
       RPCRequest* s = pending_sends_.back();
       pending_sends_.pop_back();
       s->start_time = Now();
-      s->mpi_req = world_->Issend(
+      s->mpi_req = world_->Isend(
           s->payload.data(), s->payload.size(), MPI::BYTE, s->target, s->rpc_type);
       active_sends_.insert(s);
     }
@@ -211,32 +184,11 @@ void NetworkThread::Run() {
   }
 }
 
-bool NetworkThread::check_request_queue(int src, int type, Message* data) {
+bool NetworkThread::check_queue(int src, int type, Message* data) {
   CHECK_LT(src, kMaxHosts);
-  CHECK_LT(type, kMaxMethods);
+	CHECK_LT(type, kMaxMethods);
 
-  Queue& q = requests[type][src];
-  if (!q.empty()) {
-    boost::recursive_mutex::scoped_lock sl(q_lock[type]);
-    if (q.empty())
-      return false;
-
-    const string& s = q.front();
-    if (data) {
-      data->ParseFromArray(s.data() + sizeof(Header), s.size() - sizeof(Header));
-    }
-
-    q.pop_front();
-    return true;
-  }
-  return false;
-}
-
-bool NetworkThread::check_reply_queue(int src, int type, Message* data) {
-  CHECK_LT(src, kMaxHosts);
-  CHECK_LT(type, kMaxMethods);
-
-  Queue& q = replies[type][src];
+  Queue& q = incoming[type][src];
   if (!q.empty()) {
     boost::recursive_mutex::scoped_lock sl(q_lock[type]);
     if (q.empty())
@@ -263,28 +215,20 @@ void NetworkThread::Read(int desired_src, int type, Message* data, int *source) 
 }
 
 bool NetworkThread::TryRead(int src, int type, Message* data, int *source) {
-  if (src == rpc::ANY_SOURCE) {
+  if (src == MPI::ANY_SOURCE) {
     for (int i = 0; i < world_->Get_size(); ++i) {
       if (TryRead(i, type, data, source)) {
         return true;
       }
     }
   } else {
-    if (check_request_queue(src, type, data)) {
+    if (check_queue(src, type, data)) {
       if (source) { *source = src; }
       return true;
     }
   }
 
   return false;
-}
-
-void NetworkThread::Call(int dst, int method, const Message &msg, Message *reply) {
-  Send(dst, method, msg);
-  Timer t;
-  while (!check_reply_queue(dst, method, reply)) {
-    Sleep(FLAGS_sleep_time);
-  }
 }
 
   // Enqueue the given request for transmission.
@@ -321,49 +265,21 @@ void NetworkThread::Broadcast(int method, const Message& msg) {
   }
 }
 
-void NetworkThread::SyncBroadcast(int method, const Message& msg) {
-  VLOG(2) << "Sending: " << msg.ShortDebugString();
+void NetworkThread::SyncBroadcast(int method, int reply, const Message& msg) {
   Broadcast(method, msg);
-  WaitForSync(method, world_->Get_size() - 1);
+  WaitForSync(reply, world_->Get_size() - 1);
 }
 
-void NetworkThread::WaitForSync(int method, int count) {
+void NetworkThread::WaitForSync(int reply, int count) {
   EmptyMessage empty;
-  unordered_set<int> pending;
-
-  for (int i = 1; i < world_->Get_size(); ++i) {
-    pending.insert(i);
-  }
-
-  while (!pending.empty()) {
-    for (unordered_set<int>::iterator i = pending.begin();
-         i != pending.end();
-         ++i) {
-      if (check_reply_queue(*i, method, NULL)) {
-        pending.erase(i);
-      } else {
-        VLOG(2) << "Sync blocked on worker " << *i;
-      }
-    }
-    VLOG(2) << "Waiting for sync " << pending.size();
-    Sleep(FLAGS_sleep_time);
+  while (count > 0) {
+    Read(MPI::ANY_SOURCE, reply, &empty, NULL);
+    --count;
   }
 }
 
-void NetworkThread::_RegisterCallback(int message_type, Message *req, Message* resp, Callback cb) {
-  CallbackInfo *cbinfo = new CallbackInfo;
-
-  cbinfo->spawn_thread = false;
-  cbinfo->req = req;
-  cbinfo->resp = resp;
-  cbinfo->call = cb;
-
-  CHECK_LT(message_type, kMaxMethods) << "Message type: " << message_type << " over limit.";
-  callbacks_[message_type] =  cbinfo;
-}
-
-void NetworkThread::SpawnThreadFor(int req_type) {
-  callbacks_[req_type]->spawn_thread = true;
+void NetworkThread::RegisterCallback(int message_type, boost::function<void ()> cb) {
+  callbacks_[message_type] = cb;
 }
 
 static NetworkThread* net = NULL;
@@ -382,6 +298,5 @@ void NetworkThread::Init() {
   atexit(&ShutdownMPI);
 }
 
-} // namespace rpc
-} // namespace piccolo
+}
 

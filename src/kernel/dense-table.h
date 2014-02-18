@@ -3,38 +3,24 @@
 
 #include "util/common.h"
 #include "worker/worker.pb.h"
-#include "kernel/local-table.h"
-#include "kernel/table.h"
-#include "kernel/table-inl.h"
 #include <boost/noncopyable.hpp>
-#include <boost/dynamic_bitset.hpp>
 
-#include <tr1/unordered_map>
+namespace dsm {
 
-namespace piccolo {
-
-template<class K>
-struct BlockInfo: BlockInfoBase {
-  virtual ~BlockInfo() {
-  }
-  // Returns the key representing the first element in the block
-  // containing 'k'.
-  virtual K start(const K& k, int block_size) = 0;
-
-  // Returns the index offset of 'k' within it's block.
-  virtual int offset(const K& k, int block_size) = 0;
-
+template <class K>
+struct BlockInfo {
+  virtual K block_id(const K& k, int block_size) = 0;
+  virtual int block_pos(const K& k, int block_size) = 0;
 };
 
-struct IntBlockInfo: public BlockInfo<int> {
-  int start(const int& k, int block_size) {
+struct IntBlockInfo : public BlockInfo<int> {
+  int block_id(const int& k, int block_size) {
     return k - (k % block_size);
   }
 
-  int offset(const int& k, int block_size) {
+  int block_pos(const int& k, int block_size) {
     return k % block_size;
   }
-
 };
 
 // Provides fast lookups for dense key-spaces.  Keys are divided into 'blocks' of
@@ -44,92 +30,74 @@ struct IntBlockInfo: public BlockInfo<int> {
 template<class K, class V>
 class DenseTable:
   public LocalTable,
-  public TypedTable<K,V>,
+  public TypedTable<K, V>,
   private boost::noncopyable {
 public:
   struct Bucket {
-    Bucket() :
-        entries(0) {
-    }
-    Bucket(int count) :
-        entries(count) {
-    }
+    Bucket() : entries(0) {}
+    Bucket(int count) : entries(count) {}
 
-    std::vector<V> entries;
+    vector<V> entries;
     bool dirty;
   };
 
   typedef typename std::tr1::unordered_map<K, Bucket> BucketMap;
-  typedef DecodeIterator<K, V> UpdateDecoder;
 
-  struct Iterator: public TypedTableIterator<K, V> {
-    Iterator(DenseTable<K, V> &parent) :
-        parent_(parent), it_(parent_.m_.begin()), idx_(0) {
-    }
-
-    Marshal<K> *kmarshal() {
-      return ((Marshal<K>*) parent_.kmarshal());
-    }
-    Marshal<V> *vmarshal() {
-      return ((Marshal<V>*) parent_.vmarshal());
-    }
+  struct Iterator : public TypedTableIterator<K, V> {
+    Iterator(DenseTable<K, V> &parent) : parent_(parent), it_(parent_.m_.begin()), idx_(0) { }
 
     void Next() {
       ++idx_;
-      if (idx_ >= parent_.info_.block_size) {
+      if (idx_ >= parent_.info_->block_size) {
         ++it_;
         idx_ = 0;
       }
     }
 
-    bool done() {
-      return it_ == parent_.m_.end();
+    bool done() { return it_ == parent_.m_.end(); }
+
+    const K& key() { k_ = it_->first + idx_; return k_; }
+    V& value() { return it_->second.entries[idx_]; }
+
+    void key_str(string* k) {
+      return ((Marshal<K>*)parent_.info_->key_marshal)->marshal(key(), k);
     }
 
-    const K& key() {
-      k_ = it_->first + idx_;
-      return k_;
-    }
-    V& value() {
-      return it_->second.entries[idx_];
+    void value_str(string *v) {
+      return ((Marshal<V>*)parent_.info_->value_marshal)->marshal(value(), v);
     }
 
     DenseTable<K, V> &parent_;
     K k_;
-    typename BucketMap::iterator it_;
+    typename unordered_map<K, Bucket>::iterator it_;
     int idx_;
   };
 
-  struct Factory: public TableFactory {
-    TableBase* New() {
-      return new DenseTable<K, V>();
-    }
+  struct Factory : public TableFactory {
+    TableBase* New() { return new DenseTable<K, V>(); }
   };
 
   BlockInfo<K>& block_info() {
-    return *(BlockInfo<K>*) this->info_.block_info;
+    return *(BlockInfo<K>*)info_->block_info;
   }
 
   // return the first key in a bucket
   K start_key(const K& k) {
-    return block_info().start(k, this->info_.block_size);
+    return block_info().block_id(k, info_->block_size);
   }
 
   int block_pos(const K& k) {
-    return block_info().offset(k, this->info_.block_size);
+    return block_info().block_pos(k, info_->block_size);
   }
 
   // Construct a hashmap with the given initial size; it will be expanded as necessary.
-  DenseTable(int size = 1) :
-      m_(size), bitset_epoch_(0) {
+  DenseTable(int size = 1) : m_(size) {
     last_block_ = NULL;
-    trigger_flags_.resize(size);
   }
 
-  ~DenseTable() {
-  }
+  ~DenseTable() {}
 
-  void Init(const TableDescriptor * td) {
+  void Init(const TableDescriptor* td) {
     TableBase::Init(td);
   }
 
@@ -148,8 +116,8 @@ public:
     }
 
     Bucket &vb = m_[start];
-    if (vb.entries.size() != this->info_.block_size) {
-      vb.entries.resize(this->info_.block_size);
+    if (vb.entries.size() != info_->block_size) {
+      vb.entries.resize(info_->block_size);
     }
 
     last_block_ = &vb.entries[0];
@@ -163,58 +131,46 @@ public:
   }
 
   void update(const K& k, const V& v) {
-    update_tainted_ = true;
     V* vb = get_block(k);
-
-    if (this->info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
-      ((Accumulator<V>*) this->info_.accum)->Accumulate(&vb[block_pos(k)], v);
-    } else if (this->info_.accum->type() == AccumulatorBase::HYBRID) {
-      ((Accumulator<V>*) this->info_.accum)->Accumulate(&vb[block_pos(k)], v);
-      trigger_flags_[ block_pos(k)] = true;	//WRONG
-      LOG(FATAL) << "That's wrong.";
-    } else if (this->info_.accum->type() == AccumulatorBase::TRIGGER) {
-      V v2 = vb[block_pos(k)];
-      bool doUpdate = false;
-//      LOG(INFO) << "Executing Trigger [dense]";
-      ((Trigger<K, V>*) this->info_.accum)->Fire(&k, &v2, v, &doUpdate, true);
-      if (doUpdate) {
-        vb[block_pos(k)] = v2;
-        trigger_flags_[ block_pos(k)] = true;	//WRONG
-        LOG(FATAL) << "That's wrong.";
-      }
-    } else {
-      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR";
-    }
-
-//    K k2(k);
-//    ((Accumulator<V>*)this->info_.accum)->Accumulate(&k2, v);
+    ((Accumulator<V>*)info_->accum)->Accumulate(&vb[block_pos(k)], v);
   }
 
   void put(const K& k, const V& v) {
-    update_tainted_ = true;
     V* vb = get_block(k);
     vb[block_pos(k)] = v;
-    trigger_flags_[block_pos(k)] = true;
   }
 
-  void remove(const K& k) {
-    LOG(FATAL) << "Not implemented.";
+  void remove(const K& k) { LOG(FATAL) << "Not implemented."; }
+
+  bool contains_str(const StringPiece& s) {
+    K k;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
+    return contains(k);
   }
 
-  TableIterator* get_iterator() {
-    return new Iterator(*this);
+  string get_str(const StringPiece &s) {
+    K k;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
+    string out;
+    ((Marshal<V>*)info_->value_marshal)->marshal(get(k), &out);
+    return out;
   }
+
+  void update_str(const StringPiece& kstr, const StringPiece &vstr) {
+    K k; V v;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(kstr, &k);
+    ((Marshal<V>*)info_->value_marshal)->unmarshal(vstr, &v);
+    update(k, v);
+  }
+
+  TableIterator* get_iterator() { return new Iterator(*this); }
 
   bool empty() {
     return size() == 0;
   }
 
   int64_t size() {
-    return m_.size() * this->info_.block_size;
-  }
-
-  int64_t capacity() {
-    return size();
+    return m_.size() * info_->block_size;
   }
 
   void clear() {
@@ -222,23 +178,21 @@ public:
     last_block_ = NULL;
   }
 
-  void resize(int64_t s) {
-    LOG(FATAL) << " DenseTable resize not implemented!";
-  }
+  void resize(int64_t s) {}
 
-  void Serialize(TableCoder* out, bool tryOptimize = false) {
+  void Serialize(TableCoder* out) {
     string k, v;
     for (typename BucketMap::iterator i = m_.begin(); i != m_.end(); ++i) {
       v.clear();
 
       // For the purposes of serialization, all values in a bucket are assumed
       // to be the same number of bytes.
-      marshal(i->first, &k);
+      ((Marshal<K>*)info_->key_marshal)->marshal(i->first, &k);
 
       string tmp;
       Bucket &b = i->second;
       for (int j = 0; j < b.entries.size(); ++j) {
-        marshal(b.entries[j], &tmp);
+        ((Marshal<V>*)info_->value_marshal)->marshal(b.entries[j], &tmp);
         v += tmp;
       }
 
@@ -246,56 +200,30 @@ public:
     }
   }
 
-  void Deserialize(TableCoder* in) {
-    string k,v;
-    while(in->ReadEntry(&k,&v)) {
-      update_str(k,v);
-    }
-  }
-
-  void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
-    UpdateDecoder *it = static_cast<UpdateDecoder*>(itbase);
+  void ApplyUpdates(TableCoder *in) {
     K k;
-    string kt, vt;
 
-    it->clear();
+    string kt, vt;
     while (in->ReadEntry(&kt, &vt)) {
-      unmarshal(kt, &k);
-      const int value_size = vt.size() / this->info_.block_size;
+      ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
+
+      V* block = get_block(k);
+      const int value_size = vt.size() / info_->block_size;
 
       V tmp;
-      for (int j = 0; j < this->info_.block_size; ++j) {
-        unmarshal(StringPiece(vt.data() + (value_size * j), value_size), &tmp);
-        it->append(k + j, tmp);
+      for (int j = 0; j < info_->block_size; ++j) {
+        ((Marshal<V>*)info_->value_marshal)->unmarshal(
+            StringPiece(vt.data() + (value_size * j), value_size),
+            &tmp);
+        ((Accumulator<V>*)info_->accum)->Accumulate(&block[j], tmp);
       }
     }
-    it->rewind();
-    return;
-  }
-
-  boost::dynamic_bitset<uint32_t>* bitset_getbitset(void) {
-    return &trigger_flags_;
-  }
-
-  const K bitset_getkeyforbit(unsigned long int bit_offset) {
-    int bucket = int(bit_offset/(this->info_.block_size));
-    return m_[bucket]->first + (bit_offset - (this->info_.block_size)*bucket);
-  }
-
-  int bitset_epoch() {
-    //this is fine, because resize must hold BOTH bitset_update and bitset_retrig.
-    //if we get exactly one lock, then resize can't be in progress. The update mutex
-    //should be held for a shorter duty cycle than teh retrig mutex, so let's use it.
-    boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_update_mutex());
-    return bitset_epoch_;
   }
 
 private:
   BucketMap m_;
   V* last_block_;
   K last_block_start_;
-  boost::dynamic_bitset<uint32_t> trigger_flags_;        //Retrigger flags
-  int bitset_epoch_;
 };
 }
 #endif

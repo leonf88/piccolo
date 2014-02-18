@@ -3,35 +3,18 @@
 
 #include "util/common.h"
 #include "util/file.h"
-#include "util/stats.h"
 #include "util/common.pb.h"
 
 #include <boost/thread.hpp>
 #include <boost/function.hpp>
 #include <google/protobuf/message.h>
+#include <mpi.h>
 
-#include <tr1/unordered_set>
-
-#include <deque>
-
-namespace MPI {
-  class Comm;
-}
-
-namespace piccolo {
-namespace rpc {
+namespace dsm {
 
 typedef google::protobuf::Message Message;
 
 struct RPCRequest;
-
-struct RPCInfo {
-  int source;
-  int dest;
-  int tag;
-};
-
-extern int ANY_SOURCE;
 
 // Hackery to get around mpi's unhappiness with threads.  This thread
 // simply polls MPI continuously for any kind of update and adds it to
@@ -40,7 +23,7 @@ class NetworkThread {
 public:
   bool active() const;
   int64_t pending_bytes() const;
-
+  
   // Blocking read for the given source and message type.
   void Read(int desired_src, int type, Message* data, int *source=NULL);
   bool TryRead(int desired_src, int type, Message* data, int *source=NULL);
@@ -50,11 +33,8 @@ public:
   void Send(int dst, int method, const Message &msg);
 
   void Broadcast(int method, const Message& msg);
-  void SyncBroadcast(int method, const Message& msg);
+  void SyncBroadcast(int method, int reply, const Message& msg);
   void WaitForSync(int method, int count);
-
-  // Invoke 'method' on the destination, and wait for a reply.
-  void Call(int dst, int method, const Message &msg, Message *reply);
 
   void Flush();
   void Shutdown();
@@ -65,45 +45,25 @@ public:
   static NetworkThread *Get();
   static void Init();
 
-  Stats stats;
-
-#ifndef SWIG
-  // Register the given function with the RPC thread.  The function will be invoked
+  // Register the given function with the RPC thread.  The function willi be invoked
   // from within the network thread whenever a message of the given type is received.
-  typedef boost::function<void (const RPCInfo& rpc)> Callback;
+  typedef boost::function<void ()> Callback;
+  void RegisterCallback(int message_type, Callback cb);
 
-  // Use RegisterCallback(...) instead.
-  void _RegisterCallback(int req_type, Message *req, Message *resp, Callback cb);
-
-  // After registering a callback, indicate that it should be invoked in a
-  // separate thread from the RPC server.
-  void SpawnThreadFor(int req_type);
-#endif
-
-  struct CallbackInfo {
-    Message *req;
-    Message *resp;
-
-    Callback call;
-
-    bool spawn_thread;
-  };
-
+  Stats stats;
 private:
   static const int kMaxHosts = 512;
-  static const int kMaxMethods = 64;
+  static const int kMaxMethods = 36;
 
-  typedef std::deque<string> Queue;
+  typedef deque<string> Queue;
 
   bool running;
 
-  CallbackInfo* callbacks_[kMaxMethods];
+  Callback callbacks_[kMaxMethods];
+  vector<RPCRequest*> pending_sends_;
+  unordered_set<RPCRequest*> active_sends_;
 
-  std::vector<RPCRequest*> pending_sends_;
-  std::tr1::unordered_set<RPCRequest*> active_sends_;
-
-  Queue requests[kMaxMethods][kMaxHosts];
-  Queue replies[kMaxMethods][kMaxHosts];
+  Queue incoming[kMaxMethods][kMaxHosts];
 
   MPI::Comm *world_;
   mutable boost::recursive_mutex send_lock;
@@ -111,26 +71,15 @@ private:
   mutable boost::thread *t_;
   int id_;
 
-  bool check_reply_queue(int src, int type, Message *data);
-  bool check_request_queue(int src, int type, Message* data);
+  bool check_queue(int src, int type, Message* data);
 
-  void InvokeCallback(CallbackInfo *ci, RPCInfo rpc);
   void CollectActive();
   void Run();
 
   NetworkThread();
 };
 
-#ifndef SWIG
 
-template <class Request, class Response, class Function, class Klass>
-void RegisterCallback(int req_type, Request *req, Response *resp, Function function, Klass klass) {
-  NetworkThread::Get()->_RegisterCallback(req_type, req, resp, boost::bind(function, klass, boost::cref(*req), resp, _1));
 }
-
-#endif
-
-} // namespace rpc
-} // namespace piccolo
 
 #endif // UTIL_RPC_H

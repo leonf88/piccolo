@@ -29,7 +29,7 @@
 /* #undef HAVE_LIBUNWIND_H */
 
 /* define if you have google gflags library */
-#define HAVE_LIB_GFLAGS
+/* #undef HAVE_LIB_GFLAGS */
 
 /* define if you have google gmock library */
 /* #undef HAVE_LIB_GMOCK */
@@ -126,6 +126,9 @@
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "0.3.0"
+
+/* How to access the PC from a struct ucontext */
+#define PC_FROM_UCONTEXT uc_mcontext.gregs[REG_RIP]
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */

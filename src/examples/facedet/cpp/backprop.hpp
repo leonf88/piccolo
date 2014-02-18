@@ -63,9 +63,8 @@ typedef struct {
 class BackProp {
 	public:
 		void bpnn_initialize(int seed);
-		void bpnn_free(BPNN *net, bool delstructure = true);
+		void bpnn_free(BPNN *net);
 		BPNN *bpnn_create(int n_in, int n_hidden, int n_out);
-		void bpnn_recreate(BPNN *net, int n_in, int n_hidden, int n_out, bool no_free = false);
 		void bpnn_adjust_weights(double *delta, int ndelta, double *ly, int nly, double **w, double **oldw, double eta, double momentum);
 		void bpnn_feedforward(BPNN *net);
 		void bpnn_train(BPNN *net, double eta, double momentum, double *eo, double *eh);
@@ -84,7 +83,6 @@ class BackProp {
 		void bpnn_randomize_weights(double **w, int m, int n);
 		void bpnn_zero_weights(double **w, int m, int n);
 		BPNN *bpnn_internal_create(int n_in, int n_hidden, int n_out);
-		void bpnn_internal_populate(BPNN* newvalnet, int n_in, int n_hidden, int n_out);
 		
 };
 

@@ -2,7 +2,7 @@
 #include "examples/examples.pb.h"
 #include "file-helper.h"
 
-using namespace piccolo;
+using namespace dsm;
 
 // Wrapper struct to return to C-land.
 struct RFile {

@@ -1,25 +1,22 @@
-#include <python2.7/Python.h>
-#include <boost/python.hpp>
+#include <python2.6/Python.h>
 
 #include <gflags/gflags.h>
 #include "client/client.h"
 #include "examples/examples.h"
 #include "examples/examples.pb.h"
-#include "util/common.h"
-#include "worker/worker.h"
 #include "kernel/table.h"
 #include "master/master.h"
+#include "util/common.h"
+#include "worker/worker.h"
 
 using namespace google::protobuf;
 using namespace std;
 
-namespace piccolo {
 
-static KernelBase *the_kernel;
-KernelBase* kernel();
+namespace dsm {
 
+DSMKernel* kernel();
 double crawler_runtime();
-bool crawler_triggers();
 
 #ifndef SWIG
 // gcc errors out if we don't use this hack - complaining about
@@ -28,7 +25,6 @@ typedef PyObject* PyObjectPtr;
 
 struct PythonSharder : public Sharder<string> {
   PythonSharder(PyObjectPtr callback) : c_(callback) {}
-  virtual ~PythonSharder() {}
   int operator()(const string& k, int shards);
 private:
   PyObjectPtr c_;
@@ -37,7 +33,6 @@ private:
 struct PythonAccumulate : public Accumulator<PyObjectPtr> {
   PythonAccumulate(PyObjectPtr callback) : c_(callback) {}
   void Accumulate(PyObjectPtr* a, const PyObjectPtr& b);
-  virtual ~PythonAccumulate() {};
 private:
   PyObjectPtr c_;
 };
@@ -68,23 +63,5 @@ struct PythonMarshal : public Marshal<PyObjectPtr> {
   PyObjectPtr unpickler_;
 };
 
-template<class K, class V>
-class PythonTrigger : public HybridTrigger<K, V> {
-public:
-  PythonTrigger(GlobalTable* thistable, const string& codeshort, const string& codelong);
-  void Init(piccolo::GlobalTable* thistable);
-  bool Accumulate(V* value, const V& update);
-  bool LongFire(const K key, bool lastrun);
-  bool CallPythonTrigger(PyObjectPtr callable, PyObjectPtr key, V* value, const V& update, bool isTrigger, bool isLast);
-  bool ProcessPyRetval(PyObjectPtr retval);
-
-  //TriggerID trigid;
-private:
-  MarshalledMap params_;
-  boost::python::object crawl_module_;
-  boost::python::object crawl_ns_;
-};
-
-
-#endif //close namespace
+#endif
 }

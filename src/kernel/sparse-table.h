@@ -6,11 +6,10 @@
 #include "kernel/table.h"
 #include "kernel/local-table.h"
 #include <boost/noncopyable.hpp>
-#include <boost/dynamic_bitset.hpp>
 
-namespace piccolo {
+namespace dsm {
 
-static const double kLoadFactor = 0.4;
+static const double kLoadFactor = 0.8;
 
 template <class K, class V>
 class SparseTable :
@@ -27,12 +26,8 @@ private:
 #pragma pack(pop)
 
 public:
-  typedef DecodeIterator<K, V> UpdateDecoder;
-
   struct Iterator : public TypedTableIterator<K, V> {
-    Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) {
-      Next();
-    }
+    Iterator(SparseTable<K, V>& parent) : pos(-1), parent_(parent) { Next(); }
 
     void Next() {
       do {
@@ -47,6 +42,14 @@ public:
     const K& key() { return parent_.buckets_[pos].k; }
     V& value() { return parent_.buckets_[pos].v; }
 
+    void key_str(string* k) {
+      return ((Marshal<K>*)parent_.info_->key_marshal)->marshal(key(), k);
+    }
+
+    void value_str(string *v) {
+      return ((Marshal<V>*)parent_.info_->value_marshal)->marshal(value(), v);
+    }
+
     int pos;
     SparseTable<K, V> &parent_;
   };
@@ -59,7 +62,7 @@ public:
   SparseTable(int size=1);
   ~SparseTable() {}
 
-  void Init(const TableDescriptor * td) {
+  void Init(const TableDescriptor* td) {
     TableBase::Init(td);
   }
 
@@ -71,30 +74,43 @@ public:
     LOG(FATAL) << "Not implemented.";
   }
 
-  boost::dynamic_bitset<uint32_t>* bitset_getbitset(void);
-  const K bitset_getkeyforbit(unsigned long int bit_offset);
-  int bitset_epoch(void);
-
   void resize(int64_t size);
 
   bool empty() { return size() == 0; }
   int64_t size() { return entries_; }
-  int64_t capacity() { return size_; }
 
   void clear() {
     for (int i = 0; i < size_; ++i) { buckets_[i].in_use = 0; }
     entries_ = 0;
-    trigger_flags_.reset();
   }
 
   TableIterator *get_iterator() {
       return new Iterator(*this);
   }
 
-  void Serialize(TableCoder *out, bool tryOptimize = false);
-  int64_t Deserialize(TableCoder *in, bool tryOptimize = false);
+  void Serialize(TableCoder *out);
+  void ApplyUpdates(TableCoder *in);
 
-  void DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase);
+  bool contains_str(const StringPiece& s) {
+    K k;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
+    return contains(k);
+  }
+
+  string get_str(const StringPiece &s) {
+    K k;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(s, &k);
+    string out;
+    ((Marshal<V>*)info_->value_marshal)->marshal(get(k), &out);
+    return out;
+  }
+
+  void update_str(const StringPiece& kstr, const StringPiece &vstr) {
+    K k; V v;
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(kstr, &k);
+    ((Marshal<V>*)info_->value_marshal)->unmarshal(vstr, &v);
+    update(k, v);
+  }
 
 private:
   uint32_t bucket_idx(K k) {
@@ -104,149 +120,85 @@ private:
   int bucket_for_key(const K& k) {
     int start = bucket_idx(k);
     int b = start;
-    int tries = 0;
 
     do {
-      ++tries;
       if (buckets_[b].in_use) {
         if (buckets_[b].k == k) {
-//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
           return b;
         }
       } else {
-//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
         return -1;
       }
 
        b = (b + 1) % size_;
     } while (b != start);
 
-//		  EVERY_N(10000, fprintf(stderr, "ST:: Tries = %d\n", tries))
     return -1;
   }
 
   std::vector<Bucket> buckets_;
-  boost::dynamic_bitset<uint32_t> trigger_flags_;		//Retrigger flags
 
   int64_t entries_;
   int64_t size_;
-  int bitset_epoch_;
 
   std::tr1::hash<K> hashobj_;
 };
 
 template <class K, class V>
 SparseTable<K, V>::SparseTable(int size)
-  : buckets_(0), entries_(0), size_(0), bitset_epoch_(0) {
+  : buckets_(0), entries_(0), size_(0) {
   clear();
 
-  trigger_flags_.resize(size);        //Retrigger flags
-  trigger_flags_.reset();
   resize(size);
 }
 
 template <class K, class V>
-void SparseTable<K, V>::Serialize(TableCoder *out, bool tryOptimize) {
-  if (tryOptimize && boost::is_pod<K>::value && (boost::is_pod<V>::value)) {
-    //optimize!
-    StringPiece k("rawdump");
-    VLOG(1) << "Optimized dump of " << (buckets_.size()*sizeof(Bucket)) << " bytes of data in " <<
-               buckets_.size() << " buckets of " << sizeof(Bucket) << " bytes each.";
-    StringPiece v((const char*)&(buckets_[0]),buckets_.size()*sizeof(Bucket));
-    out->WriteEntry(k,v);
-  } else {
-    Iterator *i = (Iterator*)get_iterator();
-    string k, v;
-    while (!i->done()) {
-      k.clear(); v.clear();
-      marshal(i->key(), &k);
-      marshal(i->value(), &v);
-      out->WriteEntry(k, v);
-      i->Next();
-    }
-    delete i;
+void SparseTable<K, V>::Serialize(TableCoder *out) {
+  Iterator *i = (Iterator*)get_iterator();
+  string k, v;
+  while (!i->done()) {
+    k.clear(); v.clear();
+    ((Marshal<K>*)info_->key_marshal)->marshal(i->key(), &k);
+    ((Marshal<V>*)info_->value_marshal)->marshal(i->value(), &v);
+    out->WriteEntry(k, v);
+    i->Next();
   }
+  delete i;
 }
 
 template <class K, class V>
-int64_t SparseTable<K, V>::Deserialize(TableCoder *in, bool tryOptimize) {
-  string k,v;
-  int updates = 0;
-  if (tryOptimize && boost::is_pod<K>::value && boost::is_pod<V>::value) {
-    //optimize!
-    CHECK_EQ(true,in->ReadEntry(&k,&v)) << "Failed to read raw table dump!";
-    VLOG(1) << "Optimized restore of " << v.length() << " bytes of data";
-    memcpy(&(buckets_[0]),v.c_str(),v.length());
-    updates++;
-  } else {
-    while (in->ReadEntry(&k, &v)) {
-      update_str(k, v);
-      updates++;
-    }
-  }
-  return updates;
-}
-
-template <class K, class V>
-void SparseTable<K, V>::DecodeUpdates(TableCoder *in, DecodeIteratorBase *itbase) {
-  UpdateDecoder* it = static_cast<UpdateDecoder*>(itbase);
+void SparseTable<K, V>::ApplyUpdates(TableCoder *in) {
   K k;
   V v;
   string kt, vt;
-
-  it->clear();
   while (in->ReadEntry(&kt, &vt)) {
-    unmarshal(kt, &k);
-    unmarshal(vt, &v);
-    it->append(k, v);
+    ((Marshal<K>*)info_->key_marshal)->unmarshal(kt, &k);
+    ((Marshal<V>*)info_->value_marshal)->unmarshal(vt, &v);
+    update(k, v);
   }
-  it->rewind();
-  return;
 }
 
 template <class K, class V>
 void SparseTable<K, V>::resize(int64_t size) {
-  CHECK_GT(size, 0);
-  VLOG(1) << "Resizing/rehashing table " << id() << "... " << entries_ << " : " << size_ << " -> " << size;
-
   if (size_ == size)
     return;
 
-  update_tainted_ = true;
-  // Need to inhibit both updates and retriggers during the resize process to prevent
-  // a bunch of nasty side-effects.
-  boost::recursive_mutex::scoped_lock sl_rt(TypedTable<K,V>::rt_bitset_retrig_mutex());
-  boost::recursive_mutex::scoped_lock sl_up(TypedTable<K,V>::rt_bitset_update_mutex());
-
   std::vector<Bucket> old_b = buckets_;
-
-  size_t setbits = trigger_flags_.count();
-  boost::dynamic_bitset<uint32_t> old_ltflags;
-  old_ltflags.resize(trigger_flags_.size());
-  for(int i=0; i<trigger_flags_.size(); i++)
-    old_ltflags.set(i,trigger_flags_.test(i));
-
   int old_entries = entries_;
+
+//  LOG(INFO) << "Rehashing... " << entries_ << " : " << size_ << " -> " << size;
 
   buckets_.resize(size);
   size_ = size;
   clear();
 
-  trigger_flags_.resize(size_);
-  trigger_flags_.reset();
-  bitset_epoch_++;						//prevent resize side effects for scanning long thread
-
-  for (size_t i = 0; i < old_b.size(); ++i) {
+  for (int i = 0; i < old_b.size(); ++i) {
     if (old_b[i].in_use) {
       put(old_b[i].k, old_b[i].v);
-      trigger_flags_[bucket_for_key(old_b[i].k)] = old_ltflags[i];
     }
   }
 
   CHECK_EQ(old_entries, entries_);
-  CHECK_EQ(setbits,trigger_flags_.count()) << "Pre-resize had " << setbits << " bits set, but post-resize has " << trigger_flags_.count() << " bits set.";
-
-  //VLOG(2) << "Rehashed " << entries_ << " : " << size_ << " -> " << size << " with " << setbits << " bits set on";
 }
 
 template <class K, class V>
@@ -257,64 +209,24 @@ bool SparseTable<K, V>::contains(const K& k) {
 template <class K, class V>
 V SparseTable<K, V>::get(const K& k) {
   int b = bucket_for_key(k);
-  //The following key display is a hack hack hack and only yields valid
-  //results for ints.  It will display nonsense for other types.
-  CHECK_NE(b, -1) << "No entry for requested key <" << *((int*)&k) << ">";
+  CHECK_NE(b, -1) << "No entry for requested key: " << k;
 
   return buckets_[b].v;
 }
 
 template <class K, class V>
 void SparseTable<K, V>::update(const K& k, const V& v) {
-  // Updates should already be serialized in this process and only handled by
-  // a single thread, but we don't want a resize barging in in the middle of
-  // an update and messing things up.
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_update_mutex());
   int b = bucket_for_key(k);
 
-  update_tainted_ = true;
   if (b != -1) {
-    if (info_.accum->type() == AccumulatorBase::ACCUMULATOR) {
-      ((Accumulator<V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
-    } else if (info_.accum->type() == AccumulatorBase::HYBRID) {
-      trigger_flags_[b] |= ((HybridTrigger<K,V>*)info_.accum)->Accumulate(&buckets_[b].v, v);
-
-      //VLOG(2) << "HYBRID Setting (maybe = " << trigger_flags_.test(b) << ") bit " << b << " for key " << k
-      //        << ", now " << trigger_flags_.count() << " bits set.";
-
-    } else if (info_.accum->type() == AccumulatorBase::TRIGGER) {
-      V v2 = buckets_[b].v;
-      bool doUpdate = false;
-      //LOG(INFO) << "Executing Trigger [sparse]";
-      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,false);	//isNew=false
-      if (doUpdate) {
-        buckets_[b].v = v2;
-        trigger_flags_.set(b);
-        //VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
-      }
-    } else {
-      LOG(FATAL) << "update() called with neither TRIGGER nor ACCUMULATOR nor HYBRID";
-    }
+    ((Accumulator<V>*)info_->accum)->Accumulate(&buckets_[b].v, v);
   } else {
-    if (info_.accum->type() == AccumulatorBase::TRIGGER) {
-      bool doUpdate = true;
-      V v2 = v;
-      //LOG(INFO) << "Executing Trigger [sparse] [new]";
-      ((Trigger<K,V>*)info_.accum)->Fire(&k,&v2,v,&doUpdate,true); //isNew=true
-      if (doUpdate) {
-        put(k, v2);
-        //VLOG(1) << "TRIGGER Setting bit " << b << " for key " << k;
-      }
-    } else {
-      put(k, v);
-    }
+    put(k, v);
   }
 }
 
 template <class K, class V>
 void SparseTable<K, V>::put(const K& k, const V& v) {
-  update_tainted_ = true;
-
   int start = bucket_idx(k);
   int b = start;
   bool found = false;
@@ -341,10 +253,6 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
       buckets_[b].in_use = 1;
       buckets_[b].k = k;
       buckets_[b].v = v;
-      if (info_.accum->type() == AccumulatorBase::HYBRID ||
-          info_.accum->type() == AccumulatorBase::TRIGGER) {
-        trigger_flags_[b] = true;
-      }
       ++entries_;
     }
   } else {
@@ -352,29 +260,5 @@ void SparseTable<K, V>::put(const K& k, const V& v) {
     buckets_[b].v = v;
   }
 }
-
-template <class K, class V>
-boost::dynamic_bitset<uint32_t>* SparseTable<K, V>::bitset_getbitset(void) {
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_retrig_mutex());
-  //VLOG(2) << "First set bit is " << trigger_flags_.find_first() << " where size " << trigger_flags_.size() << "==" << size_;
-  return &trigger_flags_;
 }
-
-template <class K, class V>
-const K SparseTable<K, V>::bitset_getkeyforbit(unsigned long int bit_offset) {
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_retrig_mutex());
-  CHECK_GT(size_,(int64_t) bit_offset);
-  K k = buckets_[bit_offset].k;
-  //VLOG(2) << "Getting bit " << bit_offset << " for key " << k;
-  return k;
-}
-
-template <class K, class V>
-int SparseTable<K, V>::bitset_epoch() {
-  boost::recursive_mutex::scoped_lock sl(TypedTable<K,V>::rt_bitset_retrig_mutex());
-  return bitset_epoch_;
-}
-
-}	/* namespace piccolo */
-
 #endif /* SPARSE_MAP_H_ */

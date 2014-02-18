@@ -45,7 +45,7 @@ int receive() {
   MPI::Status status;
 
   int c = 0;
-  while (world.Iprobe(rpc::ANY_SOURCE, 1, status)) {
+  while (world.Iprobe(MPI::ANY_SOURCE, 1, status)) {
     string s;
     s.resize(status.Get_count(MPI::BYTE));
     world.Recv(&s[0], status.Get_count(MPI::BYTE), MPI::BYTE,
@@ -57,7 +57,7 @@ int receive() {
 }
 
 int main(int argc, char **argv) {
-  piccolo::Init(argc, argv);
+  dsm::Init(argc, argv);
 
   for (int i = 0; i < 100; ++i) {
     send();

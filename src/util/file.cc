@@ -4,11 +4,7 @@
 #include <stdio.h>
 #include <glob.h>
 
-using std::min;
-using std::string;
-using std::vector;
-
-namespace piccolo {
+namespace dsm {
 
 static const int kFileBufferSize = 4 * 1024 * 1024;
 
@@ -176,7 +172,6 @@ void Encoder::write_bytes(const char* a, int len) {
   else { out_f_->write(a, len); }
 }
 
-#ifdef HAVE_LZO
 int LZOFile::write(const char* data, int len) {
   int left = len;
   do {
@@ -250,7 +245,6 @@ bool LZOFile::read_block() {
   block.pos = 0;
   return true;
 }
-#endif
 
 RecordFile::RecordFile(const string& path, const string& mode, int compression) {
   path_ = path;
@@ -262,11 +256,9 @@ RecordFile::RecordFile(const string& path, const string& mode, int compression) 
     fp = new LocalFile(path_ + ".tmp", mode);
   }
 
-#ifdef LZO
   if (compression == LZO) {
     fp = new LZOFile((LocalFile*)fp, mode);
   }
-#endif
 }
 
 RecordFile::~RecordFile() {
@@ -281,9 +273,9 @@ RecordFile::~RecordFile() {
 }
 
 void RecordFile::write(const google::protobuf::Message & m) {
-  VLOG(3) << "Writing... " << m.ByteSize() << " bytes at pos " << fp->tell();
+  //LOG_EVERY_N(DEBUG, 1000) << "Writing... " << m.ByteSize() << " bytes at pos " << ftell(fp->filePointer());
   writeChunk(m.SerializeAsString());
-  VLOG(3) << "New pos: " <<  fp->tell();
+  //LOG_EVERY_N(DEBUG, 1000) << "New pos: " <<  ftell(fp->filePointer());
 }
 
 void RecordFile::writeChunk(StringPiece data) {
@@ -303,22 +295,19 @@ bool RecordFile::readChunk(string *s) {
   }
 
   s->resize(len);
-  bytes_read = fp->read(&(*s)[0], len);
-  return (bytes_read == len);
+  fp->read(&(*s)[0], len);
+  return true;
 }
 
 bool RecordFile::read(google::protobuf::Message *m) {
   if (!readChunk(&buf_)) {
-    return false;
+    return false; 
   }
 
   if (!m)
     return true;
 
-  CHECK(m->ParseFromString(buf_))
-    << "Failed to parse entry of size " << buf_.size()
-    << " at position " << fp->tell()
-    << " from RecordFile " << path_;
+  CHECK(m->ParseFromString(buf_));
   return true;
 }
 

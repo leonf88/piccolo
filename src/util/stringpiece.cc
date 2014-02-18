@@ -9,7 +9,7 @@
 
 using std::vector;
 
-namespace piccolo {
+namespace dsm {
 StringPiece::StringPiece() : data(NULL), len(0) {}
 StringPiece::StringPiece(const StringPiece& s) : data(s.data), len(s.size()) {}
 StringPiece::StringPiece(const string& s) : data(s.data()), len(s.size()) {}

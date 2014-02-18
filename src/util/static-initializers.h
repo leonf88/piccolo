@@ -6,7 +6,7 @@
 
 using namespace std;
 
-namespace piccolo {
+namespace dsm {
 
 // There exists a separate registry mapping for each value type.
 template <class T>
@@ -34,7 +34,6 @@ struct RegistryHelper {
 };
 
 struct CodeHelper {
-  virtual ~CodeHelper() {}
   virtual void Run() = 0;
 };
 
@@ -46,15 +45,14 @@ extern void RunTests();
 
 }
 
-#define REGISTER(type, k, v) static piccolo::RegistryHelper<type> rhelper_ ## k (#k, v);
+#define REGISTER(type, k, v) static dsm::RegistryHelper<type> rhelper_ ## k (#k, v);
 #define REGISTER_CODE(type, k, code)\
 struct k ## CodeHelper : public type {\
-  virtual ~ k ## CodeHelper() {} \
   void Run() { code; }\
 };\
 REGISTER(type, k, new k ## CodeHelper);
 
-#define REGISTER_TEST(k, code) REGISTER_CODE(piccolo::TestHelper, k, code);
-#define REGISTER_INITIALIZER(k, code) REGISTER_CODE(piccolo::InitHelper, k, code);
+#define REGISTER_TEST(k, code) REGISTER_CODE(dsm::TestHelper, k, code);
+#define REGISTER_INITIALIZER(k, code) REGISTER_CODE(dsm::InitHelper, k, code);
 
 #endif

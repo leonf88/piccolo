@@ -1,18 +1,16 @@
-package piccolo;
+package dsm;
 
 import "util/common.proto";
 option optimize_for = SPEED;
 
 enum CheckpointType {
   CP_NONE = 0;
-  CP_TASK_COMMIT = 1;
-  CP_INTERVAL = 2;
-  CP_CONTINUOUS = 3;
+  CP_MASTER_CONTROLLED = 1;
+  CP_ROLLING = 2;
 };
 
 message RegisterWorkerRequest {
   required int32 id = 1;
-//  optional repeated ShardInfo shards;
 }
 
 message ShardAssignment {
@@ -30,7 +28,7 @@ message ShardInfo {
   required uint32 table = 1;
   required uint32 shard = 2;
   required uint64 entries = 3;
-  required int32 owner = 4 [default = -1];
+  required uint32 owner = 4;
 }
 
 message MethodStats {
@@ -60,15 +58,13 @@ message IteratorRequest {
   required uint32 table = 1;
   required uint32 shard = 2;  
   optional int32 id = 3 [default = -1];
-  optional uint32 row_count = 4 [default = 1];
 }
 
 message IteratorResponse {
   required uint32 id = 1;
   required bool done = 2;
-  repeated bytes key = 3;
-  repeated bytes value = 4;
-  required uint32 row_count = 5;
+  optional bytes key = 3;
+  optional bytes value = 4;
 }
 
 message HashGet {
@@ -90,6 +86,7 @@ message TableData {
   optional int32 epoch = 11;
   optional int32 marker = 12 [default = -1];
   
+  
   optional bool missing_key = 13;
 }
 
@@ -107,27 +104,3 @@ message CheckpointInfo {
   required int32 checkpoint_epoch = 1;
   required int32 kernel_epoch = 2;
 }
-
-message SwapTable {
-  required int32 table_a = 1;
-  required int32 table_b = 2;
-}
-
-message ClearTable {
-  required int32 table = 1;
-}
-
-//message EnableTrigger {
-//  required int32 trigger_id = 1;
-//  required int32 table = 2;
-//  required bool enable = 3;
-//}
-
-message FlushResponse {
-  required int32 updatesdone = 1;
-}
-
-message CheckpointFinishRequest {
-  required bool next_delta_only = 1;
-}
-

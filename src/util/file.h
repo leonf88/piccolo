@@ -1,83 +1,76 @@
 #ifndef FILE_H_
 #define FILE_H_
 
-#include "piccolo-config.h"
-
 #include "boost/noncopyable.hpp"
 #include "util/common.h"
 #include "util/common.pb.h"
-#include "util/stringpiece.h"
+#include <lzo/lzo1x.h>
 
-#include <string>
-#include <vector>
-
-#include <glob.h>
 #include <stdio.h>
-#include <sys/stat.h>
+#include <glob.h>
+
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-#ifdef HAVE_LZO
-#include <lzo/lzo1x.h>
-#endif
 
 namespace google { namespace protobuf { class Message; } }
 
-namespace piccolo {
+namespace dsm {
 
 class File {
 public:
   virtual ~File() {}
   virtual int read(char *buffer, int len) = 0;
-  virtual bool read_line(std::string *out) = 0;
+  virtual bool read_line(string *out) = 0;
   virtual bool eof() = 0;
   virtual void seek(int64_t pos) = 0;
   virtual uint64_t tell() = 0;
   virtual const char* name() { return ""; }
   virtual void sync() = 0;
 
-  int write_string(const std::string& buffer) {
+  int write_string(const string& buffer) {
     return write(buffer.data(), buffer.size());
   }
 
   virtual int write(const char* buffer, int len) = 0;
 
-  std::string readLine() {
-    std::string out;
+  string readLine() {
+    string out;
     read_line(&out);
     return out;
   }
 
   struct Info {
-    std::string name;
+    string name;
     struct stat stat;
   };
 
-  static std::string Slurp(const std::string& file);
-  static void Dump(const std::string& file, StringPiece data);
-  static void Mkdirs(std::string path);
-  static std::vector<std::string> MatchingFilenames(StringPiece glob);
-  static std::vector<Info> MatchingFileinfo(StringPiece glob);
+  static string Slurp(const string& file);
+  static void Dump(const string& file, StringPiece data);
+  static void Mkdirs(string path);
+  static vector<string> MatchingFilenames(StringPiece glob);
+  static vector<Info> MatchingFileinfo(StringPiece glob);
 
-  static bool Exists(const std::string& path);
-  static void Move(const std::string& src, const std::string&dst);
+  static bool Exists(const string& path);
+  static void Move(const string& src, const string&dst);
 private:
 };
 
 class LocalFile : public File {
 public:
   LocalFile(FILE* fp);
-  LocalFile(const std::string& path, const std::string& mode);
+  LocalFile(const string& path, const string& mode);
   virtual ~LocalFile() {
-    if (close_on_delete) {
+    if (close_on_delete) { 
       fflush(fp);
-      fclose(fp);
+      fclose(fp); 
     }
   }
 
   void sync() { fsync(fileno(fp)); }
 
-  bool read_line(std::string *out);
+  bool read_line(string *out);
   int read(char *buffer, int len);
   int write(const char* buffer, int len);
   void seek(int64_t pos) { fseek(fp, pos, SEEK_SET); }
@@ -92,13 +85,13 @@ public:
 
 private:
   FILE* fp;
-  std::string path;
+  string path;
   bool close_on_delete;
 };
 
 class Encoder {
 public:
-  Encoder(std::string *s) : out_(s), out_f_(NULL) {}
+  Encoder(string *s) : out_(s), out_f_(NULL) {}
   Encoder(File *f) : out_(NULL), out_f_(f) {}
 
   template <class T>
@@ -108,7 +101,7 @@ public:
   void write_bytes(StringPiece s);
   void write_bytes(const char *a, int len);
 
-  std::string *data() { return out_; }
+  string *data() { return out_; }
 
   size_t pos() {
     if (out_) { return out_->size(); }
@@ -116,19 +109,19 @@ public:
   }
 
 private:
-  std::string *out_;
+  string *out_;
   File *out_f_;
 };
 
 class Decoder {
 private:
-  const std::string* src_;
+  const string* src_;
   const char* src_p_;
   File* f_src_;
 
   int pos_;
 public:
-  Decoder(const std::string& data) : src_(&data), src_p_(data.data()), f_src_(NULL), pos_(0) {}
+  Decoder(const string& data) : src_(&data), src_p_(data.data()), f_src_(NULL), pos_(0) {}
   Decoder(File* f) : src_(NULL), src_p_(NULL), f_src_(f), pos_(0) {}
 
   template <class V> void read(V* t) {
@@ -153,7 +146,7 @@ public:
     pos_ += len;
   }
 
-  void read_string(std::string* v) {
+  void read_string(string* v) {
     uint32_t len;
     read<uint32_t>(&len);
     v->resize(len);
@@ -177,14 +170,13 @@ public:
   }
 };
 
-#ifdef HAVE_LZO
 class LZOFile : public File, private boost::noncopyable {
 public:
-  LZOFile(const std::string& fname, const std::string& mode) {
+  LZOFile(const string& fname, const string& mode) {
     init(new LocalFile(fname, mode), mode);
   }
 
-  LZOFile(LocalFile* target, const std::string& mode) {
+  LZOFile(LocalFile* target, const string& mode) {
     init(target, mode);
   }
 
@@ -193,9 +185,8 @@ public:
     delete f_;
   }
 
-  bool read_line(std::string *out) {
+  bool read_line(string *out) {
     LOG(FATAL) << "Not implemented";
-    return false;
   }
 
   virtual int read(char *buffer, int len);
@@ -208,7 +199,7 @@ public:
   void sync() { f_->sync(); }
 
 private:
-  void init(LocalFile* f, const std::string& mode) {
+  void init(LocalFile* f, const string& mode) {
     f_ = f;
     pos_ = 0;
     if (mode == "r") {
@@ -237,7 +228,6 @@ private:
 
   Block block;
 };
-#endif
 
 class RecordFile {
 public:
@@ -248,7 +238,7 @@ public:
 
   RecordFile() : fp(NULL) {}
 
-  RecordFile(const std::string& path, const std::string& mode, int compression=NONE);
+  RecordFile(const string& path, const string& mode, int compression=NONE);
   virtual ~RecordFile();
 
   virtual void write(const google::protobuf::Message &m);
@@ -262,16 +252,16 @@ public:
   void seek(uint64_t pos);
 
   void writeChunk(StringPiece data);
-  bool readChunk(std::string *s);
+  bool readChunk(string *s);
 
   File *fp;
 private:
 
-  std::string buf_;
-  std::string decomp_buf_;
-  std::string decomp_scratch_;
-  std::string path_;
-  std::string mode_;
+  string buf_;
+  string decomp_buf_;
+  string decomp_scratch_;
+  string path_;
+  string mode_;
 };
 }
 

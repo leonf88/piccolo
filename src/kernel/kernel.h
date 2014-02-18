@@ -9,9 +9,7 @@
 #include <boost/function.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include <map>
-
-namespace piccolo {
+namespace dsm {
 
 template <class K, class V>
 class TypedGlobalTable;
@@ -84,7 +82,7 @@ public:
 
   Args* ToMessage() const {
     Args* out = new Args;
-    for (std::map<string, MarshalledValue*>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
+    for (unordered_map<string, MarshalledValue*>::const_iterator i = p_.begin(); i != p_.end(); ++i) {
       Arg *p = out->add_param();
       p->set_key(i->first);
       p->set_value(i->second->ToString());
@@ -102,13 +100,13 @@ public:
   }
 
 private:
-  mutable std::map<string, MarshalledValue*> p_;
-  mutable std::map<string, string> serialized_;
+  mutable unordered_map<string, MarshalledValue*> p_;
+  mutable unordered_map<string, string> serialized_;
 };
 #endif
 
 
-class KernelBase {
+class DSMKernel {
 public:
   // Called upon creation of this kernel by a worker.
   virtual void InitKernel() {}
@@ -134,11 +132,8 @@ public:
 
   template <class K, class V>
   TypedGlobalTable<K, V>* get_table(int id) {
-    return dynamic_cast<TypedGlobalTable<K, V>*>(get_table(id));
+    return (TypedGlobalTable<K, V>*)get_table(id);
   }
-
-  virtual bool is_swapaccum(void) = 0;
-
 private:
   friend class Worker;
   friend class Master;
@@ -156,22 +151,11 @@ private:
   MarshalledMap cp_;
 };
 
-class DSMKernel : public KernelBase {
-public:
-  bool is_swapaccum(void) { return false; }
-};
-
-class DSMKernel_Swap : public KernelBase {
-public:
-  bool is_swapaccum(void) { return true; }
-};
-
 struct KernelInfo {
-  virtual ~KernelInfo() {}
   KernelInfo(const char* name) : name_(name) {}
 
-  virtual KernelBase* create() = 0;
-  virtual void Run(KernelBase* obj, const string& method_name) = 0;
+  virtual DSMKernel* create() = 0;
+  virtual void Run(DSMKernel* obj, const string& method_name) = 0;
   virtual bool has_method(const string& method_name) = 0;
 
   string name_;
@@ -180,13 +164,13 @@ struct KernelInfo {
 template <class C>
 struct KernelInfoT : public KernelInfo {
   typedef void (C::*Method)();
-  std::map<string, Method> methods_;
+  map<string, Method> methods_;
 
   KernelInfoT(const char* name) : KernelInfo(name) {}
 
-  KernelBase* create() { return new C; }
+  DSMKernel* create() { return new C; }
 
-  void Run(KernelBase* obj, const string& method_id) {
+  void Run(DSMKernel* obj, const string& method_id) {
     boost::function<void (C*)> m(methods_[method_id]);
     m((C*)obj);
   }
@@ -201,7 +185,7 @@ struct KernelInfoT : public KernelInfo {
 class ConfigData;
 class KernelRegistry {
 public:
-  typedef std::map<string, KernelInfo*> Map;
+  typedef map<string, KernelInfo*> Map;
   Map& kernels() { return m_; }
   KernelInfo* kernel(const string& name) { return m_[name]; }
 
@@ -217,7 +201,7 @@ struct KernelRegistrationHelper {
     KernelRegistry::Map& kreg = KernelRegistry::Get()->kernels();
 
     CHECK(kreg.find(name) == kreg.end());
-    kreg.insert(std::make_pair(name, new KernelInfoT<C>(name)));
+    kreg.insert(make_pair(name, new KernelInfoT<C>(name)));
   }
 };
 
@@ -228,6 +212,26 @@ struct MethodRegistrationHelper {
   }
 };
 
+class RunnerRegistry {
+public:
+  typedef int (*KernelRunner)(ConfigData&);
+  typedef map<string, KernelRunner> Map;
+
+  KernelRunner runner(const string& name) { return m_[name]; }
+  Map& runners() { return m_; }
+
+  static RunnerRegistry* Get();
+private:
+  RunnerRegistry() {}
+  Map m_;
+};
+
+struct RunnerRegistrationHelper {
+  RunnerRegistrationHelper(RunnerRegistry::KernelRunner k, const char* name) {
+    RunnerRegistry::Get()->runners().insert(make_pair(name, k));
+  }
+};
+
 #define REGISTER_KERNEL(klass)\
   static KernelRegistrationHelper<klass> k_helper_ ## klass(#klass);
 
@@ -235,9 +239,7 @@ struct MethodRegistrationHelper {
   static MethodRegistrationHelper<klass> m_helper_ ## klass ## _ ## method(#klass, #method, &klass::method);
 
 #define REGISTER_RUNNER(r)\
-  int KernelRunner(const ConfigData& c) {\
-    return r(c);\
-  }\
+  static RunnerRegistrationHelper r_helper_ ## r ## _(&r, #r);
 
 }
 #endif /* KERNELREGISTRY_H_ */

@@ -42,7 +42,7 @@ def run_example(runner,
                 n=64, 
                 build_type='release',
                 results_dir='results',
-                hostfile='conf/mpi-cluster',
+                hostfile='conf/mpi-beakers',
                 logfile_name=None,
                 args=None):
   if not logfile_name: logfile_name = runner
