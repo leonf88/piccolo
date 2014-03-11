@@ -1,14 +1,14 @@
 #ifndef CLIENT_H_
 #define CLIENT_H_
 
-#include "util/common.h"
-#include "util/file.h"
+#include "piccolo/common.h"
+#include "piccolo/file.h"
 
-#include "worker/worker.h"
-#include "master/master.h"
+#include "piccolo/worker.h"
+#include "piccolo/master.h"
 
-#include "kernel/kernel.h"
-#include "kernel/table-registry.h"
+#include "piccolo/kernel.h"
+#include "piccolo/table-registry.h"
 
 #ifndef SWIG
 DECLARE_int32(shards);

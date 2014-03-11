@@ -1,5 +1,5 @@
-set(STATICLIBS protobuf boost_thread boost_system util z)
-set(DYNAMICLIBS lzo2 pthread rt dl)
+set(STATICLIBS protobuf util z)
+set(DYNAMICLIBS lzo2 pthread rt dl ${Boost_LIBRARIES})
 
 protobuf_generate_cpp(EXAMPLE_PB_SRC EXAMPLE_PB_HDR examples.proto )
 piccolo_pp(k-means.pp 
