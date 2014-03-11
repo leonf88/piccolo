@@ -1,5 +1,5 @@
 #include "examples/examples.h"
-#include "kernel/disk-table.h"
+#include "piccolo/disk-table.h"
 
 using namespace dsm;
 DEFINE_int32(num_nodes, 10000, "");

@@ -28,7 +28,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 
-#include "util/timer.h"
+#include "piccolo/timer.h"
 #include "glog/logging.h"
 #include "google/gflags.h"
 
